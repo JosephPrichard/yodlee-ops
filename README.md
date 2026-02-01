@@ -16,7 +16,7 @@ Create a config.json file in the root directory.
 The file should fill out the following fields correctly.
 This contains the connection information data, and the topics each protobuf message will be sent on.
 
-`
+```json
 {
     "awsSecretID": "string",
     "awsSecretKey": "string",
@@ -38,7 +38,7 @@ This contains the connection information data, and the topics each protobuf mess
     "holdEnrichmentTopic": "extn_hold_enrichments",
     "txnEnrichmentTopic": "extn_txn_enrichments"
 }
-`
+```
 
 ### Run the server
 
