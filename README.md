@@ -1,5 +1,5 @@
-# OpsLogger
-A demo for a system that ships hierarchically related financial information to s3 through message queueapp.
+# Flog
+A demo for a system that ships hierarchically related financial information to s3 through message queues.
 This information can later be viewed through a GUI for auditing and debugging.
 
 Based off an idea I had for a system at work. I wanted to implement the solution but was moved out of the org.
