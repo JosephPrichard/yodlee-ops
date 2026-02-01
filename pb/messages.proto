@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package messages;
+
+option go_package = "filogger/pb";
+
+message ExtnCnctEntity {
+  string prty_id = 1;
+  string prty_id_type_cd = 2;
+  string extn_cnct_id = 3;
+  string bus_dt = 4;
+  string vendor_name = 5;
+  // todo: add the rest of the fields
+}
+
+message ExtnAcctEntity {
+  string prty_id = 2;
+  string prty_id_type_cd = 3;
+  string extn_cnct_id = 4;
+  string extn_acct_id = 5;
+  string bus_dt = 6;
+  string acct_name = 7;
+  // todo: add the rest of the fields
+}
+
+message ExtnHoldEntity {
+  string id = 1;
+  string prty_id = 2;
+  string prty_id_type_cd = 3;
+  string extn_acct_id = 4;
+  string extn_hold_id = 5;
+  string bus_dt = 6;
+  string hold_name = 7;
+  // todo: add the rest of the fields
+}
+
+message ExtnTxnEntity {
+  string id = 1;
+  string prty_id = 2;
+  string prty_id_type_cd = 3;
+  string extn_acct_id = 4;
+  string extn_txn_id = 5;
+  string txn_dt = 6;
+  string bus_dt = 7;
+  int64 txn_amt = 8;
+  // todo: add the rest of the fields
+}
