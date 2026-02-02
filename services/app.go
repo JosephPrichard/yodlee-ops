@@ -16,13 +16,7 @@ type App struct {
 	Kafka
 }
 
-var app *App
-
-func InitApp(ctx context.Context, config flog.Config) {
-	if app != nil {
-		return
-	}
-
+func MakeApp(ctx context.Context, config flog.Config) *App {
 	producers := &kafka.Writer{
 		Addr: kafka.TCP(config.KafkaBrokers...),
 	}
@@ -32,17 +26,24 @@ func InitApp(ctx context.Context, config flog.Config) {
 		Fatal(ctx, "failed to make AWS client", err)
 	}
 
-	app = &App{
+	return &App{
 		Kafka: Kafka{
-			Producer:  producers,
-			Consumers: consumers,
+			CnctRefreshTopic:    config.CnctRefreshTopic,
+			AcctRefreshTopic:    config.AcctRefreshTopic,
+			HoldRefreshTopic:    config.HoldRefreshTopic,
+			TxnRefreshTopic:     config.TxnRefreshTopic,
+			CnctEnrichmentTopic: config.CnctEnrichmentTopic,
+			AcctEnrichmentTopic: config.AcctEnrichmentTopic,
+			HoldEnrichmentTopic: config.HoldEnrichmentTopic,
+			TxnEnrichmentTopic:  config.TxnEnrichmentTopic,
+			Producer:            producers,
+			Consumers:           consumers,
 		},
 		Aws: awsClient,
 	}
 }
 
 type Kafka struct {
-	ErrorLogTopic       string
 	CnctRefreshTopic    string
 	AcctRefreshTopic    string
 	HoldRefreshTopic    string
@@ -56,13 +57,12 @@ type Kafka struct {
 }
 
 type Aws struct {
-	S3Client       *s3.Client
-	PageLength     *int32
-	ErrorLogBucket string
-	CnctBucket     string
-	AcctBucket     string
-	HoldBucket     string
-	TxnBucket      string
+	S3Client   *s3.Client
+	PageLength *int32
+	CnctBucket string
+	AcctBucket string
+	HoldBucket string
+	TxnBucket  string
 }
 
 func MakeAwsClient(ctx context.Context, cfg flog.Config) (Aws, error) {
@@ -80,10 +80,10 @@ func MakeAwsClient(ctx context.Context, cfg flog.Config) (Aws, error) {
 			o.BaseEndpoint = aws.String(cfg.Endpoint)
 			o.UsePathStyle = true
 		}),
-		ErrorLogBucket: cfg.ErrorLogBucket,
-		CnctBucket:     cfg.CnctBucket,
-		AcctBucket:     cfg.AcctBucket,
-		HoldBucket:     cfg.HoldBucket,
-		TxnBucket:      cfg.TxnBucket,
+		PageLength: cfg.PageLength,
+		CnctBucket: cfg.CnctBucket,
+		AcctBucket: cfg.AcctBucket,
+		HoldBucket: cfg.HoldBucket,
+		TxnBucket:  cfg.TxnBucket,
 	}, nil
 }

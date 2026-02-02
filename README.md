@@ -2,7 +2,7 @@
 A demo for a system that ships hierarchically related financial information to s3 through message queues.
 This information can later be viewed through a GUI for auditing and debugging.
 
-Based off an idea I had for a system at work. I wanted to implement the solution but was moved out of the org.
+This project is based off a solution I had at my workplace which I was never able to finish.
 
 ## Problem Statement
 

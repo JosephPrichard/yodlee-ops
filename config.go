@@ -10,16 +10,14 @@ type Config struct {
 	AwsSecretKey string `json:"awsSecretKey"`
 	AwsRegion    string `json:"awsRegion"`
 
-	ErrorLogBucket string `json:"errorLogBucket"`
-	CnctBucket     string `json:"cnctBucket"`
-	AcctBucket     string `json:"acctBucket"`
-	HoldBucket     string `json:"holdBucket"`
-	TxnBucket      string `json:"txnBucket"`
+	CnctBucket string `json:"cnctBucket"`
+	AcctBucket string `json:"acctBucket"`
+	HoldBucket string `json:"holdBucket"`
+	TxnBucket  string `json:"txnBucket"`
 
 	KafkaBrokers []string `json:"kafkaBrokers"`
 	GroupID      string   `json:"groupID"`
 
-	ErrorLogTopic       string `json:"errorLogTopic"`
 	CnctRefreshTopic    string `json:"cnctRefreshTopic"`
 	AcctRefreshTopic    string `json:"acctRefreshTopic"`
 	HoldRefreshTopic    string `json:"holdRefreshTopic"`
@@ -29,5 +27,6 @@ type Config struct {
 	HoldEnrichmentTopic string `json:"holdEnrichmentTopic"`
 	TxnEnrichmentTopic  string `json:"txnEnrichmentTopic"`
 
-	Endpoint string
+	Endpoint   string
+	PageLength *int32
 }

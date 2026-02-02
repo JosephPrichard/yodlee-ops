@@ -13,7 +13,6 @@ import (
 )
 
 type Consumers struct {
-	ErrorLogConsumer       *kafka.Reader
 	CnctEnrichmentConsumer *kafka.Reader
 	AcctEnrichmentConsumer *kafka.Reader
 	HoldEnrichmentConsumer *kafka.Reader
@@ -26,7 +25,6 @@ type Consumers struct {
 
 func (c *Consumers) Close() error {
 	return errors.Join(
-		closeConsumer(c.ErrorLogConsumer),
 		closeConsumer(c.CnctEnrichmentConsumer),
 		closeConsumer(c.AcctEnrichmentConsumer),
 		closeConsumer(c.HoldEnrichmentConsumer),
@@ -56,7 +54,6 @@ func MakeConsumers(config flog.Config) Consumers {
 	}
 
 	return Consumers{
-		ErrorLogConsumer:       makeReader(config.ErrorLogTopic),
 		CnctEnrichmentConsumer: makeReader(config.CnctEnrichmentTopic),
 		AcctEnrichmentConsumer: makeReader(config.AcctEnrichmentTopic),
 		TxnEnrichmentConsumer:  makeReader(config.TxnEnrichmentTopic),
@@ -90,105 +87,66 @@ func ConsumeFiMessages[Message any](reader *kafka.Reader, onMessage func(ctx con
 	}
 }
 
-func ConsumeErrorLogs() {
-	topic := app.ErrorLogTopic
-	for {
-		ctx := context.WithValue(context.Background(), "trace", uuid.NewString())
+func (app *App) HandleCnctRefreshMessage(ctx context.Context, cncts []ExtnCnctRefresh) {
+	slog.InfoContext(ctx, "handling cnct refresh message", "cncts", cncts)
 
-		m, err := app.ErrorLogConsumer.FetchMessage(ctx)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to fetch message", "topic", topic, "err", err)
-			break
-		}
-		slog.InfoContext(ctx, "read message from kafka topic", "topic", topic, "offset", m.Offset, "key", string(m.Key), "value", string(m.Value))
+	result := IngestCnctRefreshes(ctx, app, cncts)
+	slog.InfoContext(ctx, "completed cnct refresh ingestion", "putErrs", result.PutErrs, "deleteErrs", result.DeleteErrs)
 
-		var data ErrorLog
-		err = json.Unmarshal(m.Value, &data)
-
-		if err != nil {
-			// log the error and commit. a message that cannot be unmarshalled is malformed.
-			slog.ErrorContext(ctx, "failed to unmarshal error log message", "topic", topic, "err", err)
-		} else {
-			if err := IngestErrorLog(ctx, data); err != nil {
-				// log the error and skip without commiting. the message will be re consumed until ingestion is successful.
-				slog.ErrorContext(ctx, "failed to ingest error log message", "topic", topic, "err", err)
-				continue
-			}
-		}
-		if err := app.ErrorLogConsumer.CommitMessages(ctx, m); err != nil {
-			slog.ErrorContext(ctx, "failed to commit message", "topic", topic, "err", err)
-		}
-	}
+	ProducePutErrors(ctx, app, app.CnctRefreshTopic, result.PutErrs)
 }
 
-func ConsumeCnctRefreshes() {
-	ConsumeFiMessages(
-		app.CnctRefreshConsumer,
-		func(ctx context.Context, cncts []ExtnCnctRefresh) {
-			ProducePutErrors(ctx, app.CnctRefreshTopic, IngestCnctRefreshes(ctx, cncts))
-		},
-	)
+func (app *App) HandleAcctRefreshMessage(ctx context.Context, accts []ExtnAcctRefresh) {
+	slog.InfoContext(ctx, "handling acct refresh message", "accts", accts)
+
+	result := IngestAcctsRefreshes(ctx, app, accts)
+	slog.InfoContext(ctx, "completed acct refresh ingestion", "putErrs", result.PutErrs, "deleteErrs", result.DeleteErrs)
+
+	ProducePutErrors(ctx, app, app.AcctRefreshTopic, result.PutErrs)
 }
 
-func ConsumeAcctRefreshes() {
-	ConsumeFiMessages(
-		app.AcctRefreshConsumer,
-		func(ctx context.Context, accts []ExtnAcctRefresh) {
-			ProducePutErrors(ctx, app.AcctRefreshTopic, IngestAcctsRefreshes(ctx, accts))
-		},
-	)
+func (app *App) HandleTxnRefreshMessage(ctx context.Context, txns []ExtnTxnRefresh) {
+	slog.InfoContext(ctx, "handling txn refresh message", "txns", txns)
+
+	result := IngestTxnRefreshes(ctx, app, txns)
+	slog.InfoContext(ctx, "completed txn refresh ingestion", "putErrs", result.PutErrs, "deleteErrs", result.DeleteErrs)
+
+	ProducePutErrors(ctx, app, app.TxnRefreshTopic, result.PutErrs)
 }
 
-func ConsumeTxnRefreshes() {
-	ConsumeFiMessages(
-		app.TxnRefreshConsumer,
-		func(ctx context.Context, txns []ExtnTxnRefresh) {
-			ProducePutErrors(ctx, app.TxnRefreshTopic, IngestTxnRefreshes(ctx, txns))
-		},
-	)
+func (app *App) HandleHoldRefreshMessage(ctx context.Context, holds []ExtnHoldRefresh) {
+	slog.InfoContext(ctx, "handling hold refresh message", "holds", holds)
+
+	result := IngestHoldRefreshes(ctx, app, holds)
+	slog.InfoContext(ctx, "completed hold refresh ingestion", "putErrs", result.PutErrs, "deleteErrs", result.DeleteErrs)
+
+	ProducePutErrors(ctx, app, app.HoldRefreshTopic, result.PutErrs)
 }
 
-func ConsumeHoldRefreshes() {
-	ConsumeFiMessages(
-		app.HoldRefreshConsumer,
-		func(ctx context.Context, holds []ExtnHoldRefresh) {
-			ProducePutErrors(ctx, app.HoldRefreshTopic, IngestHoldRefreshes(ctx, holds))
-		},
-	)
+func (app *App) HandleCnctEnrichmentMessage(ctx context.Context, cncts []ExtnCnctEnrichment) {
+	slog.InfoContext(ctx, "handling cnct enrichment message", "cncts", cncts)
+
+	putErrors := IngestCnctEnrichments(ctx, app, cncts)
+	ProducePutErrors(ctx, app, app.CnctEnrichmentTopic, putErrors)
 }
 
-func ConsumeCnctEnrichments() {
-	ConsumeFiMessages(
-		app.CnctEnrichmentConsumer,
-		func(ctx context.Context, cncts []ExtnCnctEnrichment) {
-			ProducePutErrors(ctx, app.CnctEnrichmentTopic, IngestCnctEnrichments(ctx, cncts))
-		},
-	)
+func (app *App) HandleAcctEnrichmentMessage(ctx context.Context, accts []ExtnAcctEnrichment) {
+	slog.InfoContext(ctx, "handling acct enrichment message", "accts", accts)
+
+	putErrors := IngestAcctEnrichments(ctx, app, accts)
+	ProducePutErrors(ctx, app, app.AcctEnrichmentTopic, putErrors)
 }
 
-func ConsumeAcctEnrichments() {
-	ConsumeFiMessages(
-		app.AcctEnrichmentConsumer,
-		func(ctx context.Context, accts []ExtnAcctEnrichment) {
-			ProducePutErrors(ctx, app.AcctEnrichmentTopic, IngestAcctEnrichments(ctx, accts))
-		},
-	)
+func (app *App) HandleTxnEnrichmentMessage(ctx context.Context, txns []ExtnTxnEnrichment) {
+	slog.InfoContext(ctx, "handling txn enrichment message", "txns", txns)
+
+	putErrors := IngestTxnEnrichments(ctx, app, txns)
+	ProducePutErrors(ctx, app, app.TxnEnrichmentTopic, putErrors)
 }
 
-func ConsumeTxnEnrichments() {
-	ConsumeFiMessages(
-		app.TxnEnrichmentConsumer,
-		func(ctx context.Context, txns []ExtnTxnEnrichment) {
-			ProducePutErrors(ctx, app.TxnEnrichmentTopic, IngestTxnEnrichments(ctx, txns))
-		},
-	)
-}
+func (app *App) HandleHoldEnrichmentMessage(ctx context.Context, holds []ExtnHoldEnrichment) {
+	slog.InfoContext(ctx, "handling hold enrichment message", "holds", holds)
 
-func ConsumeHoldEnrichments() {
-	ConsumeFiMessages(
-		app.HoldEnrichmentConsumer,
-		func(ctx context.Context, holds []ExtnHoldEnrichment) {
-			ProducePutErrors(ctx, app.HoldEnrichmentTopic, IngestHoldEnrichments(ctx, holds))
-		},
-	)
+	putErrors := IngestHoldEnrichments(ctx, app, holds)
+	ProducePutErrors(ctx, app, app.HoldEnrichmentTopic, putErrors)
 }

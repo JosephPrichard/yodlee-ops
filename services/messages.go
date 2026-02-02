@@ -1,11 +1,13 @@
 package svc
 
 type ErrorLog struct {
-	ErrMsg string `json:"errMsg"`
+	ErrMsg    string `json:"errMsg"`
+	Timestamp string `json:"timestamp"`
 }
 
 type ErrorLogEntity struct {
-	ErrMsg string `json:"errMsg"`
+	ErrMsg    string `json:"errMsg"`
+	Timestamp string `json:"timestamp"`
 }
 
 type ExtnCnctRefresh struct {

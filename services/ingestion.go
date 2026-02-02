@@ -3,74 +3,18 @@ package svc
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/segmentio/kafka-go"
 	"log/slog"
 	"sync"
-	"time"
 )
 
-func IngestErrorLog(ctx context.Context, errorLog ErrorLog) error {
-	errorLogEntity := ErrorLogEntity{
-		ErrMsg: errorLog.ErrMsg,
-	}
-
-	key := time.Now().Format(time.RFC3339)
-
-	value, err := json.Marshal(errorLogEntity)
-	if err != nil {
-		// log and fail silently, since we want to consumer to commit since we *know* this error means this error log is malformed and should be removed from the queue
-		slog.ErrorContext(ctx, "failed to marshal error log entity", "err", err)
-		return nil
-	}
-
-	if _, err = app.S3Client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: aws.String(app.ErrorLogBucket),
-		Key:    aws.String(key),
-		Body:   bytes.NewReader(value),
-	}); err != nil {
-		return fmt.Errorf("failed to put error log entity to s3: %w", err)
-	}
-
-	return nil
-}
-
-func ProducePutErrors[Input any](ctx context.Context, originTopic string, putErrors []IngestError[Input]) {
-	var msgs []kafka.Message
-	for _, putError := range putErrors {
-		errorLogBytes, loggingErr := json.Marshal(ErrorLog{ErrMsg: putError.Err.Error()})
-		inputBytes, inputErr := json.Marshal(putError.Origin)
-
-		if err := errors.Join(loggingErr, inputErr); err != nil {
-			slog.ErrorContext(ctx, "failed to marshal messages for put errors", "err", err)
-			continue
-		}
-
-		msgs = append(msgs, kafka.Message{
-			Topic: app.ErrorLogTopic,
-			Value: errorLogBytes,
-		}, kafka.Message{
-			Topic: originTopic,
-			Value: inputBytes,
-		})
-	}
-	if len(msgs) > 0 {
-		if err := app.Producer.WriteMessages(ctx, msgs...); err != nil {
-			// if we aren't able to put these messages, we need to drop them. this is already a "last line" of defense for errors that shouldn't have happened
-			slog.ErrorContext(ctx, "failed to write put errors to kafka", "err", err)
-		}
-	}
-}
-
 // ingest enrichments. for each message type, we serialize the records directly into s3. we skip messages that cannot be serialized
-// if we fail to upload any messages to s3, we will naively retry the entire enrichment message
+// we return any failed insertions so they can be reinserted back into the queue
 
-func IngestCnctEnrichments(ctx context.Context, cncts []ExtnCnctEnrichment) []IngestError[ExtnCnctEnrichment] {
+func IngestCnctEnrichments(ctx context.Context, app *App, cncts []ExtnCnctEnrichment) []PutError[ExtnCnctEnrichment] {
 	type Input = ExtnCnctEnrichment
 	var putList []PutInput[Input]
 
@@ -84,10 +28,10 @@ func IngestCnctEnrichments(ctx context.Context, cncts []ExtnCnctEnrichment) []In
 		putList = append(putList, PutInput[Input]{Key: key.String(), Input: cnct, Body: body})
 	}
 
-	return PutObjects(ctx, app.CnctBucket, putList)()
+	return PutObjects(ctx, app, app.CnctBucket, putList)()
 }
 
-func IngestAcctEnrichments(ctx context.Context, accts []ExtnAcctEnrichment) []IngestError[ExtnAcctEnrichment] {
+func IngestAcctEnrichments(ctx context.Context, app *App, accts []ExtnAcctEnrichment) []PutError[ExtnAcctEnrichment] {
 	type Input = ExtnAcctEnrichment
 	var putList []PutInput[Input]
 
@@ -101,10 +45,10 @@ func IngestAcctEnrichments(ctx context.Context, accts []ExtnAcctEnrichment) []In
 		putList = append(putList, PutInput[Input]{Key: key.String(), Input: acct, Body: body})
 	}
 
-	return PutObjects(ctx, app.CnctBucket, putList)()
+	return PutObjects(ctx, app, app.AcctBucket, putList)()
 }
 
-func IngestHoldEnrichments(ctx context.Context, holds []ExtnHoldEnrichment) []IngestError[ExtnHoldEnrichment] {
+func IngestHoldEnrichments(ctx context.Context, app *App, holds []ExtnHoldEnrichment) []PutError[ExtnHoldEnrichment] {
 	type Input = ExtnHoldEnrichment
 	var putList []PutInput[Input]
 
@@ -118,10 +62,10 @@ func IngestHoldEnrichments(ctx context.Context, holds []ExtnHoldEnrichment) []In
 		putList = append(putList, PutInput[Input]{Key: key.String(), Input: hold, Body: body})
 	}
 
-	return PutObjects(ctx, app.CnctBucket, putList)()
+	return PutObjects(ctx, app, app.HoldBucket, putList)()
 }
 
-func IngestTxnEnrichments(ctx context.Context, txns []ExtnTxnEnrichment) []IngestError[ExtnTxnEnrichment] {
+func IngestTxnEnrichments(ctx context.Context, app *App, txns []ExtnTxnEnrichment) []PutError[ExtnTxnEnrichment] {
 	type Input = ExtnTxnEnrichment
 	var putList []PutInput[Input]
 
@@ -135,13 +79,18 @@ func IngestTxnEnrichments(ctx context.Context, txns []ExtnTxnEnrichment) []Inges
 		putList = append(putList, PutInput[Input]{Key: key.String(), Input: txn, Body: body})
 	}
 
-	return PutObjects(ctx, app.CnctBucket, putList)()
+	return PutObjects(ctx, app, app.TxnBucket, putList)()
+}
+
+type RefreshResult[Input any] struct {
+	PutErrs    []PutError[Input]
+	DeleteErrs []DeleteError
 }
 
 // ingest refreshes. for each message type, we serialize the records directly into s3 OR delete if the refresh is marked as deleted
 // handles failed uploads in the same way as enrichments
 
-func IngestCnctRefreshes(ctx context.Context, cncts []ExtnCnctRefresh) []IngestError[ExtnCnctRefresh] {
+func IngestCnctRefreshes(ctx context.Context, app *App, cncts []ExtnCnctRefresh) RefreshResult[ExtnCnctRefresh] {
 	type Input = ExtnCnctRefresh
 	var putList []PutInput[Input]
 	var removeCnctKeys []CnctKey
@@ -160,13 +109,13 @@ func IngestCnctRefreshes(ctx context.Context, cncts []ExtnCnctRefresh) []IngestE
 		}
 	}
 
-	getPutCall := PutObjects(ctx, app.CnctBucket, putList) // async
-	DeleteCncts(ctx, removeCnctKeys)
+	getPutCall := PutObjects(ctx, app, app.CnctBucket, putList) // async
+	deleteErrs := app.DeleteCncts(ctx, removeCnctKeys)
 
-	return getPutCall()
+	return RefreshResult[Input]{PutErrs: getPutCall(), DeleteErrs: deleteErrs}
 }
 
-func IngestAcctsRefreshes(ctx context.Context, accts []ExtnAcctRefresh) []IngestError[ExtnAcctRefresh] {
+func IngestAcctsRefreshes(ctx context.Context, app *App, accts []ExtnAcctRefresh) RefreshResult[ExtnAcctRefresh] {
 	type Input = ExtnAcctRefresh
 	var putList []PutInput[Input]
 	var removeAcctKeys []AcctKey
@@ -185,13 +134,13 @@ func IngestAcctsRefreshes(ctx context.Context, accts []ExtnAcctRefresh) []Ingest
 		}
 	}
 
-	getPutCall := PutObjects(ctx, app.AcctBucket, putList) // async
-	DeleteAccts(ctx, removeAcctKeys)
+	getPutCall := PutObjects(ctx, app, app.AcctBucket, putList) // async
+	deleteErrs := app.DeleteAccts(ctx, removeAcctKeys)
 
-	return getPutCall()
+	return RefreshResult[Input]{PutErrs: getPutCall(), DeleteErrs: deleteErrs}
 }
 
-func IngestHoldRefreshes(ctx context.Context, holds []ExtnHoldRefresh) []IngestError[ExtnHoldRefresh] {
+func IngestHoldRefreshes(ctx context.Context, app *App, holds []ExtnHoldRefresh) RefreshResult[ExtnHoldRefresh] {
 	type Input = ExtnHoldRefresh
 	var putList []PutInput[Input]
 	holdPrefixes := make(map[string]bool)
@@ -211,13 +160,13 @@ func IngestHoldRefreshes(ctx context.Context, holds []ExtnHoldRefresh) []IngestE
 		}
 	}
 
-	getPutCall := PutObjects(ctx, app.HoldBucket, putList) // async
-	DeletePrefixes(ctx, app.HoldBucket, holdPrefixes)
+	getPutCall := PutObjects(ctx, app, app.HoldBucket, putList) // async
+	deleteErrs := app.DeletePrefixes(ctx, app.HoldBucket, holdPrefixes)
 
-	return getPutCall()
+	return RefreshResult[Input]{PutErrs: getPutCall(), DeleteErrs: deleteErrs}
 }
 
-func IngestTxnRefreshes(ctx context.Context, txns []ExtnTxnRefresh) []IngestError[ExtnTxnRefresh] {
+func IngestTxnRefreshes(ctx context.Context, app *App, txns []ExtnTxnRefresh) RefreshResult[ExtnTxnRefresh] {
 	type Input = ExtnTxnRefresh
 	var putList []PutInput[Input]
 	txnPrefixes := make(map[string]bool)
@@ -237,10 +186,10 @@ func IngestTxnRefreshes(ctx context.Context, txns []ExtnTxnRefresh) []IngestErro
 		}
 	}
 
-	getPutCall := PutObjects(ctx, app.TxnBucket, putList)
-	DeletePrefixes(ctx, app.TxnBucket, txnPrefixes)
+	getPutCall := PutObjects(ctx, app, app.TxnBucket, putList)
+	deleteErrs := app.DeletePrefixes(ctx, app.TxnBucket, txnPrefixes)
 
-	return getPutCall()
+	return RefreshResult[Input]{PutErrs: getPutCall(), DeleteErrs: deleteErrs}
 }
 
 type PutInput[Input any] struct {
@@ -253,19 +202,19 @@ func (o PutInput[Input]) String() string {
 	return o.Key
 }
 
-type IngestError[Input any] struct {
+type PutError[Input any] struct {
 	Key    string
 	Origin Input
 	Err    error
 }
 
-func (e IngestError[Input]) Error() string {
+func (e PutError[Input]) Error() string {
 	return fmt.Sprintf("failed to put object to s3: key=%s, input=%v, err=%v", e.Key, e.Origin, e.Err)
 }
 
 // PutObjects uploads objects to a given bucket async and sends any failed uploads through the return channel
-func PutObjects[Input any](ctx context.Context, bucket string, inputObjects []PutInput[Input]) func() []IngestError[Input] {
-	var errs []IngestError[Input]
+func PutObjects[Input any](ctx context.Context, app *App, bucket string, inputObjects []PutInput[Input]) func() []PutError[Input] {
+	var errs []PutError[Input]
 	var mu sync.Mutex
 
 	var wg sync.WaitGroup
@@ -282,7 +231,7 @@ func PutObjects[Input any](ctx context.Context, bucket string, inputObjects []Pu
 			if err != nil {
 				slog.ErrorContext(ctx, "failed to upload object to s3", "key", object.Key, "bucket", bucket, "err", err)
 				mu.Lock()
-				errs = append(errs, IngestError[Input]{Key: object.Key, Origin: object.Input, Err: err})
+				errs = append(errs, PutError[Input]{Key: object.Key, Origin: object.Input, Err: err})
 				mu.Unlock()
 			} else {
 				slog.InfoContext(ctx, "uploaded object to s3", "bucket", bucket, "key", object.Key, "output", putOutput)
@@ -290,7 +239,7 @@ func PutObjects[Input any](ctx context.Context, bucket string, inputObjects []Pu
 		}()
 	}
 
-	return func() []IngestError[Input] {
+	return func() []PutError[Input] {
 		wg.Wait()
 		if len(errs) == 0 {
 			slog.InfoContext(ctx, "finished put objects call")
@@ -306,7 +255,11 @@ type AcctPrefixTable struct {
 	lock sync.Mutex
 }
 
-func (b *AcctPrefixTable) putObjectIDs(ctx context.Context, acctObjectIDs []s3types.ObjectIdentifier) {
+func MakeAcctPrefixTable() AcctPrefixTable {
+	return AcctPrefixTable{m: make(map[string]bool)}
+}
+
+func (b *AcctPrefixTable) insertObjectIDs(ctx context.Context, acctObjectIDs []s3types.ObjectIdentifier) {
 	for _, acctObjectID := range acctObjectIDs {
 		if acctObjectID.Key == nil {
 			continue
@@ -317,7 +270,7 @@ func (b *AcctPrefixTable) putObjectIDs(ctx context.Context, acctObjectIDs []s3ty
 			slog.ErrorContext(ctx, "failed to parse acct key from s3 object key", "acctKeyStr", acctKeyStr, "err", err)
 			continue
 		}
-		acctPrefixStr := AcctPrefix{PrtyId: acctKey.PrtyId, PrtyIdTypeCd: acctKey.PrtyIdTypeCd, AcctID: acctKey.AcctID}.String()
+		acctPrefixStr := AcctMemberPrefix{PrtyId: acctKey.PrtyId, PrtyIdTypeCd: acctKey.PrtyIdTypeCd, AcctID: acctKey.AcctID}.String()
 
 		b.lock.Lock()
 		b.m[acctPrefixStr] = true
@@ -325,9 +278,56 @@ func (b *AcctPrefixTable) putObjectIDs(ctx context.Context, acctObjectIDs []s3ty
 	}
 }
 
+// DeleteSupervisor is a block of state to control the goroutines executing concurrent delete jobs
+// it stores errors any deletes run into (protected with a lock) and a wait group for coordinating job execution
+type DeleteSupervisor struct {
+	Context context.Context
+	app     *App
+
+	deleteErrs []DeleteError
+	lock       sync.Mutex
+
+	wg sync.WaitGroup
+}
+
+func MakeDeleteSupervisor(ctx context.Context, app *App) DeleteSupervisor {
+	return DeleteSupervisor{Context: ctx, app: app}
+}
+
+func (ds *DeleteSupervisor) Execute(bucket string, listIDsChan chan []s3types.ObjectIdentifier) {
+	slog.InfoContext(ds.Context, "begin an execute delete worker", "bucket", bucket)
+
+	ds.wg.Add(1)
+	go func() {
+		defer ds.wg.Done()
+		for objectIDs := range listIDsChan {
+			if deleteErr := ds.app.DeleteObjects(ds.Context, bucket, objectIDs); deleteErr.Err != nil {
+				ds.lock.Lock()
+				ds.deleteErrs = append(ds.deleteErrs, deleteErr)
+				ds.lock.Unlock()
+			}
+		}
+	}()
+}
+
+func (ds *DeleteSupervisor) Wait() []DeleteError {
+	ds.wg.Wait()
+	if len(ds.deleteErrs) == 0 {
+		slog.InfoContext(ds.Context, "finished delete supervisor")
+	} else {
+		slog.ErrorContext(ds.Context, "finished delete supervisor", "errs", ds.deleteErrs)
+	}
+	return ds.deleteErrs
+}
+
 // DeleteCncts deletes all records with the following account keys from all parts of s3.
 // blocks until all goroutines are complete, while logs any failed delete calls.
-func DeleteCncts(ctx context.Context, keys []CnctKey) {
+func (app *App) DeleteCncts(ctx context.Context, keys []CnctKey) []DeleteError {
+	if len(keys) == 0 {
+		slog.InfoContext(ctx, "no cncts to delete")
+		return nil
+	}
+
 	cnctPrefixes := make(map[string]bool)
 	for _, key := range keys {
 		prefix := CnctPrefix{PrtyId: key.PrtyId, PrtyIdTypeCd: key.PrtyIdTypeCd, CnctID: key.CnctID}
@@ -335,18 +335,18 @@ func DeleteCncts(ctx context.Context, keys []CnctKey) {
 	}
 	slog.InfoContext(ctx, "deleting cncts", "cnctPrefixes", cnctPrefixes)
 
-	var deleteWg sync.WaitGroup
+	deletes := MakeDeleteSupervisor(ctx, app)
 
 	for cnctPrefix := range cnctPrefixes {
-		DeletePrefixWorker(ctx, &deleteWg, app.CnctBucket, cnctPrefix)
+		deletes.Execute(app.CnctBucket, app.ListObjectsByPrefix(ctx, app.CnctBucket, cnctPrefix))
 	}
 
 	// in addition to deleting each cnct by prefix, we need to parse the acctID and create an acctPrefix to delete txns and holdings.
 	var listAcctsWg sync.WaitGroup
-	var acctPrefixes AcctPrefixTable
+	acctPrefixes := MakeAcctPrefixTable()
 
 	for cnctPrefix := range cnctPrefixes {
-		listIDsChan := ListObjectsByPrefix(ctx, app.AcctBucket, cnctPrefix)
+		listIDsChan := app.ListObjectsByPrefix(ctx, app.AcctBucket, cnctPrefix)
 		deleteIDsChan := make(chan []s3types.ObjectIdentifier)
 
 		listAcctsWg.Add(1)
@@ -356,18 +356,12 @@ func DeleteCncts(ctx context.Context, keys []CnctKey) {
 			defer close(deleteIDsChan)
 
 			for acctObjectIDs := range listIDsChan {
-				acctPrefixes.putObjectIDs(ctx, acctObjectIDs)
+				acctPrefixes.insertObjectIDs(ctx, acctObjectIDs)
 				deleteIDsChan <- acctObjectIDs
 			}
 		}()
 
-		deleteWg.Add(1)
-		go func() {
-			defer deleteWg.Done()
-			for acctObjectIDs := range deleteIDsChan {
-				DeleteObjects(ctx, app.AcctBucket, acctObjectIDs)
-			}
-		}()
+		deletes.Execute(app.AcctBucket, deleteIDsChan)
 	}
 
 	listAcctsWg.Wait()
@@ -377,97 +371,102 @@ func DeleteCncts(ctx context.Context, keys []CnctKey) {
 			app.HoldBucket,
 			app.TxnBucket,
 		} {
-			DeletePrefixWorker(ctx, &deleteWg, bucket, acctPrefix)
+			deletes.Execute(bucket, app.ListObjectsByPrefix(ctx, bucket, acctPrefix))
 		}
 	}
 
-	deleteWg.Wait()
+	return deletes.Wait()
 }
 
 // DeleteAccts deletes all records with the following cnct keys from all parts s3.
-// blocks until all goroutines are complete, while logs any failed delete callapp.
-func DeleteAccts(ctx context.Context, keys []AcctKey) {
+// blocks until all goroutines are complete, while logs any failed delete calls.
+func (app *App) DeleteAccts(ctx context.Context, keys []AcctKey) []DeleteError {
+	if len(keys) == 0 {
+		slog.InfoContext(ctx, "no accts to delete")
+		return nil
+	}
+
+	acctMemPrefixes := make(map[string]bool)
 	acctPrefixes := make(map[string]bool)
 	for _, key := range keys {
-		prefix := AcctPrefix{PrtyId: key.PrtyId, PrtyIdTypeCd: key.PrtyIdTypeCd, AcctID: key.AcctID}
+		memPrefix := AcctMemberPrefix{PrtyId: key.PrtyId, PrtyIdTypeCd: key.PrtyIdTypeCd, AcctID: key.AcctID}
+		prefix := AcctPrefix{PrtyId: key.PrtyId, PrtyIdTypeCd: key.PrtyIdTypeCd, CnctID: key.CnctID, AcctID: key.AcctID}
+		acctMemPrefixes[memPrefix.String()] = true
 		acctPrefixes[prefix.String()] = true
 	}
-	slog.InfoContext(ctx, "deleting accts", "acctPrefixes", acctPrefixes)
+	slog.InfoContext(ctx, "deleting accts", "acctMemPrefixes", acctMemPrefixes, "acctPrefixes", acctPrefixes)
 
-	var deleteWg sync.WaitGroup
+	deletes := MakeDeleteSupervisor(ctx, app)
 
-	for acctPrefix := range acctPrefixes {
+	for acctMemPrefix := range acctMemPrefixes {
 		for _, bucket := range []string{
-			app.AcctBucket,
 			app.HoldBucket,
 			app.TxnBucket,
 		} {
-			DeletePrefixWorker(ctx, &deleteWg, bucket, acctPrefix)
+			deletes.Execute(bucket, app.ListObjectsByPrefix(ctx, bucket, acctMemPrefix))
 		}
 	}
+	for acctPrefix := range acctPrefixes {
+		deletes.Execute(app.AcctBucket, app.ListObjectsByPrefix(ctx, app.AcctBucket, acctPrefix))
+	}
 
-	deleteWg.Wait()
+	return deletes.Wait()
 }
 
 // DeletePrefixes generically deletes from a single bucket by prefixes. used for transactions and holdings.
-func DeletePrefixes(ctx context.Context, bucket string, prefixes map[string]bool) {
+func (app *App) DeletePrefixes(ctx context.Context, bucket string, prefixes map[string]bool) []DeleteError {
+	if len(prefixes) == 0 {
+		slog.InfoContext(ctx, "no prefixes to delete")
+		return nil
+	}
+
 	slog.InfoContext(ctx, "deleting objects by prefixes", "bucket", bucket, "prefixes", prefixes)
 
-	var wg sync.WaitGroup
+	deletes := MakeDeleteSupervisor(ctx, app)
+
 	for prefix := range prefixes {
-		DeletePrefixWorker(ctx, &wg, bucket, prefix)
+		deletes.Execute(bucket, app.ListObjectsByPrefix(ctx, bucket, prefix))
 	}
-	wg.Wait()
-}
 
-func DeletePrefixWorker(ctx context.Context, wg *sync.WaitGroup, bucket string, prefix string) {
-	slog.InfoContext(ctx, "deleting objects by prefix", "bucket", bucket, "prefix", prefix)
-
-	listIDsChan := ListObjectsByPrefix(ctx, bucket, prefix)
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for objectIDs := range listIDsChan {
-			DeleteObjects(ctx, bucket, objectIDs)
-		}
-	}()
+	return deletes.Wait()
 }
 
 // ListObjectsByPrefix lists all object keys for a certain prefix in a bucket and streams each page of data through a channel as they come.
 // aws s3 API does not support multiple buckets/prefixes per call, so each bucket prefix needs its own api call.
-func ListObjectsByPrefix(ctx context.Context, bucket string, prefix string) chan []s3types.ObjectIdentifier {
+func (app *App) ListObjectsByPrefix(ctx context.Context, bucket string, prefix string) chan []s3types.ObjectIdentifier {
 	keysChan := make(chan []s3types.ObjectIdentifier)
 
 	// paginate through all objects under the given prefix for a bucket and send each page to the channel. closes when all pages have been walked
 	go func() {
 		defer close(keysChan)
-		var continuationToken *string
-		var isLastPage bool
-		var page int
 
-		for !isLastPage {
+		paginator := s3.NewListObjectsV2Paginator(app.S3Client, &s3.ListObjectsV2Input{
+			Bucket:  aws.String(bucket),
+			Prefix:  aws.String(prefix),
+			MaxKeys: app.PageLength,
+		})
+
+		page := 0
+
+		for paginator.HasMorePages() {
 			page++
-
-			listObjects, err := app.S3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-				Bucket:            aws.String(bucket),
-				Prefix:            aws.String(prefix),
-				MaxKeys:           app.PageLength,
-				ContinuationToken: continuationToken,
-			})
+			listObjects, err := paginator.NextPage(ctx)
 			if err != nil {
-				slog.ErrorContext(ctx, "failed to list objects from s3", "bucket", bucket, "prefix", prefix, "isLastPage", isLastPage, "page", page, "err", err)
+				slog.ErrorContext(ctx, "failed to list objects from s3", "bucket", bucket, "prefix", prefix, "page", page, "err", err)
 				return
 			}
 
-			isLastPage = listObjects.IsTruncated == nil || !*listObjects.IsTruncated
-			continuationToken = listObjects.NextContinuationToken
+			slog.InfoContext(ctx, "list objects", "bucket", bucket, "prefix", prefix, "page", page, "objectCount", len(listObjects.Contents))
 
-			slog.InfoContext(ctx, "list objects", "bucket", bucket, "prefix", prefix, "isLastPage", isLastPage, "page", page, "listObjects", listObjects.Contents)
+			if len(listObjects.Contents) == 0 {
+				continue
+			}
 
-			var keys []s3types.ObjectIdentifier
+			keys := make([]s3types.ObjectIdentifier, 0, len(listObjects.Contents))
 			for _, obj := range listObjects.Contents {
-				keys = append(keys, s3types.ObjectIdentifier{Key: obj.Key})
+				keys = append(keys, s3types.ObjectIdentifier{
+					Key: obj.Key,
+				})
 			}
 			keysChan <- keys
 		}
@@ -476,9 +475,18 @@ func ListObjectsByPrefix(ctx context.Context, bucket string, prefix string) chan
 	return keysChan
 }
 
+type DeleteError struct {
+	Keys []string
+	Err  error
+}
+
+func (e DeleteError) Error() string {
+	return fmt.Sprintf("failed to delete object from s3: keys=%+v, err=%v", e.Keys, e.Err)
+}
+
 // DeleteObjects is a helper to delete all keys from a bucket and log
 // if a deletion call fails, we should log and continue execution, but we rely on another refresh to come in and actually delete these records
-func DeleteObjects(ctx context.Context, bucket string, keys []s3types.ObjectIdentifier) {
+func (app *App) DeleteObjects(ctx context.Context, bucket string, keys []s3types.ObjectIdentifier) DeleteError {
 	strKeys := make([]string, 0, len(keys))
 	for _, key := range keys {
 		if key.Key == nil {
@@ -496,4 +504,6 @@ func DeleteObjects(ctx context.Context, bucket string, keys []s3types.ObjectIden
 	} else {
 		slog.InfoContext(ctx, "deleted objects from s3", "bucket", bucket, "keys", strKeys)
 	}
+
+	return DeleteError{Keys: strKeys, Err: err}
 }

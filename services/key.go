@@ -53,14 +53,26 @@ func ParseAcctKey(acctKeyStr string) (AcctKey, error) {
 	}, nil
 }
 
-type AcctPrefix struct {
+// AcctMemberPrefix is a prefix key to delete txns or holdings.
+type AcctMemberPrefix struct {
 	PrtyId       string
 	PrtyIdTypeCd string
 	AcctID       string
 }
 
-func (k AcctPrefix) String() string {
+func (k AcctMemberPrefix) String() string {
 	return fmt.Sprintf("%s/%s/%s", k.PrtyId, k.PrtyIdTypeCd, k.AcctID)
+}
+
+type AcctPrefix struct {
+	PrtyId       string
+	PrtyIdTypeCd string
+	CnctID       string
+	AcctID       string
+}
+
+func (k AcctPrefix) String() string {
+	return fmt.Sprintf("%s/%s/%s/%s", k.PrtyId, k.PrtyIdTypeCd, k.CnctID, k.AcctID)
 }
 
 type TxnKey struct {
@@ -87,6 +99,7 @@ func (k HoldKey) String() string {
 	return fmt.Sprintf("%s/%s/%s/%s/%s", k.PrtyId, k.PrtyIdTypeCd, k.AcctID, k.HoldID, k.BusDt)
 }
 
+// AcctChildPrefix is a prefix key for either a txn or a holding.
 type AcctChildPrefix struct {
 	PrtyId       string
 	PrtyIdTypeCd string
