@@ -1,22 +1,21 @@
 package server
 
-import (
-	"context"
-	"encoding/json"
-	"filogger"
-	"filogger/services"
-)
+// import (
+// 	"context"
+// 	"encoding/json"
+// 	"filogger/services"
+// )
 
-func main() {
-	ctx := context.WithValue(context.Background(), "trace", "setup-server")
+// func main() {
+// 	ctx := context.WithValue(context.Background(), "trace", "setup-server")
 
-	var config flog.Config
-	if err := json.Unmarshal(flog.ConfigFile, &config); err != nil {
-		svc.Fatal(ctx, "failed to parse config", err)
-	}
+// 	var config flog.Config
+// 	if err := json.Unmarshal(flog.ConfigFile, &config); err != nil {
+// 		svc.Fatal(ctx, "failed to parse config", err)
+// 	}
 
-	_, err := svc.MakeAwsClient(ctx, config)
-	if err != nil {
-		svc.Fatal(ctx, "failed to make services", err)
-	}
-}
+// 	_, err := svc.MakeAwsClient(ctx, config)
+// 	if err != nil {
+// 		svc.Fatal(ctx, "failed to make services", err)
+// 	}
+// }

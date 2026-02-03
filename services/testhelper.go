@@ -2,8 +2,11 @@ package svc
 
 import (
 	"context"
-	flog "filogger"
 	"fmt"
+	"sync"
+	"testing"
+	"time"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/google/go-cmp/cmp"
@@ -13,13 +16,10 @@ import (
 	testcontainerskafka "github.com/testcontainers/testcontainers-go/modules/kafka"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"golang.org/x/sync/errgroup"
-	"sync"
-	"testing"
-	"time"
 )
 
 const (
-	LocalstackContTag  = "localstack/localstack:3.0.2"
+	LocalstackContTag  = "localstack/localstack:4.13.1"
 	KafkaContTag       = "confluentinc/confluent-local:7.4.0"
 	LocalStackContPort = "4566/tcp"
 	TestGroupID        = "test-group"
@@ -111,11 +111,10 @@ func SetupAppTest(t *testing.T) *App {
 
 	// initialize app with config.
 	InitLoggers(nil)
-	app := MakeApp(ctx, flog.Config{
-		AwsRegion:    "us-east-1",
-		AwsSecretKey: "testing",
-		AwsSecretID:  "testing",
-		Endpoint:     endpoint,
+	app := MakeApp(ctx, Config{
+		AwsDefaultRegion: "us-east-1",
+		AwsEndpoint:      endpoint,
+		IsUnitTest:       true,
 
 		KafkaBrokers: brokers,
 		GroupID:      TestGroupID,
@@ -133,9 +132,10 @@ func SetupAppTest(t *testing.T) *App {
 		AcctEnrichmentTopic: "acct-enrichment-" + uuid.NewString(),
 		TxnEnrichmentTopic:  "txn-enrichment-" + uuid.NewString(),
 		HoldEnrichmentTopic: "hold-enrichment-" + uuid.NewString(),
+		DeleteRecoveryTopic: "delete-retry-" + uuid.NewString(),
 	})
 
-	// create s3 buckets and kafka topics.
+	// create s3 buckets and kafka topics required for testing.
 	for _, bucket := range []string{
 		app.CnctBucket,
 		app.AcctBucket,
@@ -156,13 +156,14 @@ func SetupAppTest(t *testing.T) *App {
 		app.AcctEnrichmentTopic,
 		app.TxnEnrichmentTopic,
 		app.HoldEnrichmentTopic,
+		app.DeleteRecoveryTopic,
 	} {
 		if err = conn.CreateTopics(kafka.TopicConfig{
 			Topic:             topic,
 			NumPartitions:     3,
 			ReplicationFactor: 1,
 		}); err != nil {
-			t.Fatalf("failed to create topic %s: %s", topic, err)
+			t.Fatalf("failed to create topic '%s': %s", topic, err)
 		}
 	}
 

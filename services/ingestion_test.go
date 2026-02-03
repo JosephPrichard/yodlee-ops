@@ -3,7 +3,6 @@ package svc
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"filogger/pb"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -82,28 +81,6 @@ func assertProtoObjects(t *testing.T, app *App, objects []wantObject, makeValue 
 	}
 }
 
-func assertJSONObject[JSON any](t *testing.T, app *App, bucket string, key string, value JSON) {
-	t.Helper()
-
-	data, err := app.S3Client.GetObject(context.Background(), &s3.GetObjectInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-	})
-	if err != nil {
-		t.Fatalf("failed to get object: %v", err)
-	}
-
-	body, err := io.ReadAll(data.Body)
-	require.NoError(t, err)
-
-	t.Logf("got object %s/%s: %s", bucket, key, string(body))
-
-	var jsonValue JSON
-	require.NoError(t, json.Unmarshal(body, &jsonValue))
-
-	assert.Equal(t, value, jsonValue)
-}
-
 func getAllKeys(t *testing.T, app *App) []string {
 	var keys []string
 
@@ -128,7 +105,7 @@ func TestIngestCnctEnrichments(t *testing.T) {
 	app := SetupAppTest(t)
 	seedS3BucketsForInsertion(t, app)
 
-	putErrors := IngestCnctEnrichments(ctx, app, []ExtnCnctEnrichment{
+	putErrors := app.IngestCnctEnrichments(ctx, []ExtnCnctEnrichment{
 		{
 			PrtyId:       "p1",
 			PrtyIdTypeCd: "Y",
@@ -167,7 +144,7 @@ func TestIngestAcctEnrichments(t *testing.T) {
 	app := SetupAppTest(t)
 	seedS3BucketsForInsertion(t, app)
 
-	putErrors := IngestAcctEnrichments(ctx, app, []ExtnAcctEnrichment{
+	putErrors := app.IngestAcctEnrichments(ctx, []ExtnAcctEnrichment{
 		{
 			PrtyId:       "p1",
 			PrtyIdTypeCd: "Y",
@@ -208,7 +185,7 @@ func TestIngestHoldEnrichments(t *testing.T) {
 	app := SetupAppTest(t)
 	seedS3BucketsForInsertion(t, app)
 
-	putErrors := IngestHoldEnrichments(ctx, app, []ExtnHoldEnrichment{
+	putErrors := app.IngestHoldEnrichments(ctx, []ExtnHoldEnrichment{
 		{
 			PrtyId:       "p1",
 			PrtyIdTypeCd: "Y",
@@ -249,7 +226,7 @@ func TestIngestTxnEnrichments(t *testing.T) {
 	app := SetupAppTest(t)
 	seedS3BucketsForInsertion(t, app)
 
-	putErrors := IngestTxnEnrichments(ctx, app, []ExtnTxnEnrichment{
+	putErrors :=app.IngestTxnEnrichments(ctx, []ExtnTxnEnrichment{
 		{
 			PrtyId:       "p1",
 			PrtyIdTypeCd: "Y",
@@ -292,7 +269,7 @@ func TestIngestCnctRefreshes(t *testing.T) {
 	app := SetupAppTest(t)
 	seedS3BucketsForInsertion(t, app)
 
-	result := IngestCnctRefreshes(ctx, app, []ExtnCnctRefresh{
+	result := app.IngestCnctRefreshes(ctx, []ExtnCnctRefresh{
 		{
 			IsDeleted:    true,
 			PrtyId:       "p1",
@@ -353,7 +330,7 @@ func TestIngestAcctRefreshes(t *testing.T) {
 	app := SetupAppTest(t)
 	seedS3BucketsForInsertion(t, app)
 
-	result := IngestAcctsRefreshes(ctx, app, []ExtnAcctRefresh{
+	result := app.IngestAcctsRefreshes(ctx, []ExtnAcctRefresh{
 		{
 			IsDeleted:    true,
 			PrtyId:       "p1",
@@ -416,7 +393,7 @@ func TestIngestTxnRefreshes(t *testing.T) {
 	app := SetupAppTest(t)
 	seedS3BucketsForInsertion(t, app)
 
-	result := IngestTxnRefreshes(ctx, app, []ExtnTxnRefresh{
+	result := app.IngestTxnRefreshes(ctx, []ExtnTxnRefresh{
 		{
 			IsDeleted:    true,
 			PrtyId:       "p1",
@@ -481,7 +458,7 @@ func TestIngestHoldRefreshes(t *testing.T) {
 	app := SetupAppTest(t)
 	seedS3BucketsForInsertion(t, app)
 
-	result := IngestHoldRefreshes(ctx, app, []ExtnHoldRefresh{
+	result := app.IngestHoldRefreshes(ctx, []ExtnHoldRefresh{
 		{
 			IsDeleted:    true,
 			PrtyId:       "p1",

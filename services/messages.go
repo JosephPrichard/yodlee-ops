@@ -112,3 +112,28 @@ type ExtnTxnEnrichment struct {
 	TxnAmt int64 `json:"txnAmt"`
 	// todo: add the rest of the fields
 }
+
+const (
+	DeleteKind = "delete"
+	ListKind = "list"
+)
+
+type DeleteRetry struct {
+	Kind string `json:"kind"` // either 'list' or 'delete'
+	Bucket string `json:"bucket"`
+	Prefix string `json:"prefix"`
+	Keys   []string `json:"keys"`
+}
+
+type FiInput interface {
+	isFiInput()
+}
+
+func (_ ExtnCnctRefresh) isFiInput()    {}
+func (_ ExtnAcctRefresh) isFiInput()    {}
+func (_ ExtnHoldRefresh) isFiInput()    {}
+func (_ ExtnTxnRefresh) isFiInput()     {}
+func (_ ExtnCnctEnrichment) isFiInput() {}
+func (_ ExtnAcctEnrichment) isFiInput() {}
+func (_ ExtnHoldEnrichment) isFiInput() {}
+func (_ ExtnTxnEnrichment) isFiInput()  {}
