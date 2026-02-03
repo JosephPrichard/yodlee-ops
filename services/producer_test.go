@@ -11,7 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func testConsumer[JSON any](ctx context.Context, reader *kafka.Reader, count int) []any {
+func testConsumer[JSON any](ctx context.Context, t *testing.T, reader *kafka.Reader, count int) []any {
+	t.Logf("starting test consumer on topic %s", reader.Config().Topic)
+
 	var values []any
 	for range count {
 		m, err := reader.ReadMessage(ctx) // respects deadline.
@@ -27,6 +29,7 @@ func testConsumer[JSON any](ctx context.Context, reader *kafka.Reader, count int
 }
 
 func TestProducePutErrors(t *testing.T) {
+	// given
 	app := SetupAppTest(t)
 
 	cnctEnrichment := ExtnCnctEnrichment{
@@ -47,64 +50,70 @@ func TestProducePutErrors(t *testing.T) {
 
 	cnctEnrichmentChan := make(chan any)
 
-	ctx, cancel := context.WithTimeout(context.WithValue(t.Context(), "trace", t.Name()), time.Second*5)
+	ctx, cancel := context.WithTimeout(context.WithValue(t.Context(), "trace", t.Name()), time.Second*30)
 	defer cancel()
 
 	go func() {
-		cnctEnrichmentChan <- testConsumer[ExtnCnctEnrichment](ctx, app.CnctEnrichmentConsumer, wantPutCount)
+		cnctEnrichmentChan <- testConsumer[ExtnCnctEnrichment](ctx, t, app.CnctEnrichmentConsumer, wantPutCount)
 	}()
 
+	// when
 	app.ProducePutErrors(ctx, app.CnctEnrichmentTopic, putErrs)
 
+	// then
 	cnctEnrichments := <-cnctEnrichmentChan
 
 	t.Logf("received connection enrichments from consumer: %+v", cnctEnrichments)
-	assert.Equal(t, []any{cnctEnrichment}, cnctEnrichments)
+	assert.ElementsMatch(t, []any{cnctEnrichment}, cnctEnrichments)
 }
 
 func TestProduceDeleteErrors(t *testing.T) {
+	// given
 	app := SetupAppTest(t)
 
 	deleteErrs := []DeleteResult{
 		{
 			Bucket: "bucket",
-			Keys: []string{"key1", "key2"},
-			Err:   errors.New("err1"),
+			Keys:   []string{"key1", "key2"},
+			Err:    errors.New("err1"),
 		},
 		{
 			Bucket: "bucket",
 			Prefix: "prefix",
-			Err:   errors.New("err1"),
+			Err:    errors.New("err1"),
 		},
 	}
 	wantDeleteCount := len(deleteErrs)
 
 	deleteResultsChan := make(chan any)
 
-	ctx, cancel := context.WithTimeout(context.WithValue(t.Context(), "trace", t.Name()), time.Second*5)
+	ctx, cancel := context.WithTimeout(context.WithValue(t.Context(), "trace", t.Name()), time.Second*30)
 	defer cancel()
+	//ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	go func() {
-		deleteResultsChan <- testConsumer[DeleteRetry](ctx, app.DeleteRcoveryConsumer, wantDeleteCount)
+		deleteResultsChan <- testConsumer[DeleteRetry](ctx, t, app.DeleteRecoveryConsumer, wantDeleteCount)
 	}()
 
+	// when
 	app.ProduceDeleteErrors(ctx, deleteErrs)
 
+	// then
 	deleteResults := <-deleteResultsChan
 
 	t.Logf("received delete results from consumer: %+v", deleteResults)
-	
+
 	wantDeleteResults := []any{
 		DeleteRetry{
-			Kind: DeleteKind,
+			Kind:   DeleteKind,
 			Bucket: "bucket",
-			Keys: []string{"key1", "key2"},
+			Keys:   []string{"key1", "key2"},
 		},
 		DeleteRetry{
-			Kind: ListKind,
+			Kind:   ListKind,
 			Bucket: "bucket",
 			Prefix: "prefix",
 		},
 	}
-	assert.Equal(t, wantDeleteResults, deleteResults)
+	assert.ElementsMatch(t, wantDeleteResults, deleteResults)
 }

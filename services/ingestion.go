@@ -11,11 +11,10 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
-// ingest enrichments. for each message type, we serialize the records directly into s3. we skip messages that cannot be serialized
+// ingest enrichments. for each MChan type, we serialize the records directly into s3. we skip messages that cannot be serialized
 // we return any failed insertions so they can be reinserted back into the queue
 
 func (app *App) IngestCnctEnrichments(ctx context.Context, cncts []ExtnCnctEnrichment) []PutResult {
-	type Input = ExtnCnctEnrichment
 	var putList []PutInput
 
 	for _, cnct := range cncts {
@@ -32,7 +31,6 @@ func (app *App) IngestCnctEnrichments(ctx context.Context, cncts []ExtnCnctEnric
 }
 
 func (app *App) IngestAcctEnrichments(ctx context.Context, accts []ExtnAcctEnrichment) []PutResult {
-	type Input = ExtnAcctEnrichment
 	var putList []PutInput
 
 	for _, acct := range accts {
@@ -65,7 +63,6 @@ func (app *App) IngestHoldEnrichments(ctx context.Context, holds []ExtnHoldEnric
 }
 
 func (app *App) IngestTxnEnrichments(ctx context.Context, txns []ExtnTxnEnrichment) []PutResult {
-	type Input = ExtnTxnEnrichment
 	var putList []PutInput
 
 	for _, txn := range txns {
@@ -81,16 +78,15 @@ func (app *App) IngestTxnEnrichments(ctx context.Context, txns []ExtnTxnEnrichme
 	return app.PutObjects(ctx, app.TxnBucket, putList)()
 }
 
-type RefreshResult[Input any] struct {
-	PutErrs    []PutResult
-	DeleteErrs []DeleteResult
+type RefreshResult struct {
+	PutErrors    []PutResult
+	DeleteErrors []DeleteResult
 }
 
-// ingest refreshes. for each message type, we serialize the records directly into s3 OR delete if the refresh is marked as deleted
+// ingest refreshes. for each MChan type, we serialize the records directly into s3 OR delete if the refresh is marked as deleted
 // handles failed uploads in the same way as enrichments
 
-func (app *App) IngestCnctRefreshes(ctx context.Context, cncts []ExtnCnctRefresh) RefreshResult[ExtnCnctRefresh] {
-	type Input = ExtnCnctRefresh
+func (app *App) IngestCnctRefreshes(ctx context.Context, cncts []ExtnCnctRefresh) RefreshResult {
 	var putList []PutInput
 	var removeCnctKeys []CnctKey
 
@@ -111,11 +107,10 @@ func (app *App) IngestCnctRefreshes(ctx context.Context, cncts []ExtnCnctRefresh
 	getPutCall := app.PutObjects(ctx, app.CnctBucket, putList) // async
 	deleteErrs := app.DeleteCncts(ctx, removeCnctKeys)
 
-	return RefreshResult[Input]{PutErrs: getPutCall(), DeleteErrs: deleteErrs}
+	return RefreshResult{PutErrors: getPutCall(), DeleteErrors: deleteErrs}
 }
 
-func (app *App) IngestAcctsRefreshes(ctx context.Context, accts []ExtnAcctRefresh) RefreshResult[ExtnAcctRefresh] {
-	type Input = ExtnAcctRefresh
+func (app *App) IngestAcctsRefreshes(ctx context.Context, accts []ExtnAcctRefresh) RefreshResult {
 	var putList []PutInput
 	var removeAcctKeys []AcctKey
 
@@ -136,10 +131,10 @@ func (app *App) IngestAcctsRefreshes(ctx context.Context, accts []ExtnAcctRefres
 	getPutCall := app.PutObjects(ctx, app.AcctBucket, putList) // async
 	deleteErrs := app.DeleteAccts(ctx, removeAcctKeys)
 
-	return RefreshResult[Input]{PutErrs: getPutCall(), DeleteErrs: deleteErrs}
+	return RefreshResult{PutErrors: getPutCall(), DeleteErrors: deleteErrs}
 }
 
-func (app *App) IngestHoldRefreshes(ctx context.Context, holds []ExtnHoldRefresh) RefreshResult[ExtnHoldRefresh] {
+func (app *App) IngestHoldRefreshes(ctx context.Context, holds []ExtnHoldRefresh) RefreshResult {
 	type Input = ExtnHoldRefresh
 	var putList []PutInput
 	holdPrefixes := make(map[Prefix]bool)
@@ -162,10 +157,10 @@ func (app *App) IngestHoldRefreshes(ctx context.Context, holds []ExtnHoldRefresh
 	getPutCall := app.PutObjects(ctx, app.HoldBucket, putList) // async
 	deleteErrs := app.DeletePrefixes(ctx, holdPrefixes)
 
-	return RefreshResult[Input]{PutErrs: getPutCall(), DeleteErrs: deleteErrs}
+	return RefreshResult{PutErrors: getPutCall(), DeleteErrors: deleteErrs}
 }
 
-func (app *App) IngestTxnRefreshes(ctx context.Context, txns []ExtnTxnRefresh) RefreshResult[ExtnTxnRefresh] {
+func (app *App) IngestTxnRefreshes(ctx context.Context, txns []ExtnTxnRefresh) RefreshResult {
 	type Input = ExtnTxnRefresh
 	var putList []PutInput
 	txnPrefixes := make(map[Prefix]bool)
@@ -188,29 +183,36 @@ func (app *App) IngestTxnRefreshes(ctx context.Context, txns []ExtnTxnRefresh) R
 	getPutCall := app.PutObjects(ctx, app.TxnBucket, putList)
 	deleteErrs := app.DeletePrefixes(ctx, txnPrefixes)
 
-	return RefreshResult[Input]{PutErrs: getPutCall(), DeleteErrs: deleteErrs}
+	return RefreshResult{PutErrors: getPutCall(), DeleteErrors: deleteErrs}
 }
 
-func (app *App) IngestDeleteRetries(ctx context.Context, deletes []DeleteRetry) []DeleteResult {
-	prefixMap := make(map[string]bool)
+func (app *App) IngestDeleteRetries(ctx context.Context, deleteRetries []DeleteRetry) []DeleteResult {
+	slog.InfoContext(ctx, "begin ingest delete retries", "deleteRetries", deleteRetries)
 
-	for _, delete := range deletes {
-		switch delete.Kind {
+	deletes := makeDeleteSupervisor(ctx, app)
+
+	prefixes := make(map[Prefix]bool)
+
+	for _, d := range deleteRetries {
+		switch d.Kind {
 		case ListKind:
-			prefixMap[delete.Prefix] = true
+			prefixes[Prefix{Bucket: d.Bucket, Value: d.Prefix}] = true
 		case DeleteKind:
-			objectIDs := make([]s3types.ObjectIdentifier, 0)
-			for _, key := range delete.Keys {
+			objectIDs := make([]s3types.ObjectIdentifier, 0, len(d.Keys))
+			for _, key := range d.Keys {
 				objectIDs = append(objectIDs, s3types.ObjectIdentifier{Key: aws.String(key)})
 			}
-			result := app.DeleteObjects(ctx, delete.Bucket, objectIDs)
-			deleteResults = append(deleteResults, result)
+			deletes.deleteIDs(d.Bucket, objectIDs)
 		}
 	}
 
-	var deleteResults []DeleteResult
+	slog.InfoContext(ctx, "deleting prefixes for delete retries", "prefixes", prefixes)
 
-	return deleteResults
+	for prefix := range prefixes {
+		deletes.deletePages(prefix.Bucket, app.ListObjectsByPrefix(ctx, prefix.Bucket, prefix.Value))
+	}
+
+	return deletes.wait()
 }
 
 type PutInput struct {
@@ -231,6 +233,10 @@ type PutResult struct {
 
 // PutObjects uploads objects to a given bucket async and returns any failed uploads when the task is joined
 func (app *App) PutObjects(ctx context.Context, bucket string, inputObjects []PutInput) func() []PutResult {
+	if len(inputObjects) == 0 {
+		return func() []PutResult { return nil }
+	}
+
 	var errs []PutResult
 	var mu sync.Mutex
 
@@ -278,7 +284,7 @@ func makeListAcctsSupervisor(ctx context.Context) ListAcctsSupervisor {
 	return ListAcctsSupervisor{context: ctx, table: make(map[string]bool)}
 }
 
-func (ls *ListAcctsSupervisor) execute(listIDsChan chan ListResult) chan ListResult {
+func (ls *ListAcctsSupervisor) interceptListedPrefixes(listIDsChan chan ListResult) chan ListResult {
 	pipeIDsChan := make(chan ListResult)
 	ls.wg.Add(1)
 	go func() {
@@ -332,29 +338,46 @@ func makeDeleteSupervisor(ctx context.Context, app *App) DeleteSupervisor {
 	return DeleteSupervisor{context: ctx, app: app}
 }
 
-func (ds *DeleteSupervisor) execute(bucket string, listIDsChan chan ListResult) {
+func (ds *DeleteSupervisor) addResult(deleteResult DeleteResult) {
+	if deleteResult.Err == nil {
+		return
+	}
+	ds.lock.Lock()
+	ds.deleteErrs = append(ds.deleteErrs, deleteResult)
+	ds.lock.Unlock()
+}
+
+func (ds *DeleteSupervisor) deletePages(bucket string, listIDsChan chan ListResult) {
 	slog.InfoContext(ds.context, "begin an execute delete worker", "bucket", bucket)
 
 	ds.wg.Add(1)
 	go func() {
 		defer ds.wg.Done()
-		// ok. get all listed ids from the channel
 		for listResult := range listIDsChan {
 			var deleteResult DeleteResult
-			if listResult.Err == nil {
-				// list didn't error - try to delete the ids
-				deleteResult = ds.app.DeleteObjects(ds.context, bucket, listResult.Keys)
-			} else {
-				// list erroring is a special case of a delete erroring
+
+			if listResult.Err != nil {
 				deleteResult = DeleteResult{Bucket: listResult.Bucket, Prefix: listResult.Prefix, Err: listResult.Err}
+			} else {
+				deleteResult = ds.app.DeleteObjects(ds.context, bucket, listResult.Keys)
 			}
-			// keep track of all failed deletes
-			if deleteResult.Err != nil {
-				ds.lock.Lock()
-				ds.deleteErrs = append(ds.deleteErrs, deleteResult)
-				ds.lock.Unlock()
-			}
+
+			ds.addResult(deleteResult)
 		}
+	}()
+}
+
+type DeleteChunk struct {
+	Bucket string
+	Keys   []s3types.ObjectIdentifier
+}
+
+func (ds *DeleteSupervisor) deleteIDs(bucket string, keys []s3types.ObjectIdentifier) {
+	ds.wg.Add(1)
+	go func() {
+		defer ds.wg.Done()
+		deleteResult := ds.app.DeleteObjects(ds.context, bucket, keys)
+		ds.addResult(deleteResult)
 	}()
 }
 
@@ -386,7 +409,7 @@ func (app *App) DeleteCncts(ctx context.Context, keys []CnctKey) []DeleteResult 
 	deletes := makeDeleteSupervisor(ctx, app)
 
 	for cnctPrefix := range cnctPrefixes {
-		deletes.execute(app.CnctBucket, app.ListObjectsByPrefix(ctx, app.CnctBucket, cnctPrefix))
+		deletes.deletePages(app.CnctBucket, app.ListObjectsByPrefix(ctx, app.CnctBucket, cnctPrefix))
 	}
 
 	// in addition to deleting each cnct by prefix, we need to parse the acctID and create an acctPrefix to delete txns and holdings.
@@ -394,18 +417,18 @@ func (app *App) DeleteCncts(ctx context.Context, keys []CnctKey) []DeleteResult 
 
 	for cnctPrefix := range cnctPrefixes {
 		listIDsChan := app.ListObjectsByPrefix(ctx, app.AcctBucket, cnctPrefix)
-		deleteIDsChan := listAccts.execute(listIDsChan) // intercepts records coming from the listIDsChan and sends them to the deleteIDsChan
-		deletes.execute(app.AcctBucket, deleteIDsChan)
+		deleteIDsChan := listAccts.interceptListedPrefixes(listIDsChan)
+		deletes.deletePages(app.AcctBucket, deleteIDsChan)
 	}
 
-	acctsPreixTable := listAccts.wait()
+	acctsPrefixTable := listAccts.wait()
 
-	for acctPrefix := range acctsPreixTable {
+	for acctPrefix := range acctsPrefixTable {
 		for _, bucket := range []string{
 			app.HoldBucket,
 			app.TxnBucket,
 		} {
-			deletes.execute(bucket, app.ListObjectsByPrefix(ctx, bucket, acctPrefix))
+			deletes.deletePages(bucket, app.ListObjectsByPrefix(ctx, bucket, acctPrefix))
 		}
 	}
 
@@ -422,12 +445,15 @@ func (app *App) DeleteAccts(ctx context.Context, keys []AcctKey) []DeleteResult 
 
 	acctMemPrefixes := make(map[string]bool)
 	acctPrefixes := make(map[string]bool)
+
 	for _, key := range keys {
 		memPrefix := AcctMemberPrefix{PrtyId: key.PrtyId, PrtyIdTypeCd: key.PrtyIdTypeCd, AcctID: key.AcctID}
 		prefix := AcctPrefix{PrtyId: key.PrtyId, PrtyIdTypeCd: key.PrtyIdTypeCd, CnctID: key.CnctID, AcctID: key.AcctID}
+
 		acctMemPrefixes[memPrefix.String()] = true
 		acctPrefixes[prefix.String()] = true
 	}
+
 	slog.InfoContext(ctx, "deleting accts", "acctMemPrefixes", acctMemPrefixes, "acctPrefixes", acctPrefixes)
 
 	deletes := makeDeleteSupervisor(ctx, app)
@@ -437,11 +463,11 @@ func (app *App) DeleteAccts(ctx context.Context, keys []AcctKey) []DeleteResult 
 			app.HoldBucket,
 			app.TxnBucket,
 		} {
-			deletes.execute(bucket, app.ListObjectsByPrefix(ctx, bucket, acctMemPrefix))
+			deletes.deletePages(bucket, app.ListObjectsByPrefix(ctx, bucket, acctMemPrefix))
 		}
 	}
 	for acctPrefix := range acctPrefixes {
-		deletes.execute(app.AcctBucket, app.ListObjectsByPrefix(ctx, app.AcctBucket, acctPrefix))
+		deletes.deletePages(app.AcctBucket, app.ListObjectsByPrefix(ctx, app.AcctBucket, acctPrefix))
 	}
 
 	return deletes.wait()
@@ -449,7 +475,7 @@ func (app *App) DeleteAccts(ctx context.Context, keys []AcctKey) []DeleteResult 
 
 type Prefix struct {
 	Bucket string
-	Value string
+	Value  string
 }
 
 func (p Prefix) String() string {
@@ -459,7 +485,6 @@ func (p Prefix) String() string {
 // DeletePrefixes generically deletes pairs of prefixes in one shot.
 func (app *App) DeletePrefixes(ctx context.Context, prefixes map[Prefix]bool) []DeleteResult {
 	if len(prefixes) == 0 {
-		slog.InfoContext(ctx, "no prefixes to delete")
 		return nil
 	}
 
@@ -468,7 +493,7 @@ func (app *App) DeletePrefixes(ctx context.Context, prefixes map[Prefix]bool) []
 	deletes := makeDeleteSupervisor(ctx, app)
 
 	for prefix := range prefixes {
-		deletes.execute(prefix.Bucket, app.ListObjectsByPrefix(ctx, prefix.Bucket, prefix.Value))
+		deletes.deletePages(prefix.Bucket, app.ListObjectsByPrefix(ctx, prefix.Bucket, prefix.Value))
 	}
 
 	return deletes.wait()

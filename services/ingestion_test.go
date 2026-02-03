@@ -1,7 +1,6 @@
 package svc
 
 import (
-	"bytes"
 	"context"
 	"filogger/pb"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -9,77 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/testing/protocmp"
-	"io"
 	"testing"
 )
-
-func seedS3BucketsForInsertion(t *testing.T, app *App) {
-	// seed the bucket with data to test deletions AND to ensure that inserts handle existing keys properly
-	// "body" can be anything because insertion does not look at this information
-	for _, record := range []struct {
-		Bucket string
-		Key    string
-	}{
-		{Bucket: app.CnctBucket, Key: "p1/Y/c1/2025-06-12"},
-		{Bucket: app.CnctBucket, Key: "p1/Y/c1/2025-06-13"},
-		{Bucket: app.CnctBucket, Key: "p1/Y/c2/2025-06-14"},
-		{Bucket: app.CnctBucket, Key: "p1/Y/c3/2025-06-15"},
-
-		{Bucket: app.AcctBucket, Key: "p1/Y/c1/a1/2025-06-12"},
-		{Bucket: app.AcctBucket, Key: "p1/Y/c1/a1/2025-06-13"},
-		{Bucket: app.AcctBucket, Key: "p2/Y/c2/a2/2025-06-14"},
-		{Bucket: app.AcctBucket, Key: "p2/Y/c3/a3/2025-06-15"},
-
-		{Bucket: app.HoldBucket, Key: "p1/Y/a1/h1/2025-06-12"},
-		{Bucket: app.HoldBucket, Key: "p1/Y/a1/h1/2025-06-13"},
-		{Bucket: app.HoldBucket, Key: "p2/Y/a1/h1/2025-06-14"},
-		{Bucket: app.HoldBucket, Key: "p2/Y/a2/h2/2025-06-15"},
-
-		{Bucket: app.TxnBucket, Key: "p1/Y/a1/t1/2025-06-12T00:14:37Z"},
-		{Bucket: app.TxnBucket, Key: "p1/Y/a1/t1/2025-06-12T02:48:09Z"},
-		{Bucket: app.TxnBucket, Key: "p2/Y/a1/t1/2025-06-13T02:48:09Z"},
-		{Bucket: app.TxnBucket, Key: "p2/Y/a2/t2/2025-06-14T07:06:18Z"},
-	} {
-		_, err := app.S3Client.PutObject(t.Context(), &s3.PutObjectInput{
-			Bucket: aws.String(record.Bucket),
-			Key:    aws.String(record.Key),
-			Body:   bytes.NewReader([]byte("test")),
-		})
-		require.NoError(t, err)
-	}
-}
-
-type wantObject struct {
-	bucket string
-	key    string
-	value  proto.Message
-}
-
-func assertProtoObjects(t *testing.T, app *App, objects []wantObject, makeValue func() proto.Message) {
-	t.Helper()
-
-	for _, object := range objects {
-		data, err := app.S3Client.GetObject(context.Background(), &s3.GetObjectInput{
-			Bucket: aws.String(object.bucket),
-			Key:    aws.String(object.key),
-		})
-		if err != nil {
-			t.Errorf("failed to get object %s/%s: %v", object.bucket, object.key, err)
-			continue
-		}
-
-		body, err := io.ReadAll(data.Body)
-		require.NoError(t, err)
-
-		t.Logf("got object %s/%s: %s", object.bucket, object.key, string(body))
-
-		s3Value := makeValue()
-		require.NoError(t, proto.Unmarshal(body, s3Value))
-
-		Equal(t, object.value, s3Value, protocmp.Transform())
-	}
-}
 
 func getAllKeys(t *testing.T, app *App) []string {
 	var keys []string
@@ -100,11 +30,14 @@ func getAllKeys(t *testing.T, app *App) []string {
 }
 
 func TestIngestCnctEnrichments(t *testing.T) {
+	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	app := SetupAppTest(t)
-	seedS3BucketsForInsertion(t, app)
+	app.Aws.PageLength = aws.Int32(1) // testing ListObjectsV2 pagination.
+	seedS3Buckets(t, app)
 
+	// when
 	putErrors := app.IngestCnctEnrichments(ctx, []ExtnCnctEnrichment{
 		{
 			PrtyId:       "p1",
@@ -123,6 +56,7 @@ func TestIngestCnctEnrichments(t *testing.T) {
 	})
 	require.Empty(t, putErrors)
 
+	// then
 	wantObjects := []wantObject{
 		{
 			bucket: app.CnctBucket,
@@ -139,11 +73,14 @@ func TestIngestCnctEnrichments(t *testing.T) {
 }
 
 func TestIngestAcctEnrichments(t *testing.T) {
+	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	app := SetupAppTest(t)
-	seedS3BucketsForInsertion(t, app)
+	app.Aws.PageLength = aws.Int32(1) // testing ListObjectsV2 pagination.
+	seedS3Buckets(t, app)
 
+	// when
 	putErrors := app.IngestAcctEnrichments(ctx, []ExtnAcctEnrichment{
 		{
 			PrtyId:       "p1",
@@ -164,6 +101,7 @@ func TestIngestAcctEnrichments(t *testing.T) {
 	})
 	require.Empty(t, putErrors)
 
+	// then
 	wantObjects := []wantObject{
 		{
 			bucket: app.AcctBucket,
@@ -180,11 +118,14 @@ func TestIngestAcctEnrichments(t *testing.T) {
 }
 
 func TestIngestHoldEnrichments(t *testing.T) {
+	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	app := SetupAppTest(t)
-	seedS3BucketsForInsertion(t, app)
+	app.Aws.PageLength = aws.Int32(1) // testing ListObjectsV2 pagination.
+	seedS3Buckets(t, app)
 
+	// when
 	putErrors := app.IngestHoldEnrichments(ctx, []ExtnHoldEnrichment{
 		{
 			PrtyId:       "p1",
@@ -205,6 +146,7 @@ func TestIngestHoldEnrichments(t *testing.T) {
 	})
 	require.Empty(t, putErrors)
 
+	// then
 	wantObjects := []wantObject{
 		{
 			bucket: app.HoldBucket,
@@ -221,12 +163,16 @@ func TestIngestHoldEnrichments(t *testing.T) {
 }
 
 func TestIngestTxnEnrichments(t *testing.T) {
+	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	app := SetupAppTest(t)
-	seedS3BucketsForInsertion(t, app)
+	app.Aws.PageLength = aws.Int32(1) // testing ListObjectsV2 pagination.
+	seedS3Buckets(t, app)
 
-	putErrors :=app.IngestTxnEnrichments(ctx, []ExtnTxnEnrichment{
+	// when
+	putErrors := app.IngestTxnEnrichments(ctx, []ExtnTxnEnrichment{
+		// both of these insert new records because txns are completely unique due to timestamp being part of the key.
 		{
 			PrtyId:       "p1",
 			PrtyIdTypeCd: "Y",
@@ -248,6 +194,7 @@ func TestIngestTxnEnrichments(t *testing.T) {
 	})
 	require.Empty(t, putErrors)
 
+	// then
 	wantObjects := []wantObject{
 		{
 			bucket: app.TxnBucket,
@@ -264,11 +211,14 @@ func TestIngestTxnEnrichments(t *testing.T) {
 }
 
 func TestIngestCnctRefreshes(t *testing.T) {
+	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	app := SetupAppTest(t)
-	seedS3BucketsForInsertion(t, app)
+	app.Aws.PageLength = aws.Int32(1) // testing ListObjectsV2 pagination.
+	seedS3Buckets(t, app)
 
+	// when
 	result := app.IngestCnctRefreshes(ctx, []ExtnCnctRefresh{
 		{
 			IsDeleted:    true,
@@ -286,9 +236,10 @@ func TestIngestCnctRefreshes(t *testing.T) {
 			VendorName:   "GoldmanSachs",
 		},
 	})
-	require.Empty(t, result.PutErrs)
-	require.Empty(t, result.DeleteErrs)
+	require.Empty(t, result.PutErrors)
+	require.Empty(t, result.DeleteErrors)
 
+	// then
 	wantObjects := []wantObject{
 		{
 			bucket: app.CnctBucket,
@@ -298,7 +249,7 @@ func TestIngestCnctRefreshes(t *testing.T) {
 	}
 	assertProtoObjects(t, app, wantObjects, func() proto.Message { return &pb.ExtnCnctEntity{} })
 
-	// removed keys are excluded.
+	// removed keys are commented.
 	wantKeys := []string{
 		//"p1/Y/c1/2025-06-12",
 		//"p1/Y/c1/2025-06-13",
@@ -325,11 +276,14 @@ func TestIngestCnctRefreshes(t *testing.T) {
 }
 
 func TestIngestAcctRefreshes(t *testing.T) {
+	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	app := SetupAppTest(t)
-	seedS3BucketsForInsertion(t, app)
+	app.Aws.PageLength = aws.Int32(1) // testing ListObjectsV2 pagination.
+	seedS3Buckets(t, app)
 
+	// when
 	result := app.IngestAcctsRefreshes(ctx, []ExtnAcctRefresh{
 		{
 			IsDeleted:    true,
@@ -349,9 +303,10 @@ func TestIngestAcctRefreshes(t *testing.T) {
 			AcctName:     "Savings Account",
 		},
 	})
-	require.Empty(t, result.PutErrs)
-	require.Empty(t, result.DeleteErrs)
+	require.Empty(t, result.PutErrors)
+	require.Empty(t, result.DeleteErrors)
 
+	// then
 	wantObjects := []wantObject{
 		{
 			bucket: app.AcctBucket,
@@ -361,7 +316,7 @@ func TestIngestAcctRefreshes(t *testing.T) {
 	}
 	assertProtoObjects(t, app, wantObjects, func() proto.Message { return &pb.ExtnAcctEntity{} })
 
-	// removed keys are excluded.
+	// removed keys are commented.
 	wantKeys := []string{
 		"p1/Y/c1/2025-06-12",
 		"p1/Y/c1/2025-06-13",
@@ -388,11 +343,14 @@ func TestIngestAcctRefreshes(t *testing.T) {
 }
 
 func TestIngestTxnRefreshes(t *testing.T) {
+	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	app := SetupAppTest(t)
-	seedS3BucketsForInsertion(t, app)
+	app.Aws.PageLength = aws.Int32(1) // testing ListObjectsV2 pagination.
+	seedS3Buckets(t, app)
 
+	// when
 	result := app.IngestTxnRefreshes(ctx, []ExtnTxnRefresh{
 		{
 			IsDeleted:    true,
@@ -414,9 +372,10 @@ func TestIngestTxnRefreshes(t *testing.T) {
 			TxnAmt:       -1299,
 		},
 	})
-	require.Empty(t, result.PutErrs)
-	require.Empty(t, result.DeleteErrs)
+	require.Empty(t, result.PutErrors)
+	require.Empty(t, result.DeleteErrors)
 
+	// then
 	wantObjects := []wantObject{
 		{
 			bucket: app.TxnBucket,
@@ -426,7 +385,7 @@ func TestIngestTxnRefreshes(t *testing.T) {
 	}
 	assertProtoObjects(t, app, wantObjects, func() proto.Message { return &pb.ExtnTxnEntity{} })
 
-	// removed keys are excluded.
+	// removed keys are commented.
 	wantKeys := []string{
 		"p1/Y/c1/2025-06-12",
 		"p1/Y/c1/2025-06-13",
@@ -453,11 +412,14 @@ func TestIngestTxnRefreshes(t *testing.T) {
 }
 
 func TestIngestHoldRefreshes(t *testing.T) {
+	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	app := SetupAppTest(t)
-	seedS3BucketsForInsertion(t, app)
+	app.Aws.PageLength = aws.Int32(1) // testing ListObjectsV2 pagination.
+	seedS3Buckets(t, app)
 
+	// when
 	result := app.IngestHoldRefreshes(ctx, []ExtnHoldRefresh{
 		{
 			IsDeleted:    true,
@@ -477,9 +439,10 @@ func TestIngestHoldRefreshes(t *testing.T) {
 			HoldName:     "Stock",
 		},
 	})
-	require.Empty(t, result.PutErrs)
-	require.Empty(t, result.DeleteErrs)
+	require.Empty(t, result.PutErrors)
+	require.Empty(t, result.DeleteErrors)
 
+	// then
 	wantObjects := []wantObject{
 		{
 			bucket: app.HoldBucket,
@@ -489,7 +452,7 @@ func TestIngestHoldRefreshes(t *testing.T) {
 	}
 	assertProtoObjects(t, app, wantObjects, func() proto.Message { return &pb.ExtnHoldEntity{} })
 
-	// removed keys are excluded.
+	// removed keys are commented.
 	wantKeys := []string{
 		"p1/Y/c1/2025-06-12",
 		"p1/Y/c1/2025-06-13",
@@ -509,6 +472,60 @@ func TestIngestHoldRefreshes(t *testing.T) {
 
 		"p1/Y/a1/t1/2025-06-12T00:14:37Z",
 		"p1/Y/a1/t1/2025-06-12T02:48:09Z",
+		"p2/Y/a1/t1/2025-06-13T02:48:09Z",
+		"p2/Y/a2/t2/2025-06-14T07:06:18Z",
+	}
+	assert.ElementsMatch(t, wantKeys, getAllKeys(t, app))
+}
+
+func TestIngestDeleteRetries(t *testing.T) {
+	// given
+	ctx := context.WithValue(t.Context(), "trace", t.Name())
+
+	app := SetupAppTest(t)
+	app.Aws.PageLength = aws.Int32(1) // testing ListObjectsV2 pagination.
+	seedS3Buckets(t, app)
+
+	// when
+	results := app.IngestDeleteRetries(ctx, []DeleteRetry{
+		{
+			Kind:   ListKind,
+			Bucket: app.AcctBucket,
+			Prefix: "p1/Y/c1",
+		},
+		{
+			Kind:   DeleteKind,
+			Bucket: app.HoldBucket,
+			Keys:   []string{"p1/Y/a1/h1/2025-06-12", "p1/Y/a1/h1/2025-06-13"},
+		},
+		{
+			Kind:   DeleteKind,
+			Bucket: app.TxnBucket,
+			Keys:   []string{"p1/Y/a1/t1/2025-06-12T00:14:37Z", "p1/Y/a1/t1/2025-06-12T02:48:09Z"},
+		},
+	})
+	require.Empty(t, results)
+
+	// then
+	// removed keys are commented.
+	wantKeys := []string{
+		"p1/Y/c1/2025-06-12",
+		"p1/Y/c1/2025-06-13",
+		"p1/Y/c2/2025-06-14",
+		"p1/Y/c3/2025-06-15",
+
+		//"p1/Y/c1/a1/2025-06-12",
+		//"p1/Y/c1/a1/2025-06-13",
+		"p2/Y/c2/a2/2025-06-14",
+		"p2/Y/c3/a3/2025-06-15",
+
+		//"p1/Y/a1/h1/2025-06-12",
+		//"p1/Y/a1/h1/2025-06-13",
+		"p2/Y/a1/h1/2025-06-14",
+		"p2/Y/a2/h2/2025-06-15",
+
+		//"p1/Y/a1/t1/2025-06-12T00:14:37Z",
+		//"p1/Y/a1/t1/2025-06-12T02:48:09Z",
 		"p2/Y/a1/t1/2025-06-13T02:48:09Z",
 		"p2/Y/a2/t2/2025-06-14T07:06:18Z",
 	}

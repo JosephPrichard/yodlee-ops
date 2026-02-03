@@ -45,6 +45,8 @@ type App struct {
 }
 
 func MakeApp(ctx context.Context, config Config) *App {
+	InitLoggers(nil)
+
 	awsClient, err := MakeAwsClient(ctx, config)
 	if err != nil {
 		Fatal(ctx, "failed to make AWS client", err)
@@ -53,7 +55,8 @@ func MakeApp(ctx context.Context, config Config) *App {
 	producers := &kafka.Writer{
 		Addr: kafka.TCP(config.KafkaBrokers...),
 	}
-	makeReader := func(topic string) *kafka.Reader {
+
+	makeConsumer := func(topic string) *kafka.Reader {
 		return kafka.NewReader(kafka.ReaderConfig{
 			Brokers:        config.KafkaBrokers,
 			GroupID:        config.GroupID,
@@ -61,8 +64,8 @@ func MakeApp(ctx context.Context, config Config) *App {
 			CommitInterval: time.Second, // auto-commit
 		})
 	}
-
 	kafkaClient := Kafka{
+		KafkaBrokers:           config.KafkaBrokers,
 		CnctRefreshTopic:       config.CnctRefreshTopic,
 		AcctRefreshTopic:       config.AcctRefreshTopic,
 		HoldRefreshTopic:       config.HoldRefreshTopic,
@@ -73,21 +76,22 @@ func MakeApp(ctx context.Context, config Config) *App {
 		TxnEnrichmentTopic:     config.TxnEnrichmentTopic,
 		DeleteRecoveryTopic:    config.DeleteRecoveryTopic,
 		Producer:               producers,
-		CnctEnrichmentConsumer: makeReader(config.CnctEnrichmentTopic),
-		AcctEnrichmentConsumer: makeReader(config.AcctEnrichmentTopic),
-		TxnEnrichmentConsumer:  makeReader(config.TxnEnrichmentTopic),
-		HoldEnrichmentConsumer: makeReader(config.HoldEnrichmentTopic),
-		CnctRefreshConsumer:    makeReader(config.CnctRefreshTopic),
-		AcctRefreshConsumer:    makeReader(config.AcctRefreshTopic),
-		HoldRefreshConsumer:    makeReader(config.HoldRefreshTopic),
-		TxnRefreshConsumer:     makeReader(config.TxnRefreshTopic),
-		DeleteRcoveryConsumer:  makeReader(config.DeleteRecoveryTopic),
+		CnctEnrichmentConsumer: makeConsumer(config.CnctEnrichmentTopic),
+		AcctEnrichmentConsumer: makeConsumer(config.AcctEnrichmentTopic),
+		TxnEnrichmentConsumer:  makeConsumer(config.TxnEnrichmentTopic),
+		HoldEnrichmentConsumer: makeConsumer(config.HoldEnrichmentTopic),
+		CnctRefreshConsumer:    makeConsumer(config.CnctRefreshTopic),
+		AcctRefreshConsumer:    makeConsumer(config.AcctRefreshTopic),
+		HoldRefreshConsumer:    makeConsumer(config.HoldRefreshTopic),
+		TxnRefreshConsumer:     makeConsumer(config.TxnRefreshTopic),
+		DeleteRecoveryConsumer: makeConsumer(config.DeleteRecoveryTopic),
 	}
+
 	return &App{Kafka: kafkaClient, Aws: awsClient}
 }
 
 func (app *App) Close() error {
-	close := func(r io.Closer) error {
+	shutdown := func(r io.Closer) error {
 		if r == nil {
 			return nil
 		}
@@ -95,18 +99,19 @@ func (app *App) Close() error {
 	}
 
 	return errors.Join(
-		close(app.CnctEnrichmentConsumer),
-		close(app.AcctEnrichmentConsumer),
-		close(app.HoldEnrichmentConsumer),
-		close(app.TxnEnrichmentConsumer),
-		close(app.CnctRefreshConsumer),
-		close(app.AcctRefreshConsumer),
-		close(app.HoldRefreshConsumer),
-		close(app.TxnRefreshConsumer),
+		shutdown(app.CnctEnrichmentConsumer),
+		shutdown(app.AcctEnrichmentConsumer),
+		shutdown(app.HoldEnrichmentConsumer),
+		shutdown(app.TxnEnrichmentConsumer),
+		shutdown(app.CnctRefreshConsumer),
+		shutdown(app.AcctRefreshConsumer),
+		shutdown(app.HoldRefreshConsumer),
+		shutdown(app.TxnRefreshConsumer),
 	)
 }
 
 type Kafka struct {
+	KafkaBrokers           []string
 	CnctRefreshTopic       string
 	AcctRefreshTopic       string
 	HoldRefreshTopic       string
@@ -125,11 +130,18 @@ type Kafka struct {
 	AcctRefreshConsumer    *kafka.Reader
 	HoldRefreshConsumer    *kafka.Reader
 	TxnRefreshConsumer     *kafka.Reader
-	DeleteRcoveryConsumer  *kafka.Reader
+	DeleteRecoveryConsumer *kafka.Reader
+}
+
+type S3Client interface {
+	PutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
+	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+	ListObjectsV2(ctx context.Context, params *s3.ListObjectsV2Input, optFns ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
+	DeleteObjects(ctx context.Context, params *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
 }
 
 type Aws struct {
-	S3Client   *s3.Client
+	S3Client   S3Client
 	PageLength *int32
 	CnctBucket string
 	AcctBucket string
