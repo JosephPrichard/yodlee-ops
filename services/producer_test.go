@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	cfg "filogger/config"
+	"filogger/testutil"
 	"testing"
 	"time"
 
@@ -30,7 +32,8 @@ func testConsumer[JSON any](ctx context.Context, t *testing.T, reader *kafka.Rea
 
 func TestProducePutErrors(t *testing.T) {
 	// given
-	app := SetupAppTest(t)
+	kafka := cfg.MakeKafka(testutil.SetupITest(t))
+	app := &App{KafkaClient: kafka}
 
 	cnctEnrichment := ExtnCnctEnrichment{
 		PrtyId:       "p1",
@@ -69,7 +72,8 @@ func TestProducePutErrors(t *testing.T) {
 
 func TestProduceDeleteErrors(t *testing.T) {
 	// given
-	app := SetupAppTest(t)
+	kafka := cfg.MakeKafka(testutil.SetupITest(t))
+	app := &App{KafkaClient: kafka}
 
 	deleteErrs := []DeleteResult{
 		{

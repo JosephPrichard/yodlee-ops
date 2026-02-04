@@ -1,23 +1,19 @@
-package svc
+package testutil
 
 import (
-	"bytes"
 	"context"
+	cfg "filogger/config"
 	"fmt"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/segmentio/kafka-go"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/testing/protocmp"
-	"io"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/segmentio/kafka-go"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/google/go-cmp/cmp"
 	"github.com/google/uuid"
 	"github.com/testcontainers/testcontainers-go"
 	testcontainerskafka "github.com/testcontainers/testcontainers-go/modules/kafka"
@@ -37,7 +33,7 @@ var setupAppMu sync.Mutex
 var localstackCont testcontainers.Container
 var kafkaCont *testcontainerskafka.KafkaContainer
 
-func SetupAppTest(t *testing.T) *App {
+func SetupITest(t *testing.T) cfg.Config {
 	// global lock for the entire initialization phase.
 	// this prevents multiple containers for the same infra from being spawned and guarantees all tests share the same "App" instance
 	setupAppMu.Lock()
@@ -98,7 +94,7 @@ func SetupAppTest(t *testing.T) *App {
 	t.Logf("kafka brokers: %v", brokers)
 
 	// test configuration for infra.
-	cfg := Config{
+	cfg := cfg.Config{
 		AwsDefaultRegion: "us-east-1",
 		AwsEndpoint:      awsEndpoint,
 		IsUnitTest:       true,
@@ -127,10 +123,10 @@ func SetupAppTest(t *testing.T) *App {
 	createTopics(t, cfg)
 
 	// make the app state and connect to the infra.
-	return MakeApp(ctx, cfg)
+	return cfg
 }
 
-func createBuckets(ctx context.Context, t *testing.T, cfg Config) {
+func createBuckets(ctx context.Context, t *testing.T, cfg cfg.Config) {
 	awsCfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(cfg.AwsDefaultRegion),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("testing", "testing", "")),
@@ -154,7 +150,7 @@ func createBuckets(ctx context.Context, t *testing.T, cfg Config) {
 	}
 }
 
-func createTopics(t *testing.T, cfg Config) {
+func createTopics(t *testing.T, cfg cfg.Config) {
 	conn, err := kafka.Dial("tcp", cfg.KafkaBrokers[0])
 	if err != nil {
 		t.Fatalf("failed to connect to kafka: %s", err)
@@ -199,78 +195,4 @@ func createTopics(t *testing.T, cfg Config) {
 
 func unique(str string) string {
 	return str + "-" + uuid.NewString()
-}
-
-func Equal[T any](t *testing.T, expected, actual T, opts ...cmp.Option) {
-	t.Helper()
-	if diff := cmp.Diff(expected, actual, opts...); diff != "" {
-		t.Errorf("\n%s", diff)
-	}
-}
-
-func seedS3Buckets(t *testing.T, app *App) {
-	// seed the bucket with data to test deletions AND to ensure that inserts handle existing keys properly
-	// "body" can be anything because insertion does not look at this information
-	for _, record := range []struct {
-		Bucket string
-		Key    string
-	}{
-		{Bucket: app.CnctBucket, Key: "p1/Y/c1/2025-06-12"},
-		{Bucket: app.CnctBucket, Key: "p1/Y/c1/2025-06-13"},
-		{Bucket: app.CnctBucket, Key: "p1/Y/c2/2025-06-14"},
-		{Bucket: app.CnctBucket, Key: "p1/Y/c3/2025-06-15"},
-
-		{Bucket: app.AcctBucket, Key: "p1/Y/c1/a1/2025-06-12"},
-		{Bucket: app.AcctBucket, Key: "p1/Y/c1/a1/2025-06-13"},
-		{Bucket: app.AcctBucket, Key: "p2/Y/c2/a2/2025-06-14"},
-		{Bucket: app.AcctBucket, Key: "p2/Y/c3/a3/2025-06-15"},
-
-		{Bucket: app.HoldBucket, Key: "p1/Y/a1/h1/2025-06-12"},
-		{Bucket: app.HoldBucket, Key: "p1/Y/a1/h1/2025-06-13"},
-		{Bucket: app.HoldBucket, Key: "p2/Y/a1/h1/2025-06-14"},
-		{Bucket: app.HoldBucket, Key: "p2/Y/a2/h2/2025-06-15"},
-
-		{Bucket: app.TxnBucket, Key: "p1/Y/a1/t1/2025-06-12T00:14:37Z"},
-		{Bucket: app.TxnBucket, Key: "p1/Y/a1/t1/2025-06-12T02:48:09Z"},
-		{Bucket: app.TxnBucket, Key: "p2/Y/a1/t1/2025-06-13T02:48:09Z"},
-		{Bucket: app.TxnBucket, Key: "p2/Y/a2/t2/2025-06-14T07:06:18Z"},
-	} {
-		_, err := app.S3Client.PutObject(t.Context(), &s3.PutObjectInput{
-			Bucket: aws.String(record.Bucket),
-			Key:    aws.String(record.Key),
-			Body:   bytes.NewReader([]byte("test")),
-		})
-		require.NoError(t, err)
-	}
-}
-
-type wantObject struct {
-	bucket string
-	key    string
-	value  proto.Message
-}
-
-func assertProtoObjects(t *testing.T, app *App, objects []wantObject, makeValue func() proto.Message) {
-	t.Helper()
-
-	for _, object := range objects {
-		data, err := app.S3Client.GetObject(context.Background(), &s3.GetObjectInput{
-			Bucket: aws.String(object.bucket),
-			Key:    aws.String(object.key),
-		})
-		if err != nil {
-			t.Errorf("failed to get object %s/%s: %v", object.bucket, object.key, err)
-			continue
-		}
-
-		body, err := io.ReadAll(data.Body)
-		require.NoError(t, err)
-
-		t.Logf("got object %s/%s: %s", object.bucket, object.key, string(body))
-
-		s3Value := makeValue()
-		require.NoError(t, proto.Unmarshal(body, s3Value))
-
-		Equal(t, object.value, s3Value, protocmp.Transform())
-	}
 }

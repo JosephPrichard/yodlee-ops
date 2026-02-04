@@ -115,13 +115,13 @@ type ExtnTxnEnrichment struct {
 
 const (
 	DeleteKind = "delete"
-	ListKind = "list"
+	ListKind   = "list"
 )
 
 type DeleteRetry struct {
-	Kind string `json:"kind"` // either 'list' or 'delete'
-	Bucket string `json:"bucket"`
-	Prefix string `json:"prefix"`
+	Kind   string   `json:"kind"` // either 'list' or 'delete'
+	Bucket string   `json:"bucket"`
+	Prefix string   `json:"prefix"`
 	Keys   []string `json:"keys"`
 }
 

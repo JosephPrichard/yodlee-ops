@@ -3,17 +3,21 @@ package svc
 import (
 	"context"
 	"encoding/json"
+	cfg "filogger/config"
+	"filogger/testutil"
+	"testing"
+	"time"
+
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 func TestFiMessageConsumers(t *testing.T) {
 	// given
-	app := SetupAppTest(t)
-	seedS3Buckets(t, app)
+	testCfg := testutil.SetupITest(t)
+	app := &App{KafkaClient: cfg.MakeKafka(testCfg), AwsClient: cfg.MakeAwsClient(testCfg)}
+	testutil.SeedS3Buckets(t, &app.AwsClient)
 
 	var produceMsgs []kafka.Message
 
@@ -130,5 +134,5 @@ func TestFiMessageConsumers(t *testing.T) {
 		"p1/Y/a1/t1/2025-06-11T07:06:18Z",
 		"p300/Y/a200/t200/2025-06-13T07:06:18Z",
 	}
-	assert.ElementsMatch(t, wantKeys, getAllKeys(t, app))
+	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, &app.AwsClient))
 }
