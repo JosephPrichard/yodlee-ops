@@ -22,9 +22,12 @@ func testConsumer[JSON any](ctx context.Context, t *testing.T, reader *kafka.Rea
 		if err != nil {
 			values = append(values, err)
 		} else {
-			var errorLog JSON
-			_ = json.Unmarshal(m.Value, &errorLog)
-			values = append(values, errorLog)
+			var val JSON
+			if err := json.Unmarshal(m.Value, &val); err != nil {
+				values = append(values, err)
+			} else {
+				values = append(values, val)
+			}
 		}
 	}
 	return values
@@ -32,8 +35,9 @@ func testConsumer[JSON any](ctx context.Context, t *testing.T, reader *kafka.Rea
 
 func TestProducePutErrors(t *testing.T) {
 	// given
-	kafka := cfg.MakeKafka(testutil.SetupITest(t))
-	app := &App{KafkaClient: kafka}
+	cfg.InitLoggers(nil)
+	kafkaClient := cfg.MakeKafka(testutil.SetupITest(t, testutil.Kafka).KafkaConfig)
+	app := &App{KafkaClient: kafkaClient}
 
 	cnctEnrichment := ExtnCnctEnrichment{
 		PrtyId:       "p1",
@@ -72,8 +76,8 @@ func TestProducePutErrors(t *testing.T) {
 
 func TestProduceDeleteErrors(t *testing.T) {
 	// given
-	kafka := cfg.MakeKafka(testutil.SetupITest(t))
-	app := &App{KafkaClient: kafka}
+	kafkaClient := cfg.MakeKafka(testutil.SetupITest(t, testutil.Kafka).KafkaConfig)
+	app := &App{KafkaClient: kafkaClient}
 
 	deleteErrs := []DeleteResult{
 		{

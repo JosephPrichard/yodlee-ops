@@ -14,9 +14,11 @@ import (
 )
 
 func makeTestAwsClient(t *testing.T) *App {
-	testCfg := testutil.SetupITest(t)
-	app := &App{AwsClient: cfg.MakeAwsClient(testCfg)}
+	testCfg := testutil.SetupITest(t, testutil.Aws)
+
+	app := &App{AwsClient: cfg.MakeAwsClient(testCfg.AwsConfig)}
 	app.AwsClient.PageLength = aws.Int32(1) // testing ListObjectsV2 pagination.
+
 	testutil.SeedS3Buckets(t, &app.AwsClient)
 	return app
 }

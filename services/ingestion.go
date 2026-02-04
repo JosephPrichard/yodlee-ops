@@ -5,6 +5,7 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -15,6 +16,8 @@ import (
 // we return any failed insertions so they can be reinserted back into the queue
 
 func (app *App) IngestCnctEnrichments(ctx context.Context, cncts []ExtnCnctEnrichment) []PutResult {
+	start := time.Now()
+
 	var putList []PutInput
 
 	for _, cnct := range cncts {
@@ -27,10 +30,15 @@ func (app *App) IngestCnctEnrichments(ctx context.Context, cncts []ExtnCnctEnric
 		putList = append(putList, PutInput{Key: key.String(), Input: cnct, Body: body})
 	}
 
-	return app.PutObjects(ctx, app.CnctBucket, putList)()
+	putErrors := app.PutObjects(ctx, app.CnctBucket, putList)()
+
+	slog.InfoContext(ctx, "finished ingest cnct enrichments", "elapsed", time.Since(start))
+	return putErrors
 }
 
 func (app *App) IngestAcctEnrichments(ctx context.Context, accts []ExtnAcctEnrichment) []PutResult {
+	start := time.Now()
+
 	var putList []PutInput
 
 	for _, acct := range accts {
@@ -43,10 +51,15 @@ func (app *App) IngestAcctEnrichments(ctx context.Context, accts []ExtnAcctEnric
 		putList = append(putList, PutInput{Key: key.String(), Input: acct, Body: body})
 	}
 
-	return app.PutObjects(ctx, app.AcctBucket, putList)()
+	putErrors := app.PutObjects(ctx, app.AcctBucket, putList)()
+
+	slog.InfoContext(ctx, "finished ingest acct enrichments", "elapsed", time.Since(start))
+	return putErrors
 }
 
 func (app *App) IngestHoldEnrichments(ctx context.Context, holds []ExtnHoldEnrichment) []PutResult {
+	start := time.Now()
+
 	var putList []PutInput
 
 	for _, hold := range holds {
@@ -59,10 +72,15 @@ func (app *App) IngestHoldEnrichments(ctx context.Context, holds []ExtnHoldEnric
 		putList = append(putList, PutInput{Key: key.String(), Input: hold, Body: body})
 	}
 
-	return app.PutObjects(ctx, app.HoldBucket, putList)()
+	putErrors := app.PutObjects(ctx, app.HoldBucket, putList)()
+
+	slog.InfoContext(ctx, "finished ingest hold enrichments", "elapsed", time.Since(start))
+	return putErrors
 }
 
 func (app *App) IngestTxnEnrichments(ctx context.Context, txns []ExtnTxnEnrichment) []PutResult {
+	start := time.Now()
+
 	var putList []PutInput
 
 	for _, txn := range txns {
@@ -75,7 +93,10 @@ func (app *App) IngestTxnEnrichments(ctx context.Context, txns []ExtnTxnEnrichme
 		putList = append(putList, PutInput{Key: key.String(), Input: txn, Body: body})
 	}
 
-	return app.PutObjects(ctx, app.TxnBucket, putList)()
+	putErrors := app.PutObjects(ctx, app.TxnBucket, putList)()
+
+	slog.InfoContext(ctx, "finished ingest txn enrichments", "elapsed", time.Since(start))
+	return putErrors
 }
 
 type RefreshResult struct {
@@ -87,6 +108,8 @@ type RefreshResult struct {
 // handles failed uploads in the same way as enrichments
 
 func (app *App) IngestCnctRefreshes(ctx context.Context, cncts []ExtnCnctRefresh) RefreshResult {
+	start := time.Now()
+
 	var putList []PutInput
 	var removeCnctKeys []CnctKey
 
@@ -107,10 +130,14 @@ func (app *App) IngestCnctRefreshes(ctx context.Context, cncts []ExtnCnctRefresh
 	getPutCall := app.PutObjects(ctx, app.CnctBucket, putList) // async
 	deleteErrs := app.DeleteCncts(ctx, removeCnctKeys)
 
+	slog.InfoContext(ctx, "finished ingest cnct refreshes", "elapsed", time.Since(start))
+
 	return RefreshResult{PutErrors: getPutCall(), DeleteErrors: deleteErrs}
 }
 
 func (app *App) IngestAcctsRefreshes(ctx context.Context, accts []ExtnAcctRefresh) RefreshResult {
+	start := time.Now()
+
 	var putList []PutInput
 	var removeAcctKeys []AcctKey
 
@@ -131,10 +158,14 @@ func (app *App) IngestAcctsRefreshes(ctx context.Context, accts []ExtnAcctRefres
 	getPutCall := app.PutObjects(ctx, app.AcctBucket, putList) // async
 	deleteErrs := app.DeleteAccts(ctx, removeAcctKeys)
 
+	slog.InfoContext(ctx, "finished ingest accts refreshes", "elapsed", time.Since(start))
+
 	return RefreshResult{PutErrors: getPutCall(), DeleteErrors: deleteErrs}
 }
 
 func (app *App) IngestHoldRefreshes(ctx context.Context, holds []ExtnHoldRefresh) RefreshResult {
+	start := time.Now()
+
 	type Input = ExtnHoldRefresh
 	var putList []PutInput
 	holdPrefixes := make(map[Prefix]bool)
@@ -157,11 +188,14 @@ func (app *App) IngestHoldRefreshes(ctx context.Context, holds []ExtnHoldRefresh
 	getPutCall := app.PutObjects(ctx, app.HoldBucket, putList) // async
 	deleteErrs := app.DeletePrefixes(ctx, holdPrefixes)
 
+	slog.InfoContext(ctx, "finished ingest hold refreshes", "elapsed", time.Since(start))
+
 	return RefreshResult{PutErrors: getPutCall(), DeleteErrors: deleteErrs}
 }
 
 func (app *App) IngestTxnRefreshes(ctx context.Context, txns []ExtnTxnRefresh) RefreshResult {
-	type Input = ExtnTxnRefresh
+	start := time.Now()
+
 	var putList []PutInput
 	txnPrefixes := make(map[Prefix]bool)
 
@@ -182,6 +216,8 @@ func (app *App) IngestTxnRefreshes(ctx context.Context, txns []ExtnTxnRefresh) R
 
 	getPutCall := app.PutObjects(ctx, app.TxnBucket, putList)
 	deleteErrs := app.DeletePrefixes(ctx, txnPrefixes)
+
+	slog.InfoContext(ctx, "finished ingest txn refreshes", "elapsed", time.Since(start))
 
 	return RefreshResult{PutErrors: getPutCall(), DeleteErrors: deleteErrs}
 }
@@ -395,7 +431,6 @@ func (ds *DeleteSupervisor) wait() []DeleteResult {
 // blocks until all goroutines are complete, while logs any failed delete calls.
 func (app *App) DeleteCncts(ctx context.Context, keys []CnctKey) []DeleteResult {
 	if len(keys) == 0 {
-		slog.InfoContext(ctx, "no cncts to delete")
 		return nil
 	}
 
@@ -439,7 +474,6 @@ func (app *App) DeleteCncts(ctx context.Context, keys []CnctKey) []DeleteResult 
 // blocks until all goroutines are complete, while logs any failed delete calls.
 func (app *App) DeleteAccts(ctx context.Context, keys []AcctKey) []DeleteResult {
 	if len(keys) == 0 {
-		slog.InfoContext(ctx, "no accts to delete")
 		return nil
 	}
 

@@ -14,16 +14,23 @@ import (
 )
 
 type Config struct {
+	AwsConfig
+	KafkaConfig
+}
+
+type AwsConfig struct {
 	AwsEndpoint      string
 	AwsDefaultRegion string
-	IsUnitTest       bool // a special flag to tell app to use hardcoded credentials when connecting to local infra.
+	IsUnitTest       bool // a special flag to tell the app to use hardcoded credentials when connecting to local infra.
 
 	CnctBucket string
 	AcctBucket string
 	HoldBucket string
 	TxnBucket  string
 	PageLength *int32
+}
 
+type KafkaConfig struct {
 	KafkaBrokers []string
 	GroupID      string
 
@@ -36,11 +43,22 @@ type Config struct {
 	HoldEnrichmentTopic string
 	TxnEnrichmentTopic  string
 	DeleteRecoveryTopic string
+
+	// consumers
+	CommitInterval time.Duration
+	MaxWait        time.Duration
+	MinBytes       int
+	MaxBytes       int
+	// producers
+	BatchTimeout time.Duration
+	BatchSize    int
 }
 
-func MakeKafka(config Config) KafkaClient {
+func MakeKafka(config KafkaConfig) KafkaClient {
 	producers := &kafka.Writer{
-		Addr: kafka.TCP(config.KafkaBrokers...),
+		Addr:         kafka.TCP(config.KafkaBrokers...),
+		BatchSize:    config.BatchSize,
+		BatchTimeout: config.BatchTimeout,
 	}
 
 	makeConsumer := func(topic string) *kafka.Reader {
@@ -48,7 +66,10 @@ func MakeKafka(config Config) KafkaClient {
 			Brokers:        config.KafkaBrokers,
 			GroupID:        config.GroupID,
 			Topic:          topic,
-			CommitInterval: time.Second, // auto-commit
+			CommitInterval: config.CommitInterval,
+			MaxWait:        config.MaxWait,
+			MinBytes:       config.MinBytes,
+			MaxBytes:       config.MaxBytes,
 		})
 	}
 	kafkaClient := KafkaClient{
@@ -136,7 +157,7 @@ type AwsClient struct {
 	TxnBucket  string
 }
 
-func MakeAwsClient(cfg Config) AwsClient {
+func MakeAwsClient(cfg AwsConfig) AwsClient {
 	opts := []func(*config.LoadOptions) error{
 		config.WithRegion(cfg.AwsDefaultRegion),
 	}

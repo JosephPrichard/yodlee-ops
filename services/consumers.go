@@ -8,26 +8,33 @@ import (
 	"github.com/google/uuid"
 	"github.com/segmentio/kafka-go"
 	"log/slog"
+	"time"
 )
 
-type StartConsumersConfig struct {
+type ConsumersConfig struct {
 	Context     context.Context
 	ConsumeChan chan bool
+	Concurrency int
 }
 
-func (app *App) StartConsumers(cfg StartConsumersConfig) {
-	go ConsumeFiMessages(cfg, app.CnctRefreshConsumer, app.HandleCnctRefreshMessage)
-	go ConsumeFiMessages(cfg, app.AcctRefreshConsumer, app.HandleAcctRefreshMessage)
-	go ConsumeFiMessages(cfg, app.HoldRefreshConsumer, app.HandleHoldRefreshMessage)
-	go ConsumeFiMessages(cfg, app.TxnRefreshConsumer, app.HandleTxnRefreshMessage)
-	go ConsumeFiMessages(cfg, app.CnctEnrichmentConsumer, app.HandleCnctRefreshMessage)
-	go ConsumeFiMessages(cfg, app.AcctEnrichmentConsumer, app.HandleAcctRefreshMessage)
-	go ConsumeFiMessages(cfg, app.HoldEnrichmentConsumer, app.HandleHoldRefreshMessage)
-	go ConsumeFiMessages(cfg, app.TxnEnrichmentConsumer, app.HandleTxnRefreshMessage)
-	go ConsumeFiMessages(cfg, app.DeleteRecoveryConsumer, app.HandleDeleteRecoveryMessage)
+func (app *App) StartConsumers(cfg ConsumersConfig) {
+	if cfg.Concurrency <= 0 {
+		cfg.Concurrency = 1
+	}
+	for range cfg.Concurrency {
+		go ConsumeFiMessages(cfg, app.CnctRefreshConsumer, app.HandleCnctRefreshMessage)
+		go ConsumeFiMessages(cfg, app.AcctRefreshConsumer, app.HandleAcctRefreshMessage)
+		go ConsumeFiMessages(cfg, app.HoldRefreshConsumer, app.HandleHoldRefreshMessage)
+		go ConsumeFiMessages(cfg, app.TxnRefreshConsumer, app.HandleTxnRefreshMessage)
+		go ConsumeFiMessages(cfg, app.CnctEnrichmentConsumer, app.HandleCnctRefreshMessage)
+		go ConsumeFiMessages(cfg, app.AcctEnrichmentConsumer, app.HandleAcctRefreshMessage)
+		go ConsumeFiMessages(cfg, app.HoldEnrichmentConsumer, app.HandleHoldRefreshMessage)
+		go ConsumeFiMessages(cfg, app.TxnEnrichmentConsumer, app.HandleTxnRefreshMessage)
+		go ConsumeFiMessages(cfg, app.DeleteRecoveryConsumer, app.HandleDeleteRecoveryMessage)
+	}
 }
 
-func ConsumeFiMessages[Message any](cfg StartConsumersConfig, reader *kafka.Reader, onMessage func(ctx context.Context, message Message)) {
+func ConsumeFiMessages[Message any](cfg ConsumersConfig, reader *kafka.Reader, onMessage func(ctx context.Context, message Message)) {
 	readCfg := reader.Config()
 	for {
 		ctx := context.WithValue(cfg.Context, "trace", uuid.NewString())
@@ -40,6 +47,7 @@ func ConsumeFiMessages[Message any](cfg StartConsumersConfig, reader *kafka.Read
 			continue
 		}
 		slog.InfoContext(ctx, "read messages from kafka topic", "topic", readCfg.Topic, "offset", m.Offset, "key", string(m.Key), "value", string(m.Value))
+		start := time.Now()
 
 		var data Message
 		if err := json.Unmarshal(m.Value, &data); err != nil {
@@ -48,6 +56,7 @@ func ConsumeFiMessages[Message any](cfg StartConsumersConfig, reader *kafka.Read
 		}
 
 		onMessage(ctx, data)
+		slog.InfoContext(ctx, "consumed message from kafka topic", "topic", readCfg.Topic, "elapsed", time.Since(start))
 
 		if cfg.ConsumeChan != nil {
 			cfg.ConsumeChan <- true

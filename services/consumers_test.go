@@ -3,7 +3,6 @@ package svc
 import (
 	"context"
 	"encoding/json"
-	cfg "filogger/config"
 	"filogger/testutil"
 	"testing"
 	"time"
@@ -15,8 +14,8 @@ import (
 
 func TestFiMessageConsumers(t *testing.T) {
 	// given
-	testCfg := testutil.SetupITest(t)
-	app := &App{KafkaClient: cfg.MakeKafka(testCfg), AwsClient: cfg.MakeAwsClient(testCfg)}
+	testCfg := testutil.SetupITest(t, testutil.Aws, testutil.Kafka)
+	app := MakeApp(testCfg)
 	testutil.SeedS3Buckets(t, &app.AwsClient)
 
 	var produceMsgs []kafka.Message
@@ -80,15 +79,16 @@ func TestFiMessageConsumers(t *testing.T) {
 	}
 	wantConsumeCount := len(produceMsgs) // 1:1 produce -> consume
 
-	ctx, cancel := context.WithTimeout(context.WithValue(t.Context(), "trace", t.Name()), time.Second*60) // consumers respect timeout.
+	ctx, cancel := context.WithTimeout(context.WithValue(t.Context(), "trace", t.Name()), time.Second*60) // consumers respect timeout. timeout must be long due to poor kafka latency.
 	defer cancel()
 
 	mChan := make(chan bool)
 
 	// when
-	app.StartConsumers(StartConsumersConfig{
+	app.StartConsumers(ConsumersConfig{
 		Context:     ctx,
 		ConsumeChan: mChan, // used to let us deterministically wait on N messages to be consumed.
+		Concurrency: 2,
 	})
 
 	for _, msg := range produceMsgs {
