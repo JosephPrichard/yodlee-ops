@@ -1,4 +1,4 @@
-# Flog
+# Yodlee Ops
 A demo for a system that ships hierarchically related financial information to s3 through message queues.
 This information can later be viewed through a GUI for auditing and debugging.
 
