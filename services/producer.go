@@ -13,25 +13,27 @@ func (app *App) ProducePutErrors(ctx context.Context, topic string, putErrs []Pu
 		return
 	}
 
-	var msgs []kafka.Message
+	var dataArray []any
+
 	for _, putErr := range putErrs {
-		inputBytes, err := json.Marshal(putErr.Origin)
+		dataArray = append(dataArray, putErr.Origin)
+	}
+
+	if len(dataArray) > 0 {
+		inputBytes, err := json.Marshal(dataArray)
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to marshal messages for put errors", "err", err)
-			continue
+			return
 		}
+		slog.InfoContext(ctx, "producing put error", "topic", topic, "bytes", len(inputBytes), "dataArray", dataArray)
 
-		slog.InfoContext(ctx, "producing put error", "topic", topic, "bytes", len(inputBytes), "originalInput", putErr.Origin)
-
-		msgs = append(msgs, kafka.Message{
+		msg := kafka.Message{
 			Topic: topic,
 			Value: inputBytes,
-		})
-	}
-	if len(msgs) > 0 {
-		if err := app.Producer.WriteMessages(ctx, msgs...); err != nil {
-			// if we aren't able to put these messages, we need to drop them. this is already a "last line" of defense for errors that shouldn't have happened
-			slog.ErrorContext(ctx, "failed to produce put errors to kafka", "msgs", msgs, "err", err)
+		}
+
+		if err := app.Producer.WriteMessages(ctx, msg); err != nil {
+			slog.ErrorContext(ctx, "failed to produce put errors to kafka", "err", err)
 		}
 	}
 }
@@ -75,8 +77,7 @@ func (app *App) ProduceDeleteErrors(ctx context.Context, deleteErrs []DeleteResu
 	}
 	if len(msgs) > 0 {
 		if err := app.Producer.WriteMessages(ctx, msgs...); err != nil {
-			// if we aren't able to put these messages, we need to drop them. this is already a "last line" of defense for errors that shouldn't have happened
-			slog.ErrorContext(ctx, "failed to produce delete errors to kafka", "msgs", msgs, "err", err)
+			slog.ErrorContext(ctx, "failed to produce delete errors to kafka", "err", err)
 		}
 	}
 }

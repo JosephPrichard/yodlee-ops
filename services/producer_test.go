@@ -61,7 +61,7 @@ func TestProducePutErrors(t *testing.T) {
 	defer cancel()
 
 	go func() {
-		cnctEnrichmentChan <- testConsumer[ExtnCnctEnrichment](ctx, t, app.CnctEnrichmentConsumer, wantPutCount)
+		cnctEnrichmentChan <- testConsumer[[]ExtnCnctEnrichment](ctx, t, app.CnctEnrichmentConsumer, wantPutCount)
 	}()
 
 	// when
@@ -71,7 +71,7 @@ func TestProducePutErrors(t *testing.T) {
 	cnctEnrichments := <-cnctEnrichmentChan
 
 	t.Logf("received connection enrichments from consumer: %+v", cnctEnrichments)
-	assert.ElementsMatch(t, []any{cnctEnrichment}, cnctEnrichments)
+	assert.ElementsMatch(t, []any{[]ExtnCnctEnrichment{cnctEnrichment}}, cnctEnrichments)
 }
 
 func TestProduceDeleteErrors(t *testing.T) {

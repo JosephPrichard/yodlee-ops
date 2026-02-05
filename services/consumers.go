@@ -18,6 +18,9 @@ type ConsumersConfig struct {
 }
 
 func (app *App) StartConsumers(cfg ConsumersConfig) {
+	if cfg.Context == nil {
+		cfg.Context = context.Background()
+	}
 	if cfg.Concurrency <= 0 {
 		cfg.Concurrency = 1
 	}
@@ -32,6 +35,8 @@ func (app *App) StartConsumers(cfg ConsumersConfig) {
 		go ConsumeFiMessages(cfg, app.TxnEnrichmentConsumer, app.HandleTxnRefreshMessage)
 		go ConsumeFiMessages(cfg, app.DeleteRecoveryConsumer, app.HandleDeleteRecoveryMessage)
 	}
+
+	slog.Info("started consumers", "config", cfg)
 }
 
 func ConsumeFiMessages[Message any](cfg ConsumersConfig, reader *kafka.Reader, onMessage func(ctx context.Context, message Message)) {
@@ -39,7 +44,7 @@ func ConsumeFiMessages[Message any](cfg ConsumersConfig, reader *kafka.Reader, o
 	for {
 		ctx := context.WithValue(cfg.Context, "trace", uuid.NewString())
 
-		m, err := reader.ReadMessage(ctx)
+		m, err := reader.ReadMessage(cfg.Context) // config allows cancel.
 		if errors.Is(err, context.Canceled) {
 			break
 		} else if err != nil {
@@ -51,7 +56,7 @@ func ConsumeFiMessages[Message any](cfg ConsumersConfig, reader *kafka.Reader, o
 
 		var data Message
 		if err := json.Unmarshal(m.Value, &data); err != nil {
-			slog.ErrorContext(ctx, "failed to unmarshal fi messages", "type", fmt.Sprintf("%T", data), "topic", readCfg.Topic, "err", err)
+			slog.ErrorContext(ctx, "failed to unmarshal fi messages", "msg", data, "type", fmt.Sprintf("%T", data), "topic", readCfg.Topic, "err", err)
 			continue
 		}
 

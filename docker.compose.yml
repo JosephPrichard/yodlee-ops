@@ -3,7 +3,7 @@ version: "3.9"
 services:
   kafka:
     image: confluentinc/cp-kafka:7.6.1
-    container_name: flog-kafka
+    container_name: ops-kafka
     ports:
       - "9092:9092"
     environment:
@@ -26,7 +26,7 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
   localstack:
     image: localstack/localstack:3.1
-    container_name: flog-localstack
+    container_name: ops-localstack
     ports:
       - "4566:4566"
     environment:

@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -18,10 +22,71 @@ type Config struct {
 	KafkaConfig
 }
 
+func ReadEnv() map[string]string {
+	envMap := make(map[string]string)
+	for _, env := range os.Environ() {
+		kv := strings.SplitN(env, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+		envMap[kv[0]] = kv[1]
+	}
+	return envMap
+}
+
+func MakeConfig(env map[string]string) Config {
+	expectInt := func(v string) int {
+		i, err := strconv.Atoi(v)
+		if err != nil {
+			log.Fatalf("invalid int in configuration: '%s'", v)
+		}
+		return i
+	}
+
+	expectDuration := func(v string) time.Duration {
+		duration, err := time.ParseDuration(v)
+		if err != nil {
+			log.Fatalf("invalid duration in configuration: '%s'", v)
+		}
+		return duration
+	}
+
+	return Config{
+		AwsConfig: AwsConfig{
+			AwsEndpoint:      env["AWS_ENDPOINT"],
+			AwsDefaultRegion: env["AWS_DEFAULT_REGION"],
+
+			CnctBucket: env["CNCT_BUCKET"],
+			AcctBucket: env["ACCT_BUCKET"],
+			HoldBucket: env["HOLD_BUCKET"],
+			TxnBucket:  env["TXN_BUCKET"],
+		},
+		KafkaConfig: KafkaConfig{
+			KafkaBrokers:        strings.Split(env["KAFKA_BROKERS"], ","),
+			CnctRefreshTopic:    env["CNCT_REFRESH_TOPIC"],
+			AcctRefreshTopic:    env["ACCT_REFRESH_TOPIC"],
+			HoldRefreshTopic:    env["HOLD_REFRESH_TOPIC"],
+			TxnRefreshTopic:     env["TXN_REFRESH_TOPIC"],
+			CnctEnrichmentTopic: env["CNCT_ENRICHMENT_TOPIC"],
+			AcctEnrichmentTopic: env["ACCT_ENRICHMENT_TOPIC"],
+			HoldEnrichmentTopic: env["HOLD_ENRICHMENT_TOPIC"],
+			TxnEnrichmentTopic:  env["TXN_ENRICHMENT_TOPIC"],
+			DeleteRecoveryTopic: env["DELETE_RETRY_TOPIC"],
+
+			MaxWait:      expectDuration(env["CONSUMER_MAX_WAIT"]),
+			MinBytes:     expectInt(env["CONSUMER_MIN_BYTES"]),
+			MaxBytes:     expectInt(env["CONSUMER_MAX_BYTES"]),
+			Concurrency:  expectInt(env["CONSUMER_CONCURRENCY"]),
+			BatchTimeout: expectDuration(env["PRODUCER_BATCH_TIMEOUT"]),
+			BatchSize:    expectInt(env["PRODUCER_BATCH_SIZE"]),
+		},
+	}
+}
+
 type AwsConfig struct {
 	AwsEndpoint      string
 	AwsDefaultRegion string
-	IsUnitTest       bool // a special flag to tell the app to use hardcoded credentials when connecting to local infra.
+	IsLocal          bool // a special flag to tell the app to use hardcoded credentials when connecting to local infra.
 
 	CnctBucket string
 	AcctBucket string
@@ -49,6 +114,7 @@ type KafkaConfig struct {
 	MaxWait        time.Duration
 	MinBytes       int
 	MaxBytes       int
+	Concurrency    int
 	// producers
 	BatchTimeout time.Duration
 	BatchSize    int
@@ -161,14 +227,14 @@ func MakeAwsClient(cfg AwsConfig) AwsClient {
 	opts := []func(*config.LoadOptions) error{
 		config.WithRegion(cfg.AwsDefaultRegion),
 	}
-	if cfg.IsUnitTest {
+	if cfg.IsLocal {
 		opts = append(opts, config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("testing", "testing", "")))
 	}
 
 	ctx := context.TODO()
 	awsCfg, err := config.LoadDefaultConfig(ctx, opts...)
 	if err != nil {
-		Fatal(ctx, "failed to load AWS config: %v", err)
+		log.Fatalf("failed to load AWS config: %v", err)
 	}
 
 	return AwsClient{

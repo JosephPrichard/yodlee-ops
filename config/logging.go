@@ -7,11 +7,6 @@ import (
 	"os"
 )
 
-func Fatal(ctx context.Context, msg string, err error) {
-	slog.ErrorContext(ctx, msg, "err", err.Error())
-	os.Exit(1)
-}
-
 type TraceHandler struct {
 	slog.Handler
 }
