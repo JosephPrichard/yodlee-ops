@@ -5,6 +5,7 @@ import (
 	cfg "filogger/config"
 	"filogger/pb"
 	"filogger/testutil"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -505,4 +506,269 @@ func TestIngestDeleteRetries(t *testing.T) {
 		"p2/Y/a2/t2/2025-06-14T07:06:18Z",
 	}
 	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, &app.AwsClient))
+}
+
+func TestIngest_PutFailure(t *testing.T) {
+	ctx := context.WithValue(t.Context(), "trace", t.Name())
+
+	setupTest := func(failKey string) *App {
+		app := makeTestAwsClient(t)
+
+		stable := app.AwsClient.S3Client
+		app.AwsClient.S3Client = &cfg.StubUnstableS3Client{
+			StableS3Client: stable,
+			FailPutKey:     failKey,
+		}
+
+		return app
+	}
+
+	t.Run("CnctEnrichment", func(t *testing.T) {
+		failKey := "p1/Y/c1/2025-06-12"
+		app := setupTest(failKey)
+
+		input := []ExtnCnctEnrichment{
+			{
+				PrtyId:       "p1",
+				PrtyIdTypeCd: "Y",
+				ExtnCnctId:   "c1",
+				BusDt:        "2025-06-12",
+				VendorName:   "BankOfAmerica",
+			},
+		}
+
+		putErrors := app.IngestCnctEnrichments(ctx, input)
+
+		want := []PutResult{
+			{Key: failKey, Origin: input[0]},
+		}
+		testutil.Equal(t, want, putErrors, cmpopts.IgnoreFields(PutResult{}, "Err"))
+	})
+
+	t.Run("AcctEnrichment", func(t *testing.T) {
+		failKey := "p1/Y/c1/a1/2025-06-12"
+		app := setupTest(failKey)
+
+		input := []ExtnAcctEnrichment{
+			{
+				PrtyId:       "p1",
+				PrtyIdTypeCd: "Y",
+				ExtnCnctId:   "c1",
+				ExtnAcctId:   "a1",
+				BusDt:        "2025-06-12",
+				AcctName:     "Checking Account",
+			},
+		}
+
+		putErrors := app.IngestAcctEnrichments(ctx, input)
+
+		want := []PutResult{
+			{Key: failKey, Origin: input[0]},
+		}
+		testutil.Equal(t, want, putErrors, cmpopts.IgnoreFields(PutResult{}, "Err"))
+	})
+
+	t.Run("HoldEnrichment", func(t *testing.T) {
+		failKey := "p1/Y/a1/h1/2025-06-12"
+		app := setupTest(failKey)
+
+		input := []ExtnHoldEnrichment{
+			{
+				PrtyId:       "p1",
+				PrtyIdTypeCd: "Y",
+				ExtnAcctId:   "a1",
+				ExtnHoldId:   "h1",
+				BusDt:        "2025-06-12",
+				HoldName:     "Security",
+			},
+		}
+
+		putErrors := app.IngestHoldEnrichments(ctx, input)
+
+		want := []PutResult{
+			{Key: failKey, Origin: input[0]},
+		}
+		testutil.Equal(t, want, putErrors, cmpopts.IgnoreFields(PutResult{}, "Err"))
+	})
+
+	t.Run("TxnEnrichment", func(t *testing.T) {
+		failKey := "p1/Y/a1/t1/2025-06-11T07:06:18Z"
+		app := setupTest(failKey)
+
+		input := []ExtnTxnEnrichment{
+			{
+				PrtyId:       "p1",
+				PrtyIdTypeCd: "Y",
+				ExtnAcctId:   "a1",
+				ExtnTxnId:    "t1",
+				BusDt:        "2025-06-11",
+				TxnDt:        "2025-06-11T07:06:18Z",
+				TxnAmt:       4523,
+			},
+		}
+
+		putErrors := app.IngestTxnEnrichments(ctx, input)
+
+		want := []PutResult{
+			{Key: failKey, Origin: input[0]},
+		}
+		testutil.Equal(t, want, putErrors, cmpopts.IgnoreFields(PutResult{}, "Err"))
+	})
+
+	t.Run("CnctRefresh", func(t *testing.T) {
+		failKey := "p1/Y/c1/2025-06-12"
+		app := setupTest(failKey)
+
+		input := []ExtnCnctRefresh{
+			{
+				PrtyId:       "p1",
+				PrtyIdTypeCd: "Y",
+				ExtnCnctId:   "c1",
+				BusDt:        "2025-06-12",
+				VendorName:   "BankOfAmerica",
+			},
+		}
+
+		result := app.IngestCnctRefreshes(ctx, input)
+
+		want := []PutResult{
+			{Key: failKey, Origin: input[0]},
+		}
+		testutil.Equal(t, want, result.PutErrors, cmpopts.IgnoreFields(PutResult{}, "Err"))
+	})
+
+	t.Run("AcctRefresh", func(t *testing.T) {
+		failKey := "p1/Y/c1/a1/2025-06-12"
+		app := setupTest(failKey)
+
+		input := []ExtnAcctRefresh{
+			{
+				PrtyId:       "p1",
+				PrtyIdTypeCd: "Y",
+				ExtnCnctId:   "c1",
+				ExtnAcctId:   "a1",
+				BusDt:        "2025-06-12",
+				AcctName:     "Checking Account",
+			},
+		}
+
+		result := app.IngestAcctsRefreshes(ctx, input)
+
+		want := []PutResult{
+			{Key: failKey, Origin: input[0]},
+		}
+		testutil.Equal(t, want, result.PutErrors, cmpopts.IgnoreFields(PutResult{}, "Err"))
+	})
+
+	t.Run("HoldRefresh", func(t *testing.T) {
+		failKey := "p1/Y/a1/h1/2025-06-12"
+		app := setupTest(failKey)
+
+		input := []ExtnHoldRefresh{
+			{
+				PrtyId:       "p1",
+				PrtyIdTypeCd: "Y",
+				ExtnAcctId:   "a1",
+				ExtnHoldId:   "h1",
+				BusDt:        "2025-06-12",
+				HoldName:     "Security",
+			},
+		}
+
+		result := app.IngestHoldRefreshes(ctx, input)
+
+		want := []PutResult{
+			{Key: failKey, Origin: input[0]},
+		}
+		testutil.Equal(t, want, result.PutErrors, cmpopts.IgnoreFields(PutResult{}, "Err"))
+	})
+
+	t.Run("TxnRefresh", func(t *testing.T) {
+		failKey := "p1/Y/a1/t1/2025-06-11T07:06:18Z"
+		app := setupTest(failKey)
+
+		input := []ExtnTxnRefresh{
+			{
+				PrtyId:       "p1",
+				PrtyIdTypeCd: "Y",
+				ExtnAcctId:   "a1",
+				ExtnTxnId:    "t1",
+				BusDt:        "2025-06-11",
+				TxnDt:        "2025-06-11T07:06:18Z",
+				TxnAmt:       4523,
+			},
+		}
+
+		result := app.IngestTxnRefreshes(ctx, input)
+
+		want := []PutResult{
+			{Key: failKey, Origin: input[0]},
+		}
+		testutil.Equal(t, want, result.PutErrors, cmpopts.IgnoreFields(PutResult{}, "Err"))
+	})
+}
+
+func TestIngest_RefreshDeleteFailure(t *testing.T) {
+	ctx := context.WithValue(t.Context(), "trace", t.Name())
+
+	t.Run("CnctRefresh", func(t *testing.T) {
+		app := makeTestAwsClient(t)
+
+		stable := app.AwsClient.S3Client
+		app.AwsClient.S3Client = &cfg.StubUnstableS3Client{
+			StableS3Client: stable,
+			FailListPrefix: map[string]string{
+				app.TxnBucket: "p1/Y/a1", // fail to list txn by prefix
+			},
+			FailDeleteKeys: []string{"p1/Y/a1/h1/2025-06-12"}, // fail to delete a holding
+		}
+
+		result := app.IngestCnctRefreshes(ctx, []ExtnCnctRefresh{
+			{
+				IsDeleted:    true,
+				PrtyId:       "p1",
+				PrtyIdTypeCd: "Y",
+				ExtnCnctId:   "c1",
+				BusDt:        "2025-06-12",
+				VendorName:   "BankOfAmerica",
+			},
+		})
+
+		want := []DeleteResult{{
+			Bucket: app.TxnBucket, Prefix: "p1/Y/a1"},
+			{Bucket: app.HoldBucket, Keys: []string{"p1/Y/a1/h1/2025-06-12"}},
+		}
+		testutil.Equal(t, want, result.DeleteErrors, cmpopts.IgnoreFields(DeleteResult{}, "Err"))
+	})
+
+	t.Run("AcctRefresh", func(t *testing.T) {
+		app := makeTestAwsClient(t)
+
+		stable := app.AwsClient.S3Client
+		app.AwsClient.S3Client = &cfg.StubUnstableS3Client{
+			StableS3Client: stable,
+			FailListPrefix: map[string]string{
+				app.TxnBucket: "p1/Y/a1", // fail to list txn by prefix
+			},
+			FailDeleteKeys: []string{"p1/Y/c1/a1/2025-06-12"}, // fail to delete an acct
+		}
+
+		result := app.IngestAcctsRefreshes(ctx, []ExtnAcctRefresh{
+			{
+				IsDeleted:    true,
+				PrtyId:       "p1",
+				PrtyIdTypeCd: "Y",
+				ExtnCnctId:   "c1",
+				ExtnAcctId:   "a1",
+				BusDt:        "2025-06-12",
+				AcctName:     "Checking Account",
+			},
+		})
+
+		want := []DeleteResult{{
+			Bucket: app.TxnBucket, Prefix: "p1/Y/a1"},
+			{Bucket: app.AcctBucket, Keys: []string{"p1/Y/c1/a1/2025-06-12"}},
+		}
+		testutil.Equal(t, want, result.DeleteErrors, cmpopts.IgnoreFields(DeleteResult{}, "Err"))
+	})
 }

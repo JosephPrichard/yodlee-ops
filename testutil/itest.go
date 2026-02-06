@@ -105,7 +105,7 @@ func SetupITest(t *testing.T, flags ...TestFlag) cfg.Config {
 		appCfg.AwsConfig = cfg.AwsConfig{
 			AwsDefaultRegion: "us-east-1",
 			AwsEndpoint:      awsEndpoint,
-			IsUnitTest:       true,
+			IsLocal:          true,
 
 			CnctBucket: unique("cncts"),
 			AcctBucket: unique("accts"),
