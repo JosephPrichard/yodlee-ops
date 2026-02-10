@@ -209,11 +209,11 @@ func main() {
 	}
 
 	infra.InitLoggers(nil)
-	config := infra.MakeConfig(infra.ReadEnv())
+	config := infra.MakeConfig()
 	ctx := context.Background()
 
 	slog.Info("starting test producer", "config", config)
-	kafkaClient := infra.MakeKafkaProducers(config.KafkaConfig)
+	kafkaClient := infra.MakeKafkaProducers(config)
 
 	ticker := time.NewTicker(500 * time.Millisecond)
 	for range ticker.C {
@@ -226,28 +226,28 @@ func main() {
 
 		switch topicKind {
 		case 0:
-			topic = kafkaClient.CnctRefreshTopic
+			topic = infra.CnctRefreshTopic
 			value = makeCnctRefreshes(n)
 		case 1:
-			topic = kafkaClient.AcctRefreshTopic
+			topic = infra.AcctRefreshTopic
 			value = makeAcctRefreshes(n)
 		case 2:
-			topic = kafkaClient.TxnRefreshTopic
+			topic = infra.TxnRefreshTopic
 			value = makeTxnRefreshes(n)
 		case 3:
-			topic = kafkaClient.HoldRefreshTopic
+			topic = infra.HoldRefreshTopic
 			value = makeHoldRefreshes(n)
 		case 4:
-			topic = kafkaClient.CnctResponseTopic
+			topic = infra.CnctResponseTopic
 			value = makeCnctResponses(n)
 		case 5:
-			topic = kafkaClient.AcctResponseTopic
+			topic = infra.AcctResponseTopic
 			value = makeAcctResponses(n)
 		case 6:
-			topic = kafkaClient.TxnResponseTopic
+			topic = infra.TxnResponseTopic
 			value = makeTxnResponses(n)
 		case 7:
-			topic = kafkaClient.HoldResponseTopic
+			topic = infra.HoldResponseTopic
 			value = makeHoldResponses(n)
 		default:
 			continue

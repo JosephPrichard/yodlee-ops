@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"log"
+	"os"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -35,6 +37,23 @@ type Config struct {
 	AwsDefaultRegion string
 	IsLocal          bool // a special flag to tell the app to use hardcoded credentials when connecting to local infra.
 	KafkaBrokers     []string
+}
+
+func MakeConfig() Config {
+	envMap := make(map[string]string)
+	for _, env := range os.Environ() {
+		kv := strings.SplitN(env, "=", 2)
+		if len(kv) != 2 {
+			continue
+		}
+		envMap[kv[0]] = kv[1]
+	}
+
+	return Config{
+		AwsEndpoint:      envMap["AWS_ENDPOINT"],
+		AwsDefaultRegion: envMap["AWS_DEFAULT_REGION"],
+		KafkaBrokers:     strings.Split(envMap["KAFKA_BROKERS"], ","),
+	}
 }
 
 type Clients struct {

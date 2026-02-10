@@ -19,16 +19,16 @@ func main() {
 	}
 
 	infra.InitLoggers(nil)
-	config := infra.MakeConfig(infra.ReadEnv())
-
-	log.Printf("config: %+v", config)
+	config := infra.MakeConfig()
 	config.IsLocal = true
 
-	slog.Info("starting server with configuration", "config", config)
-	app := svc.MakeApp(config)
+	app := &svc.App{
+		AwsClient:   infra.MakeAwsClient(config),
+		KafkaClient: infra.MakeKafkaConsumerProducer(config),
+	}
 
 	consumerCtx, cancelConsumer := context.WithCancel(context.Background())
-	app.StartConsumers(svc.ConsumersConfig{Context: consumerCtx, Concurrency: config.Concurrency})
+	app.StartConsumers(svc.ConsumersConfig{Context: consumerCtx, Concurrency: 100})
 	defer app.Close()
 
 	go func() {
