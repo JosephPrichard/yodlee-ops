@@ -3,47 +3,40 @@ package svc
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
-
 	"github.com/segmentio/kafka-go"
+	"log/slog"
+	"yodleeops/infra"
 )
 
-func (app *App) ProducePutErrors(ctx context.Context, topic string, putErrs []PutResult) {
-	if len(putErrs) == 0 {
+func (app *App) ProduceJsonMessage(ctx context.Context, topic string, key string, fiMessage any) {
+	inputBytes, err := json.Marshal(fiMessage)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to republish json messages", "err", err)
 		return
 	}
+	slog.InfoContext(ctx, "producing json messages", "topic", topic, "size", len(inputBytes), "json", string(inputBytes))
 
-	var dataArray []any
-
-	for _, putErr := range putErrs {
-		dataArray = append(dataArray, putErr.Origin)
-	}
-
-	if len(dataArray) > 0 {
-		inputBytes, err := json.Marshal(dataArray)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to marshal messages for put errors", "err", err)
-			return
-		}
-		slog.InfoContext(ctx, "producing put error", "topic", topic, "bytes", len(inputBytes), "dataArray", dataArray)
-
-		msg := kafka.Message{
-			Topic: topic,
-			Value: inputBytes,
-		}
-
-		if err := app.Producer.WriteMessages(ctx, msg); err != nil {
-			slog.ErrorContext(ctx, "failed to produce put errors to kafka", "err", err)
-		}
+	if err := app.Producer.WriteMessages(ctx, kafka.Message{
+		Key:   []byte(key),
+		Topic: topic,
+		Value: inputBytes,
+	}); err != nil {
+		slog.ErrorContext(ctx, "failed to json messages", "err", err)
 	}
 }
 
-func (app *App) ProduceDeleteErrors(ctx context.Context, deleteErrs []DeleteResult) {
+type DeleteErrorMsg struct {
+	Key   string
+	Topic string
+	Value any
+}
+
+func MakeDeleteErrorsMsgs(ctx context.Context, profileId string, deleteErrs []DeleteResult) []DeleteErrorMsg {
 	if len(deleteErrs) == 0 {
-		return
+		return nil
 	}
 
-	var msgs []kafka.Message
+	var msgs []DeleteErrorMsg
 	for _, deleteErr := range deleteErrs {
 		var kind string
 		if deleteErr.Prefix != "" {
@@ -51,7 +44,7 @@ func (app *App) ProduceDeleteErrors(ctx context.Context, deleteErrs []DeleteResu
 		} else if len(deleteErr.Keys) > 0 {
 			kind = DeleteKind
 		} else {
-			slog.WarnContext(ctx, "skipping an empty delete result while producing", "deleteErr", deleteErr)
+			slog.WarnContext(ctx, "skipping an empty delete Result while producing", "deleteErr", deleteErr)
 			continue
 		}
 
@@ -61,20 +54,34 @@ func (app *App) ProduceDeleteErrors(ctx context.Context, deleteErrs []DeleteResu
 			Prefix: deleteErr.Prefix,
 			Keys:   deleteErr.Keys,
 		}
-		msgBytes, inputErr := json.Marshal(deleteRetry)
+		slog.InfoContext(ctx, "producing delete error", "Topic", infra.DeleteRecoveryTopic, "deleteRetry", deleteRetry)
 
-		if err := inputErr; err != nil {
+		msgs = append(msgs, DeleteErrorMsg{
+			Key:   profileId,
+			Topic: infra.DeleteRecoveryTopic,
+			Value: deleteRetry,
+		})
+	}
+	return msgs
+}
+
+func (app *App) ProduceDeleteErrors(ctx context.Context, profileId string, deleteErrs []DeleteResult) {
+	deleteErrorMsgs := MakeDeleteErrorsMsgs(ctx, profileId, deleteErrs)
+
+	var msgs []kafka.Message
+	for _, msg := range deleteErrorMsgs {
+		msgBytes, err := json.Marshal(msg)
+		if err != nil {
 			slog.ErrorContext(ctx, "failed to marshal messages for put errors", "err", err)
 			continue
 		}
-
-		slog.InfoContext(ctx, "producing delete error", "topic", app.DeleteRecoveryTopic, "bytes", len(msgBytes), "deleteRetry", deleteRetry)
-
 		msgs = append(msgs, kafka.Message{
-			Topic: app.DeleteRecoveryTopic,
+			Key:   []byte(msg.Key),
+			Topic: msg.Topic,
 			Value: msgBytes,
 		})
 	}
+
 	if len(msgs) > 0 {
 		if err := app.Producer.WriteMessages(ctx, msgs...); err != nil {
 			slog.ErrorContext(ctx, "failed to produce delete errors to kafka", "err", err)

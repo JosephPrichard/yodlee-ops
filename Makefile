@@ -13,6 +13,8 @@ protos:
 install-prereqs:
 	@echo "Installing protoc-gen-go..."
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+	@echo "Installing swagger code generator..."
+	go install github.com/go-swagger/go-swagger/cmd/swagger@latest
 
 clean:
 	rm ./pb/messageapp.pb.go

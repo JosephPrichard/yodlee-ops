@@ -6,14 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
-	"github.com/segmentio/kafka-go"
 	"log/slog"
 	"time"
+	"yodleeops/infra"
+	"yodleeops/internal/yodlee"
 )
 
 type ConsumersConfig struct {
 	Context     context.Context
-	ConsumeChan chan bool
 	Concurrency int
 }
 
@@ -29,117 +29,199 @@ func (app *App) StartConsumers(cfg ConsumersConfig) {
 		go ConsumeFiMessages(cfg, app.AcctRefreshConsumer, app.HandleAcctRefreshMessage)
 		go ConsumeFiMessages(cfg, app.HoldRefreshConsumer, app.HandleHoldRefreshMessage)
 		go ConsumeFiMessages(cfg, app.TxnRefreshConsumer, app.HandleTxnRefreshMessage)
-		go ConsumeFiMessages(cfg, app.CnctEnrichmentConsumer, app.HandleCnctRefreshMessage)
-		go ConsumeFiMessages(cfg, app.AcctEnrichmentConsumer, app.HandleAcctRefreshMessage)
-		go ConsumeFiMessages(cfg, app.HoldEnrichmentConsumer, app.HandleHoldRefreshMessage)
-		go ConsumeFiMessages(cfg, app.TxnEnrichmentConsumer, app.HandleTxnRefreshMessage)
-		go ConsumeFiMessages(cfg, app.DeleteRecoveryConsumer, app.HandleDeleteRecoveryMessage)
+		go ConsumeFiMessages(cfg, app.CnctResponseConsumer, app.HandleAcctResponseMessage)
+		go ConsumeFiMessages(cfg, app.AcctResponseConsumer, app.HandleAcctResponseMessage)
+		go ConsumeFiMessages(cfg, app.HoldResponseConsumer, app.HandleHoldResponseMessage)
+		go ConsumeFiMessages(cfg, app.TxnResponseConsumer, app.HandleTxnResponseMessage)
+		go ConsumeFiMessages(cfg, app.DeleteRetryConsumer, app.HandleDeleteRecoveryMessage)
+		go ConsumeFiMessages(cfg, app.BroadcastConsumer, app.HandleBroadcastMessage)
 	}
 
 	slog.Info("started consumers", "config", cfg)
 }
 
-func ConsumeFiMessages[Message any](cfg ConsumersConfig, reader *kafka.Reader, onMessage func(ctx context.Context, message Message)) {
+func ConsumeFiMessages[Message any](cfg ConsumersConfig, reader infra.Consumer, onMessage func(ctx context.Context, key string, message Message)) {
+	count := 0
 	readCfg := reader.Config()
 	for {
 		ctx := context.WithValue(cfg.Context, "trace", uuid.NewString())
 
+		count++
 		m, err := reader.ReadMessage(cfg.Context) // config allows cancel.
 		if errors.Is(err, context.Canceled) {
 			break
 		} else if err != nil {
-			slog.ErrorContext(ctx, "failed to fetch fi messages", "topic", readCfg.Topic, "err", err)
+			slog.ErrorContext(ctx, "failed to fetch fi messages", "Topic", readCfg.Topic, "err", err)
 			continue
 		}
-		slog.InfoContext(ctx, "read messages from kafka topic", "topic", readCfg.Topic, "offset", m.Offset, "key", string(m.Key), "value", string(m.Value))
+
+		slog.InfoContext(ctx, "read messages from kafka Topic", "count", count, "Topic", readCfg.Topic, "offset", m.Offset, "Key", string(m.Key), "value", string(m.Value))
 		start := time.Now()
 
 		var data Message
 		if err := json.Unmarshal(m.Value, &data); err != nil {
-			slog.ErrorContext(ctx, "failed to unmarshal fi messages", "msg", data, "type", fmt.Sprintf("%T", data), "topic", readCfg.Topic, "err", err)
+			slog.ErrorContext(ctx, "failed to unmarshal fi messages", "type", fmt.Sprintf("%T", data), "Topic", readCfg.Topic, "err", err)
 			continue
 		}
 
-		onMessage(ctx, data)
-		slog.InfoContext(ctx, "consumed message from kafka topic", "topic", readCfg.Topic, "elapsed", time.Since(start))
-
-		if cfg.ConsumeChan != nil {
-			cfg.ConsumeChan <- true
-		}
+		onMessage(ctx, string(m.Key), data)
+		slog.InfoContext(ctx, "consumed message from kafka Topic", "count", count, "Topic", readCfg.Topic, "elapsed", time.Since(start))
 	}
 }
 
-func (app *App) HandleCnctRefreshMessage(ctx context.Context, cncts []ExtnCnctRefresh) {
+func collectPutResults[Wrap YodleeWrapper[Inner], Inner any](putResults []PutResult[Wrap]) ([]Wrap, []Inner) {
+	var successInputs []Wrap
+	var errInputs []Inner
+	for _, putErr := range putResults {
+		if putErr.Err != nil {
+			errInputs = append(errInputs, putErr.Input.Inner())
+		} else {
+			successInputs = append(successInputs, putErr.Input)
+		}
+	}
+	return successInputs, errInputs
+}
+
+type CompleteRefreshEvent[Wrap YodleeWrapper[Inner], Inner any] struct {
+	Ctx    context.Context
+	App    *App
+	Topic  string
+	Key    string
+	Result RefreshResult[Wrap]
+}
+
+func MakeCompleteRefreshEvent[Wrap YodleeWrapper[Inner], Inner any](
+	ctx context.Context,
+	app *App,
+	topic string,
+	key string,
+	result RefreshResult[Wrap],
+) CompleteRefreshEvent[Wrap, Inner] {
+	return CompleteRefreshEvent[Wrap, Inner]{ctx, app, topic, key, result}
+}
+
+func (e CompleteRefreshEvent[Wrap, Inner]) Process() {
+	successInputs, errInputs := collectPutResults(e.Result.PutResults)
+
+	if len(successInputs) > 0 {
+		e.App.ProduceJsonMessage(e.Ctx, infra.BroadcastTopic, "", successInputs)
+	}
+	if len(errInputs) > 0 {
+		e.App.ProduceJsonMessage(e.Ctx, e.Topic, e.Key, errInputs)
+	}
+	e.App.ProduceDeleteErrors(e.Ctx, e.Key, e.Result.DeleteErrors)
+}
+
+func (app *App) HandleCnctRefreshMessage(ctx context.Context, key string, cncts []yodlee.DataExtractsProviderAccount) {
 	slog.InfoContext(ctx, "handling cnct refresh messages", "cncts", cncts)
 
-	result := app.IngestCnctRefreshes(ctx, cncts)
-	slog.InfoContext(ctx, "completed cnct refresh ingestion", "putErrs", result.PutErrors, "deleteErrs", result.DeleteErrors)
+	result := app.IngestCnctRefreshes(ctx, key, cncts)
+	slog.InfoContext(ctx, "completed cnct refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	app.ProducePutErrors(ctx, app.CnctRefreshTopic, result.PutErrors)
-	app.ProduceDeleteErrors(ctx, result.DeleteErrors)
+	MakeCompleteRefreshEvent(ctx, app, infra.CnctRefreshTopic, key, result).Process()
 }
 
-func (app *App) HandleAcctRefreshMessage(ctx context.Context, accts []ExtnAcctRefresh) {
+func (app *App) HandleAcctRefreshMessage(ctx context.Context, key string, accts []yodlee.DataExtractsAccount) {
 	slog.InfoContext(ctx, "handling acct refresh messages", "accts", accts)
 
-	result := app.IngestAcctsRefreshes(ctx, accts)
-	slog.InfoContext(ctx, "completed acct refresh ingestion", "putErrs", result.PutErrors, "deleteErrs", result.DeleteErrors)
+	result := app.IngestAcctsRefreshes(ctx, key, accts)
+	slog.InfoContext(ctx, "completed acct refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	app.ProducePutErrors(ctx, app.AcctRefreshTopic, result.PutErrors)
-	app.ProduceDeleteErrors(ctx, result.DeleteErrors)
+	MakeCompleteRefreshEvent(ctx, app, infra.AcctRefreshTopic, key, result).Process()
 }
 
-func (app *App) HandleTxnRefreshMessage(ctx context.Context, txns []ExtnTxnRefresh) {
+func (app *App) HandleTxnRefreshMessage(ctx context.Context, key string, txns []yodlee.DataExtractsTransaction) {
 	slog.InfoContext(ctx, "handling txn refresh messages", "txns", txns)
 
-	result := app.IngestTxnRefreshes(ctx, txns)
-	slog.InfoContext(ctx, "completed txn refresh ingestion", "putErrs", result.PutErrors, "deleteErrs", result.DeleteErrors)
+	result := app.IngestTxnRefreshes(ctx, key, txns)
+	slog.InfoContext(ctx, "completed txn refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	app.ProducePutErrors(ctx, app.TxnRefreshTopic, result.PutErrors)
-	app.ProduceDeleteErrors(ctx, result.DeleteErrors)
+	MakeCompleteRefreshEvent(ctx, app, infra.TxnRefreshTopic, key, result).Process()
 }
 
-func (app *App) HandleHoldRefreshMessage(ctx context.Context, holds []ExtnHoldRefresh) {
+func (app *App) HandleHoldRefreshMessage(ctx context.Context, key string, holds []yodlee.DataExtractsHolding) {
 	slog.InfoContext(ctx, "handling hold refresh messages", "holds", holds)
 
-	result := app.IngestHoldRefreshes(ctx, holds)
-	slog.InfoContext(ctx, "completed hold refresh ingestion", "putErrs", result.PutErrors, "deleteErrs", result.DeleteErrors)
+	result := app.IngestHoldRefreshes(ctx, key, holds)
+	slog.InfoContext(ctx, "completed hold refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	app.ProducePutErrors(ctx, app.HoldRefreshTopic, result.PutErrors)
-	app.ProduceDeleteErrors(ctx, result.DeleteErrors)
+	MakeCompleteRefreshEvent(ctx, app, infra.HoldRefreshTopic, key, result).Process()
 }
 
-func (app *App) HandleCnctEnrichmentMessage(ctx context.Context, cncts []ExtnCnctEnrichment) {
-	slog.InfoContext(ctx, "handling cnct enrichment messages", "cncts", cncts)
+func (app *App) HandleCnctResponseMessage(ctx context.Context, key string, cncts yodlee.ProviderAccountResponse) {
+	slog.InfoContext(ctx, "handling cnct response messages", "cncts", cncts)
 
-	putErrors := app.IngestCnctEnrichments(ctx, cncts)
-	app.ProducePutErrors(ctx, app.CnctEnrichmentTopic, putErrors)
+	putResults := app.IngestCnctResponses(ctx, key, cncts)
+
+	successInputs, errInputs := collectPutResults(putResults)
+
+	if len(successInputs) > 0 {
+		app.ProduceJsonMessage(ctx, infra.BroadcastTopic, "", successInputs)
+	}
+	if len(errInputs) > 0 {
+		nextInput := yodlee.ProviderAccountResponse{ProviderAccount: errInputs}
+		app.ProduceJsonMessage(ctx, infra.CnctResponseTopic, key, nextInput)
+	}
 }
 
-func (app *App) HandleAcctEnrichmentMessage(ctx context.Context, accts []ExtnAcctEnrichment) {
-	slog.InfoContext(ctx, "handling acct enrichment messages", "accts", accts)
+func (app *App) HandleAcctResponseMessage(ctx context.Context, key string, accts yodlee.AccountResponse) {
+	slog.InfoContext(ctx, "handling acct response messages", "accts", accts)
 
-	putErrors := app.IngestAcctEnrichments(ctx, accts)
-	app.ProducePutErrors(ctx, app.AcctEnrichmentTopic, putErrors)
+	putResults := app.IngestAcctResponses(ctx, key, accts)
+
+	successInputs, errInputs := collectPutResults(putResults)
+
+	if len(successInputs) > 0 {
+		app.ProduceJsonMessage(ctx, infra.BroadcastTopic, "", successInputs)
+	}
+	if len(errInputs) > 0 {
+		nextInput := yodlee.AccountResponse{Account: errInputs}
+		app.ProduceJsonMessage(ctx, infra.AcctResponseTopic, key, nextInput)
+	}
 }
 
-func (app *App) HandleTxnEnrichmentMessage(ctx context.Context, txns []ExtnTxnEnrichment) {
-	slog.InfoContext(ctx, "handling txn enrichment messages", "txns", txns)
+func (app *App) HandleTxnResponseMessage(ctx context.Context, key string, txns yodlee.TransactionResponse) {
+	slog.InfoContext(ctx, "handling txn response messages", "txns", txns)
 
-	putErrors := app.IngestTxnEnrichments(ctx, txns)
-	app.ProducePutErrors(ctx, app.TxnEnrichmentTopic, putErrors)
+	putResults := app.IngestTxnResponses(ctx, key, txns)
+
+	successInputs, errInputs := collectPutResults(putResults)
+
+	if len(successInputs) > 0 {
+		app.ProduceJsonMessage(ctx, infra.BroadcastTopic, "", successInputs)
+	}
+	if len(errInputs) > 0 {
+		nextInput := yodlee.TransactionResponse{Transaction: errInputs}
+		app.ProduceJsonMessage(ctx, infra.TxnResponseTopic, key, nextInput)
+	}
 }
 
-func (app *App) HandleHoldEnrichmentMessage(ctx context.Context, holds []ExtnHoldEnrichment) {
-	slog.InfoContext(ctx, "handling hold enrichment messages", "holds", holds)
+func (app *App) HandleHoldResponseMessage(ctx context.Context, key string, holds yodlee.HoldingResponse) {
+	slog.InfoContext(ctx, "handling hold response messages", "holds", holds)
 
-	putErrors := app.IngestHoldEnrichments(ctx, holds)
-	app.ProducePutErrors(ctx, app.HoldEnrichmentTopic, putErrors)
+	putResults := app.IngestHoldResponses(ctx, key, holds)
+
+	successInputs, errInputs := collectPutResults(putResults)
+
+	if len(successInputs) > 0 {
+		app.ProduceJsonMessage(ctx, infra.BroadcastTopic, "", successInputs)
+	}
+	if len(errInputs) > 0 {
+		nextInput := yodlee.HoldingResponse{Holding: errInputs}
+		app.ProduceJsonMessage(ctx, infra.HoldResponseTopic, key, nextInput)
+	}
 }
 
-func (app *App) HandleDeleteRecoveryMessage(ctx context.Context, deleteRetries []DeleteRetry) {
+func (app *App) HandleDeleteRecoveryMessage(ctx context.Context, key string, deleteRetries []DeleteRetry) {
 	slog.InfoContext(ctx, "handling delete recovery messages", "deleteRetries", deleteRetries)
 
 	deleteErrors := app.IngestDeleteRetries(ctx, deleteRetries)
-	app.ProduceDeleteErrors(ctx, deleteErrors)
+	app.ProduceDeleteErrors(ctx, key, deleteErrors)
+}
+
+func (app *App) HandleBroadcastMessage(ctx context.Context, _ string, broadcasts []json.RawMessage) {
+	for _, brd := range broadcasts {
+		slog.InfoContext(ctx, "broadcasting message", "message", string(brd))
+		app.Broadcaster.Broadcast(brd)
+	}
 }

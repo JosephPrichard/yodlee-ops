@@ -2,709 +2,680 @@ package svc
 
 import (
 	"context"
-	cfg "filogger/config"
-	"filogger/pb"
-	"filogger/testutil"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/stretchr/testify/assert"
 	"testing"
+	"yodleeops/infra/stubs"
+	"yodleeops/internal/yodlee"
+	"yodleeops/testutil"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
 )
 
-func makeTestAwsClient(t *testing.T) *App {
-	testCfg := testutil.SetupITest(t, testutil.Aws)
+func setupIngestionTest(t *testing.T) *App {
+	awsClient := testutil.SetupAwsITest(t)
 
-	app := &App{AwsClient: cfg.MakeAwsClient(testCfg.AwsConfig)}
+	app := &App{AwsClient: awsClient}
 	app.AwsClient.PageLength = aws.Int32(1) // testing ListObjectsV2 pagination.
 
-	testutil.SeedS3Buckets(t, &app.AwsClient)
+	testutil.SeedS3Buckets(t, app.AwsClient)
 	return app
 }
 
-func TestIngestCnctEnrichments(t *testing.T) {
+func TestIngestCnctResponses(t *testing.T) {
 	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	app := makeTestAwsClient(t)
+	app := setupIngestionTest(t)
 
 	// when
-	putErrors := app.IngestCnctEnrichments(ctx, []ExtnCnctEnrichment{
-		{
-			PrtyId:       "p1",
-			PrtyIdTypeCd: "Y",
-			ExtnCnctId:   "c1",
-			BusDt:        "2025-06-12",
-			VendorName:   "BankOfAmerica",
-		},
-		{
-			PrtyId:       "p300",
-			PrtyIdTypeCd: "Y",
-			ExtnCnctId:   "c10",
-			BusDt:        "2025-06-13",
-			VendorName:   "GoldmanSachs",
+	putResults := app.IngestCnctResponses(ctx, "p1", yodlee.ProviderAccountResponse{
+		ProviderAccount: []yodlee.ProviderAccount{
+			{
+				Id:          1,
+				LastUpdated: "2025-06-12",
+				RequestId:   "REQUEST",
+			},
+			{
+				Id:          100,
+				LastUpdated: "2025-06-13",
+				RequestId:   "REQUEST",
+			},
 		},
 	})
-	require.Empty(t, putErrors)
+	assert.Equal(t, 2, len(putResults))
 
 	// then
-	wantObjects := []testutil.WantObject{
+	wantObjects := []testutil.WantObject[OpsProviderAccount]{
 		{
 			Bucket: app.CnctBucket,
-			Key:    "p1/Y/c1/2025-06-12",
-			Value:  &pb.ExtnCnctEntity{PrtyId: "p1", PrtyIdTypeCd: "Y", ExtnCnctId: "c1", BusDt: "2025-06-12", VendorName: "BankOfAmerica"},
+			Key:    "p1/1/1/2025-06-12",
+			Value:  OpsProviderAccount{ProfileId: "p1", ProviderAccount: yodlee.ProviderAccount{Id: 1, LastUpdated: "2025-06-12", RequestId: "REQUEST"}},
 		},
 		{
 			Bucket: app.CnctBucket,
-			Key:    "p300/Y/c10/2025-06-13",
-			Value:  &pb.ExtnCnctEntity{PrtyId: "p300", PrtyIdTypeCd: "Y", ExtnCnctId: "c10", BusDt: "2025-06-13", VendorName: "GoldmanSachs"},
+			Key:    "p1/1/100/2025-06-13",
+			Value:  OpsProviderAccount{ProfileId: "p1", ProviderAccount: yodlee.ProviderAccount{Id: 100, LastUpdated: "2025-06-13", RequestId: "REQUEST"}},
 		},
 	}
-	testutil.AssertProtoObjects(t, &app.AwsClient, wantObjects, func() proto.Message { return &pb.ExtnCnctEntity{} })
+	testutil.AssertObjects(t, app.AwsClient, wantObjects)
 }
 
-func TestIngestAcctEnrichments(t *testing.T) {
+func TestIngestAcctResponses(t *testing.T) {
 	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	app := makeTestAwsClient(t)
+	app := setupIngestionTest(t)
 
 	// when
-	putErrors := app.IngestAcctEnrichments(ctx, []ExtnAcctEnrichment{
-		{
-			PrtyId:       "p1",
-			PrtyIdTypeCd: "Y",
-			ExtnCnctId:   "c1",
-			ExtnAcctId:   "a1",
-			BusDt:        "2025-06-12",
-			AcctName:     "Checking Account",
-		},
-		{
-			PrtyId:       "p300",
-			PrtyIdTypeCd: "Y",
-			ExtnCnctId:   "c100",
-			ExtnAcctId:   "a200",
-			BusDt:        "2025-06-13",
-			AcctName:     "Savings Account",
+	putResults := app.IngestAcctResponses(ctx, "p1", yodlee.AccountResponse{
+		Account: []yodlee.Account{
+			{
+				ProviderAccountId: 1,
+				Id:                1,
+				LastUpdated:       "2025-06-12",
+				AccountName:       "Checking Account",
+			},
+			{
+				ProviderAccountId: 100,
+				Id:                200,
+				LastUpdated:       "2025-06-13",
+				AccountName:       "Savings Account",
+			},
 		},
 	})
-	require.Empty(t, putErrors)
+	assert.Equal(t, 2, len(putResults))
 
 	// then
-	wantObjects := []testutil.WantObject{
+	wantObjects := []testutil.WantObject[OpsAccount]{
 		{
 			Bucket: app.AcctBucket,
-			Key:    "p1/Y/c1/a1/2025-06-12",
-			Value:  &pb.ExtnAcctEntity{PrtyId: "p1", PrtyIdTypeCd: "Y", ExtnCnctId: "c1", ExtnAcctId: "a1", BusDt: "2025-06-12", AcctName: "Checking Account"},
+			Key:    "p1/1/1/1/2025-06-12",
+			Value:  OpsAccount{ProfileId: "p1", Account: yodlee.Account{ProviderAccountId: 1, Id: 1, LastUpdated: "2025-06-12", AccountName: "Checking Account"}},
 		},
 		{
 			Bucket: app.AcctBucket,
-			Key:    "p300/Y/c100/a200/2025-06-13",
-			Value:  &pb.ExtnAcctEntity{PrtyId: "p300", PrtyIdTypeCd: "Y", ExtnCnctId: "c100", ExtnAcctId: "a200", BusDt: "2025-06-13", AcctName: "Savings Account"},
+			Key:    "p1/1/100/200/2025-06-13",
+			Value:  OpsAccount{ProfileId: "p1", Account: yodlee.Account{ProviderAccountId: 100, Id: 200, LastUpdated: "2025-06-13", AccountName: "Savings Account"}},
 		},
 	}
-	testutil.AssertProtoObjects(t, &app.AwsClient, wantObjects, func() proto.Message { return &pb.ExtnAcctEntity{} })
+	testutil.AssertObjects(t, app.AwsClient, wantObjects)
 }
 
-func TestIngestHoldEnrichments(t *testing.T) {
+func TestIngestHoldResponses(t *testing.T) {
 	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	app := makeTestAwsClient(t)
+	app := setupIngestionTest(t)
 	// when
-	putErrors := app.IngestHoldEnrichments(ctx, []ExtnHoldEnrichment{
-		{
-			PrtyId:       "p1",
-			PrtyIdTypeCd: "Y",
-			ExtnAcctId:   "a1",
-			ExtnHoldId:   "h1",
-			BusDt:        "2025-06-12",
-			HoldName:     "Security",
-		},
-		{
-			PrtyId:       "p300",
-			PrtyIdTypeCd: "Y",
-			ExtnAcctId:   "a200",
-			ExtnHoldId:   "h100",
-			BusDt:        "2025-06-13",
-			HoldName:     "Stock",
+	putResults := app.IngestHoldResponses(ctx, "p1", yodlee.HoldingResponse{
+		Holding: []yodlee.Holding{
+			{
+				AccountId:   1,
+				Id:          1,
+				LastUpdated: "2025-06-12",
+				HoldingType: "Security",
+			},
+			{
+				AccountId:   200,
+				Id:          100,
+				LastUpdated: "2025-06-13",
+				HoldingType: "Stock",
+			},
 		},
 	})
-	require.Empty(t, putErrors)
+	assert.Equal(t, 2, len(putResults))
 
 	// then
-	wantObjects := []testutil.WantObject{
+	wantObjects := []testutil.WantObject[OpsHolding]{
 		{
 			Bucket: app.HoldBucket,
-			Key:    "p1/Y/a1/h1/2025-06-12",
-			Value:  &pb.ExtnHoldEntity{PrtyId: "p1", PrtyIdTypeCd: "Y", ExtnAcctId: "a1", ExtnHoldId: "h1", BusDt: "2025-06-12", HoldName: "Security"},
+			Key:    "p1/1/1/1/2025-06-12",
+			Value:  OpsHolding{ProfileId: "p1", Holding: yodlee.Holding{AccountId: 1, Id: 1, LastUpdated: "2025-06-12", HoldingType: "Security"}},
 		},
 		{
 			Bucket: app.HoldBucket,
-			Key:    "p300/Y/a200/h100/2025-06-13",
-			Value:  &pb.ExtnHoldEntity{PrtyId: "p300", PrtyIdTypeCd: "Y", ExtnAcctId: "a200", ExtnHoldId: "h100", BusDt: "2025-06-13", HoldName: "Stock"},
+			Key:    "p1/1/200/100/2025-06-13",
+			Value:  OpsHolding{ProfileId: "p1", Holding: yodlee.Holding{AccountId: 200, Id: 100, LastUpdated: "2025-06-13", HoldingType: "Stock"}},
 		},
 	}
-	testutil.AssertProtoObjects(t, &app.AwsClient, wantObjects, func() proto.Message { return &pb.ExtnHoldEntity{} })
+	testutil.AssertObjects(t, app.AwsClient, wantObjects)
 }
 
-func TestIngestTxnEnrichments(t *testing.T) {
+func TestIngestTxnResponses(t *testing.T) {
 	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	app := makeTestAwsClient(t)
+	app := setupIngestionTest(t)
 
 	// when
-	putErrors := app.IngestTxnEnrichments(ctx, []ExtnTxnEnrichment{
-		// both of these insert new records because txns are completely unique due to timestamp being part of the key.
-		{
-			PrtyId:       "p1",
-			PrtyIdTypeCd: "Y",
-			ExtnAcctId:   "a1",
-			ExtnTxnId:    "t1",
-			BusDt:        "2025-06-11",
-			TxnDt:        "2025-06-11T07:06:18Z",
-			TxnAmt:       4523,
-		},
-		{
-			PrtyId:       "p300",
-			PrtyIdTypeCd: "Y",
-			ExtnAcctId:   "a200",
-			ExtnTxnId:    "t200",
-			BusDt:        "2025-06-13",
-			TxnDt:        "2025-06-13T07:06:18Z",
-			TxnAmt:       -1299,
+	putResults := app.IngestTxnResponses(ctx, "p1", yodlee.TransactionResponse{
+		Transaction: []yodlee.TransactionWithDateTime{
+			{
+				AccountId:   1,
+				Id:          1,
+				Date:        "2025-06-11T07:06:18Z",
+				CheckNumber: "123",
+			},
+			{
+				AccountId:   200,
+				Id:          200,
+				Date:        "2025-06-13T07:06:18Z",
+				CheckNumber: "123",
+			},
 		},
 	})
-	require.Empty(t, putErrors)
+	assert.Equal(t, 2, len(putResults))
 
 	// then
-	wantObjects := []testutil.WantObject{
+	wantObjects := []testutil.WantObject[OpsTransaction]{
 		{
 			Bucket: app.TxnBucket,
-			Key:    "p1/Y/a1/t1/2025-06-11T07:06:18Z",
-			Value:  &pb.ExtnTxnEntity{PrtyId: "p1", PrtyIdTypeCd: "Y", ExtnAcctId: "a1", ExtnTxnId: "t1", BusDt: "2025-06-11", TxnDt: "2025-06-11T07:06:18Z", TxnAmt: 4523},
+			Key:    "p1/1/1/1/2025-06-11T07:06:18Z",
+			Value: OpsTransaction{ProfileId: "p1",
+				TransactionWithDateTime: yodlee.TransactionWithDateTime{AccountId: 1, Id: 1, Date: "2025-06-11T07:06:18Z", CheckNumber: "123"}},
 		},
 		{
 			Bucket: app.TxnBucket,
-			Key:    "p300/Y/a200/t200/2025-06-13T07:06:18Z",
-			Value:  &pb.ExtnTxnEntity{PrtyId: "p300", PrtyIdTypeCd: "Y", ExtnAcctId: "a200", ExtnTxnId: "t200", BusDt: "2025-06-13", TxnDt: "2025-06-13T07:06:18Z", TxnAmt: -1299},
+			Key:    "p1/1/200/200/2025-06-13T07:06:18Z",
+			Value: OpsTransaction{ProfileId: "p1",
+				TransactionWithDateTime: yodlee.TransactionWithDateTime{AccountId: 200, Id: 200, Date: "2025-06-13T07:06:18Z", CheckNumber: "123"}},
 		},
 	}
-	testutil.AssertProtoObjects(t, &app.AwsClient, wantObjects, func() proto.Message { return &pb.ExtnTxnEntity{} })
+	testutil.AssertObjects(t, app.AwsClient, wantObjects)
 }
 
 func TestIngestCnctRefreshes(t *testing.T) {
 	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	app := makeTestAwsClient(t)
+	app := setupIngestionTest(t)
 
 	// when
-	result := app.IngestCnctRefreshes(ctx, []ExtnCnctRefresh{
+	result := app.IngestCnctRefreshes(ctx, "p1", []yodlee.DataExtractsProviderAccount{
 		{
-			IsDeleted:    true,
-			PrtyId:       "p1",
-			PrtyIdTypeCd: "Y",
-			ExtnCnctId:   "c1",
-			BusDt:        "2025-06-12",
-			VendorName:   "BankOfAmerica",
+			IsDeleted: true,
+			Id:        10,
 		},
 		{
-			PrtyId:       "p300",
-			PrtyIdTypeCd: "Y",
-			ExtnCnctId:   "c10",
-			BusDt:        "2025-06-13",
-			VendorName:   "GoldmanSachs",
+			Id:          99,
+			LastUpdated: "2025-06-13",
+			RequestId:   "REQUEST",
 		},
 	})
-	require.Empty(t, result.PutErrors)
+	assert.Equal(t, 1, len(result.PutResults))
 	require.Empty(t, result.DeleteErrors)
 
 	// then
-	wantObjects := []testutil.WantObject{
+	wantObjects := []testutil.WantObject[OpsProviderAccountRefresh]{
 		{
 			Bucket: app.CnctBucket,
-			Key:    "p300/Y/c10/2025-06-13",
-			Value:  &pb.ExtnCnctEntity{PrtyId: "p300", PrtyIdTypeCd: "Y", ExtnCnctId: "c10", BusDt: "2025-06-13", VendorName: "GoldmanSachs"},
+			Key:    "p1/1/99/2025-06-13",
+			Value:  OpsProviderAccountRefresh{ProfileId: "p1", DataExtractsProviderAccount: yodlee.DataExtractsProviderAccount{Id: 99, LastUpdated: "2025-06-13", RequestId: "REQUEST"}},
 		},
 	}
-	testutil.AssertProtoObjects(t, &app.AwsClient, wantObjects, func() proto.Message { return &pb.ExtnCnctEntity{} })
+	testutil.AssertObjects(t, app.AwsClient, wantObjects)
 
 	// removed keys are commented.
-	wantKeys := []string{
-		//"p1/Y/c1/2025-06-12",
-		//"p1/Y/c1/2025-06-13",
-		"p1/Y/c2/2025-06-14",
-		"p1/Y/c3/2025-06-15",
-		"p300/Y/c10/2025-06-13",
+	wantKeys := []testutil.WantKey{
+		// Connections
+		//{Bucket: App.CnctBucket, Key: "p1/1/10/2025-06-12"},
+		//{Bucket: App.CnctBucket, Key: "p1/1/10/2025-06-13"},
+		{Bucket: app.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		{Bucket: app.CnctBucket, Key: "p1/1/30/2025-06-15"},
+		{Bucket: app.CnctBucket, Key: "p1/1/99/2025-06-13"},
 
-		//"p1/Y/c1/a1/2025-06-12",
-		//"p1/Y/c1/a1/2025-06-13",
-		"p2/Y/c2/a2/2025-06-14",
-		"p2/Y/c3/a3/2025-06-15",
+		// Accounts
+		//{Bucket: App.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
+		//{Bucket: App.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
+		{Bucket: app.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: app.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
 
-		//"p1/Y/a1/h1/2025-06-12",
-		//"p1/Y/a1/h1/2025-06-13",
-		"p2/Y/a1/h1/2025-06-14",
-		"p2/Y/a2/h2/2025-06-15",
+		// Holdings
+		//{Bucket: App.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
+		//{Bucket: App.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
+		{Bucket: app.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: app.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
 
-		//"p1/Y/a1/t1/2025-06-12T00:14:37Z",
-		//"p1/Y/a1/t1/2025-06-12T02:48:09Z",
-		"p2/Y/a1/t1/2025-06-13T02:48:09Z",
-		"p2/Y/a2/t2/2025-06-14T07:06:18Z",
+		// Transactions
+		//{Bucket: App.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		//{Bucket: App.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		{Bucket: app.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: app.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 	}
-	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, &app.AwsClient))
+	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, app.AwsClient))
 }
 
 func TestIngestAcctRefreshes(t *testing.T) {
 	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	app := makeTestAwsClient(t)
+	app := setupIngestionTest(t)
 
 	// when
-	result := app.IngestAcctsRefreshes(ctx, []ExtnAcctRefresh{
+	result := app.IngestAcctsRefreshes(ctx, "p1", []yodlee.DataExtractsAccount{
 		{
-			IsDeleted:    true,
-			PrtyId:       "p1",
-			PrtyIdTypeCd: "Y",
-			ExtnCnctId:   "c1",
-			ExtnAcctId:   "a1",
-			BusDt:        "2025-06-12",
-			AcctName:     "Checking Account",
+			IsDeleted:         true,
+			ProviderAccountId: 10,
+			Id:                100,
 		},
 		{
-			PrtyId:       "p300",
-			PrtyIdTypeCd: "Y",
-			ExtnCnctId:   "c100",
-			ExtnAcctId:   "a200",
-			BusDt:        "2025-06-13",
-			AcctName:     "Savings Account",
+			ProviderAccountId: 99,
+			Id:                999,
+			LastUpdated:       "2025-06-13",
+			AccountName:       "Savings Account",
 		},
 	})
-	require.Empty(t, result.PutErrors)
+	assert.Equal(t, 1, len(result.PutResults))
 	require.Empty(t, result.DeleteErrors)
 
 	// then
-	wantObjects := []testutil.WantObject{
+	wantObjects := []testutil.WantObject[OpsAccountRefresh]{
 		{
 			Bucket: app.AcctBucket,
-			Key:    "p300/Y/c100/a200/2025-06-13",
-			Value:  &pb.ExtnAcctEntity{PrtyId: "p300", PrtyIdTypeCd: "Y", ExtnCnctId: "c100", ExtnAcctId: "a200", BusDt: "2025-06-13", AcctName: "Savings Account"},
+			Key:    "p1/1/99/999/2025-06-13",
+			Value:  OpsAccountRefresh{ProfileId: "p1", DataExtractsAccount: yodlee.DataExtractsAccount{ProviderAccountId: 99, Id: 999, LastUpdated: "2025-06-13", AccountName: "Savings Account"}},
 		},
 	}
-	testutil.AssertProtoObjects(t, &app.AwsClient, wantObjects, func() proto.Message { return &pb.ExtnAcctEntity{} })
+	testutil.AssertObjects(t, app.AwsClient, wantObjects)
 
 	// removed keys are commented.
-	wantKeys := []string{
-		"p1/Y/c1/2025-06-12",
-		"p1/Y/c1/2025-06-13",
-		"p1/Y/c2/2025-06-14",
-		"p1/Y/c3/2025-06-15",
+	wantKeys := []testutil.WantKey{
+		// Connections
+		{Bucket: app.CnctBucket, Key: "p1/1/10/2025-06-12"},
+		{Bucket: app.CnctBucket, Key: "p1/1/10/2025-06-13"},
+		{Bucket: app.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		{Bucket: app.CnctBucket, Key: "p1/1/30/2025-06-15"},
 
-		//"p1/Y/c1/a1/2025-06-12",
-		//"p1/Y/c1/a1/2025-06-13",
-		"p2/Y/c2/a2/2025-06-14",
-		"p2/Y/c3/a3/2025-06-15",
-		"p300/Y/c100/a200/2025-06-13",
+		// Accounts
+		//{Bucket: App.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
+		//{Bucket: App.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
+		{Bucket: app.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: app.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
+		{Bucket: app.AcctBucket, Key: "p1/1/99/999/2025-06-13"},
 
-		//"p1/Y/a1/h1/2025-06-12",
-		//"p1/Y/a1/h1/2025-06-13",
-		"p2/Y/a1/h1/2025-06-14",
-		"p2/Y/a2/h2/2025-06-15",
+		// Holdings
+		//{Bucket: App.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
+		//{Bucket: App.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
+		{Bucket: app.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: app.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
 
-		//"p1/Y/a1/t1/2025-06-12T00:14:37Z",
-		//"p1/Y/a1/t1/2025-06-12T02:48:09Z",
-		"p2/Y/a1/t1/2025-06-13T02:48:09Z",
-		"p2/Y/a2/t2/2025-06-14T07:06:18Z",
+		// Transactions
+		//{Bucket: App.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		//{Bucket: App.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		{Bucket: app.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: app.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 	}
-	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, &app.AwsClient))
+	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, app.AwsClient))
 }
 
 func TestIngestTxnRefreshes(t *testing.T) {
 	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	app := makeTestAwsClient(t)
+	app := setupIngestionTest(t)
 
 	// when
-	result := app.IngestTxnRefreshes(ctx, []ExtnTxnRefresh{
+	result := app.IngestTxnRefreshes(ctx, "p1", []yodlee.DataExtractsTransaction{
 		{
-			IsDeleted:    true,
-			PrtyId:       "p1",
-			PrtyIdTypeCd: "Y",
-			ExtnAcctId:   "a1",
-			ExtnTxnId:    "t1",
-			BusDt:        "2025-06-11",
-			TxnDt:        "2025-06-11T07:06:18Z",
-			TxnAmt:       4523,
+			IsDeleted: true,
+			AccountId: 100,
+			Id:        3000,
 		},
 		{
-			PrtyId:       "p300",
-			PrtyIdTypeCd: "Y",
-			ExtnAcctId:   "a200",
-			ExtnTxnId:    "t200",
-			BusDt:        "2025-06-13",
-			TxnDt:        "2025-06-13T07:06:18Z",
-			TxnAmt:       -1299,
+			AccountId:   999,
+			Id:          9999,
+			Date:        "2025-06-13T07:06:18Z",
+			CheckNumber: "123",
 		},
 	})
-	require.Empty(t, result.PutErrors)
+	assert.Equal(t, 1, len(result.PutResults))
 	require.Empty(t, result.DeleteErrors)
 
 	// then
-	wantObjects := []testutil.WantObject{
+	wantObjects := []testutil.WantObject[OpsTransactionRefresh]{
 		{
 			Bucket: app.TxnBucket,
-			Key:    "p300/Y/a200/t200/2025-06-13T07:06:18Z",
-			Value:  &pb.ExtnTxnEntity{PrtyId: "p300", PrtyIdTypeCd: "Y", ExtnAcctId: "a200", ExtnTxnId: "t200", BusDt: "2025-06-13", TxnDt: "2025-06-13T07:06:18Z", TxnAmt: -1299},
+			Key:    "p1/1/999/9999/2025-06-13T07:06:18Z",
+			Value:  OpsTransactionRefresh{ProfileId: "p1", DataExtractsTransaction: yodlee.DataExtractsTransaction{AccountId: 999, Id: 9999, Date: "2025-06-13T07:06:18Z", CheckNumber: "123"}},
 		},
 	}
-	testutil.AssertProtoObjects(t, &app.AwsClient, wantObjects, func() proto.Message { return &pb.ExtnTxnEntity{} })
+	testutil.AssertObjects(t, app.AwsClient, wantObjects)
 
 	// removed keys are commented.
-	wantKeys := []string{
-		"p1/Y/c1/2025-06-12",
-		"p1/Y/c1/2025-06-13",
-		"p1/Y/c2/2025-06-14",
-		"p1/Y/c3/2025-06-15",
+	wantKeys := []testutil.WantKey{
+		// Connections
+		{Bucket: app.CnctBucket, Key: "p1/1/10/2025-06-12"},
+		{Bucket: app.CnctBucket, Key: "p1/1/10/2025-06-13"},
+		{Bucket: app.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		{Bucket: app.CnctBucket, Key: "p1/1/30/2025-06-15"},
 
-		"p1/Y/c1/a1/2025-06-12",
-		"p1/Y/c1/a1/2025-06-13",
-		"p2/Y/c2/a2/2025-06-14",
-		"p2/Y/c3/a3/2025-06-15",
+		// Accounts
+		{Bucket: app.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
+		{Bucket: app.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
+		{Bucket: app.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: app.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
 
-		"p1/Y/a1/h1/2025-06-12",
-		"p1/Y/a1/h1/2025-06-13",
-		"p2/Y/a1/h1/2025-06-14",
-		"p2/Y/a2/h2/2025-06-15",
+		// Holdings
+		{Bucket: app.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
+		{Bucket: app.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
+		{Bucket: app.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: app.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
 
-		//"p1/Y/a1/t1/2025-06-12T00:14:37Z",
-		//"p1/Y/a1/t1/2025-06-12T02:48:09Z",
-		"p2/Y/a1/t1/2025-06-13T02:48:09Z",
-		"p2/Y/a2/t2/2025-06-14T07:06:18Z",
-		"p300/Y/a200/t200/2025-06-13T07:06:18Z",
+		// Transactions
+		//{Bucket: App.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		//{Bucket: App.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		{Bucket: app.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: app.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
+		{Bucket: app.TxnBucket, Key: "p1/1/999/9999/2025-06-13T07:06:18Z"},
 	}
-	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, &app.AwsClient))
+	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, app.AwsClient))
 }
 
 func TestIngestHoldRefreshes(t *testing.T) {
 	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	app := makeTestAwsClient(t)
+	app := setupIngestionTest(t)
 
 	// when
-	result := app.IngestHoldRefreshes(ctx, []ExtnHoldRefresh{
+	result := app.IngestHoldRefreshes(ctx, "p1", []yodlee.DataExtractsHolding{
+		// holdings can't be deleted individually (only the account that contains the holdings can be deleted).
+		//{
+		//	IsDeleted:   true,
+		//	ExtnAcctId:  "a1",
+		//	ExtnHoldId:  "h1",
+		//},
 		{
-			IsDeleted:    true,
-			PrtyId:       "p1",
-			PrtyIdTypeCd: "Y",
-			ExtnAcctId:   "a1",
-			ExtnHoldId:   "h1",
-			BusDt:        "2025-06-12",
-			HoldName:     "Security",
-		},
-		{
-			PrtyId:       "p300",
-			PrtyIdTypeCd: "Y",
-			ExtnAcctId:   "a200",
-			ExtnHoldId:   "h100",
-			BusDt:        "2025-06-13",
-			HoldName:     "Stock",
+			AccountId:   999,
+			Id:          9999,
+			LastUpdated: "2025-06-13",
+			HoldingType: "Stock",
 		},
 	})
-	require.Empty(t, result.PutErrors)
+	assert.Equal(t, 1, len(result.PutResults))
 	require.Empty(t, result.DeleteErrors)
 
 	// then
-	wantObjects := []testutil.WantObject{
+	wantObjects := []testutil.WantObject[OpsHoldingRefresh]{
 		{
 			Bucket: app.HoldBucket,
-			Key:    "p300/Y/a200/h100/2025-06-13",
-			Value:  &pb.ExtnHoldEntity{PrtyId: "p300", PrtyIdTypeCd: "Y", ExtnAcctId: "a200", ExtnHoldId: "h100", BusDt: "2025-06-13", HoldName: "Stock"},
+			Key:    "p1/1/999/9999/2025-06-13",
+			Value:  OpsHoldingRefresh{ProfileId: "p1", DataExtractsHolding: yodlee.DataExtractsHolding{AccountId: 999, Id: 9999, LastUpdated: "2025-06-13", HoldingType: "Stock"}},
 		},
 	}
-	testutil.AssertProtoObjects(t, &app.AwsClient, wantObjects, func() proto.Message { return &pb.ExtnHoldEntity{} })
+	testutil.AssertObjects(t, app.AwsClient, wantObjects)
 
 	// removed keys are commented.
-	wantKeys := []string{
-		"p1/Y/c1/2025-06-12",
-		"p1/Y/c1/2025-06-13",
-		"p1/Y/c2/2025-06-14",
-		"p1/Y/c3/2025-06-15",
+	wantKeys := []testutil.WantKey{
+		// Connections
+		{Bucket: app.CnctBucket, Key: "p1/1/10/2025-06-12"},
+		{Bucket: app.CnctBucket, Key: "p1/1/10/2025-06-13"},
+		{Bucket: app.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		{Bucket: app.CnctBucket, Key: "p1/1/30/2025-06-15"},
 
-		"p1/Y/c1/a1/2025-06-12",
-		"p1/Y/c1/a1/2025-06-13",
-		"p2/Y/c2/a2/2025-06-14",
-		"p2/Y/c3/a3/2025-06-15",
+		// Accounts
+		{Bucket: app.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
+		{Bucket: app.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
+		{Bucket: app.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: app.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
 
-		//"p1/Y/a1/h1/2025-06-12",
-		//"p1/Y/a1/h1/2025-06-13",
-		"p2/Y/a1/h1/2025-06-14",
-		"p2/Y/a2/h2/2025-06-15",
-		"p300/Y/a200/h100/2025-06-13",
+		// Holdings
+		{Bucket: app.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
+		{Bucket: app.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
+		{Bucket: app.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: app.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
+		{Bucket: app.HoldBucket, Key: "p1/1/999/9999/2025-06-13"},
 
-		"p1/Y/a1/t1/2025-06-12T00:14:37Z",
-		"p1/Y/a1/t1/2025-06-12T02:48:09Z",
-		"p2/Y/a1/t1/2025-06-13T02:48:09Z",
-		"p2/Y/a2/t2/2025-06-14T07:06:18Z",
+		// Transactions
+		{Bucket: app.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		{Bucket: app.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		{Bucket: app.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: app.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 	}
-	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, &app.AwsClient))
+	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, app.AwsClient))
 }
 
 func TestIngestDeleteRetries(t *testing.T) {
 	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	app := makeTestAwsClient(t)
+	app := setupIngestionTest(t)
 
 	// when
 	results := app.IngestDeleteRetries(ctx, []DeleteRetry{
 		{
 			Kind:   ListKind,
 			Bucket: app.AcctBucket,
-			Prefix: "p1/Y/c1",
-		},
-		{
-			Kind:   DeleteKind,
-			Bucket: app.HoldBucket,
-			Keys:   []string{"p1/Y/a1/h1/2025-06-12", "p1/Y/a1/h1/2025-06-13"},
+			Prefix: "p1/1/10",
 		},
 		{
 			Kind:   DeleteKind,
 			Bucket: app.TxnBucket,
-			Keys:   []string{"p1/Y/a1/t1/2025-06-12T00:14:37Z", "p1/Y/a1/t1/2025-06-12T02:48:09Z"},
+			Keys:   []string{"p1/1/100/3000/2025-06-12T00:14:37Z", "p1/1/100/3000/2025-06-12T02:48:09Z"},
 		},
 	})
 	require.Empty(t, results)
 
 	// then
 	// removed keys are commented.
-	wantKeys := []string{
-		"p1/Y/c1/2025-06-12",
-		"p1/Y/c1/2025-06-13",
-		"p1/Y/c2/2025-06-14",
-		"p1/Y/c3/2025-06-15",
+	wantKeys := []testutil.WantKey{
+		// Connections
+		{Bucket: app.CnctBucket, Key: "p1/1/10/2025-06-12"},
+		{Bucket: app.CnctBucket, Key: "p1/1/10/2025-06-13"},
+		{Bucket: app.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		{Bucket: app.CnctBucket, Key: "p1/1/30/2025-06-15"},
 
-		//"p1/Y/c1/a1/2025-06-12",
-		//"p1/Y/c1/a1/2025-06-13",
-		"p2/Y/c2/a2/2025-06-14",
-		"p2/Y/c3/a3/2025-06-15",
+		// Accounts
+		//{Bucket: App.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
+		//{Bucket: App.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
+		{Bucket: app.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: app.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
 
-		//"p1/Y/a1/h1/2025-06-12",
-		//"p1/Y/a1/h1/2025-06-13",
-		"p2/Y/a1/h1/2025-06-14",
-		"p2/Y/a2/h2/2025-06-15",
+		// Holdings
+		{Bucket: app.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
+		{Bucket: app.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
+		{Bucket: app.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: app.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
 
-		//"p1/Y/a1/t1/2025-06-12T00:14:37Z",
-		//"p1/Y/a1/t1/2025-06-12T02:48:09Z",
-		"p2/Y/a1/t1/2025-06-13T02:48:09Z",
-		"p2/Y/a2/t2/2025-06-14T07:06:18Z",
+		// Transactions
+		//{Bucket: App.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		//{Bucket: App.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		{Bucket: app.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: app.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 	}
-	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, &app.AwsClient))
+	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, app.AwsClient))
 }
 
 func TestIngest_PutFailure(t *testing.T) {
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	setupTest := func(failKey string) *App {
-		app := makeTestAwsClient(t)
+		app := setupIngestionTest(t)
 
-		stable := app.AwsClient.S3Client
-		app.AwsClient.S3Client = &cfg.StubUnstableS3Client{
-			StableS3Client: stable,
-			FailPutKey:     failKey,
-		}
+		app.AwsClient.S3Client = infrastub.MakeBadS3Client(app.AwsClient.S3Client, infrastub.BadS3ClientCfg{
+			FailPutKey: failKey,
+		})
 
 		return app
 	}
 
-	t.Run("CnctEnrichment", func(t *testing.T) {
-		failKey := "p1/Y/c1/2025-06-12"
+	t.Run("CnctResponse", func(t *testing.T) {
+		failKey := "p1/1/90/2025-06-12"
 		app := setupTest(failKey)
 
-		input := []ExtnCnctEnrichment{
-			{
-				PrtyId:       "p1",
-				PrtyIdTypeCd: "Y",
-				ExtnCnctId:   "c1",
-				BusDt:        "2025-06-12",
-				VendorName:   "BankOfAmerica",
+		input := yodlee.ProviderAccountResponse{
+			ProviderAccount: []yodlee.ProviderAccount{
+				{
+					Id:          90,
+					LastUpdated: "2025-06-12",
+					RequestId:   "REQUEST",
+				},
 			},
 		}
+		putResults := app.IngestCnctResponses(ctx, "p1", input)
 
-		putErrors := app.IngestCnctEnrichments(ctx, input)
-
-		want := []PutResult{
-			{Key: failKey, Origin: input[0]},
+		want := []PutCnctResult{
+			{Key: failKey, Input: OpsProviderAccount{ProfileId: "p1", ProviderAccount: input.ProviderAccount[0]}},
 		}
-		testutil.Equal(t, want, putErrors, cmpopts.IgnoreFields(PutResult{}, "Err"))
+		testutil.Equal(t, want, putResults, cmpopts.IgnoreFields(PutCnctResult{}, "Err"))
 	})
 
-	t.Run("AcctEnrichment", func(t *testing.T) {
-		failKey := "p1/Y/c1/a1/2025-06-12"
+	t.Run("AcctResponse", func(t *testing.T) {
+		failKey := "p1/1/90/900/2025-06-12"
 		app := setupTest(failKey)
 
-		input := []ExtnAcctEnrichment{
-			{
-				PrtyId:       "p1",
-				PrtyIdTypeCd: "Y",
-				ExtnCnctId:   "c1",
-				ExtnAcctId:   "a1",
-				BusDt:        "2025-06-12",
-				AcctName:     "Checking Account",
+		input := yodlee.AccountResponse{
+			Account: []yodlee.Account{
+				{
+					ProviderAccountId: 90,
+					Id:                900,
+					LastUpdated:       "2025-06-12",
+					AccountName:       "Checking Account",
+				},
 			},
 		}
+		putResults := app.IngestAcctResponses(ctx, "p1", input)
 
-		putErrors := app.IngestAcctEnrichments(ctx, input)
-
-		want := []PutResult{
-			{Key: failKey, Origin: input[0]},
+		want := []PutAcctResult{
+			{Key: failKey, Input: OpsAccount{ProfileId: "p1", Account: input.Account[0]}},
 		}
-		testutil.Equal(t, want, putErrors, cmpopts.IgnoreFields(PutResult{}, "Err"))
+		testutil.Equal(t, want, putResults, cmpopts.IgnoreFields(PutAcctResult{}, "Err"))
 	})
 
-	t.Run("HoldEnrichment", func(t *testing.T) {
-		failKey := "p1/Y/a1/h1/2025-06-12"
+	t.Run("HoldResponse", func(t *testing.T) {
+		failKey := "p1/1/900/9000/2025-06-12"
 		app := setupTest(failKey)
 
-		input := []ExtnHoldEnrichment{
-			{
-				PrtyId:       "p1",
-				PrtyIdTypeCd: "Y",
-				ExtnAcctId:   "a1",
-				ExtnHoldId:   "h1",
-				BusDt:        "2025-06-12",
-				HoldName:     "Security",
+		input := yodlee.HoldingResponse{
+			Holding: []yodlee.Holding{
+				{
+					AccountId:   900,
+					Id:          9000,
+					LastUpdated: "2025-06-12",
+					HoldingType: "Security",
+				},
 			},
 		}
+		putResults := app.IngestHoldResponses(ctx, "p1", input)
 
-		putErrors := app.IngestHoldEnrichments(ctx, input)
-
-		want := []PutResult{
-			{Key: failKey, Origin: input[0]},
+		want := []PutHoldResult{
+			{Key: failKey, Input: OpsHolding{ProfileId: "p1", Holding: input.Holding[0]}},
 		}
-		testutil.Equal(t, want, putErrors, cmpopts.IgnoreFields(PutResult{}, "Err"))
+		testutil.Equal(t, want, putResults, cmpopts.IgnoreFields(PutHoldResult{}, "Err"))
 	})
 
-	t.Run("TxnEnrichment", func(t *testing.T) {
-		failKey := "p1/Y/a1/t1/2025-06-11T07:06:18Z"
+	t.Run("TxnResponse", func(t *testing.T) {
+		failKey := "p1/1/900/9000/2025-06-11T07:06:18Z"
 		app := setupTest(failKey)
 
-		input := []ExtnTxnEnrichment{
-			{
-				PrtyId:       "p1",
-				PrtyIdTypeCd: "Y",
-				ExtnAcctId:   "a1",
-				ExtnTxnId:    "t1",
-				BusDt:        "2025-06-11",
-				TxnDt:        "2025-06-11T07:06:18Z",
-				TxnAmt:       4523,
+		input := yodlee.TransactionResponse{
+			Transaction: []yodlee.TransactionWithDateTime{
+				{
+					AccountId:   900,
+					Id:          9000,
+					Date:        "2025-06-11T07:06:18Z",
+					CheckNumber: "123",
+				},
 			},
 		}
+		putResults := app.IngestTxnResponses(ctx, "p1", input)
 
-		putErrors := app.IngestTxnEnrichments(ctx, input)
-
-		want := []PutResult{
-			{Key: failKey, Origin: input[0]},
+		want := []PutTxnResult{
+			{Key: failKey, Input: OpsTransaction{ProfileId: "p1", TransactionWithDateTime: input.Transaction[0]}},
 		}
-		testutil.Equal(t, want, putErrors, cmpopts.IgnoreFields(PutResult{}, "Err"))
+		testutil.Equal(t, want, putResults, cmpopts.IgnoreFields(PutTxnResult{}, "Err"))
 	})
 
 	t.Run("CnctRefresh", func(t *testing.T) {
-		failKey := "p1/Y/c1/2025-06-12"
+		failKey := "p1/1/90/2025-06-12"
 		app := setupTest(failKey)
 
-		input := []ExtnCnctRefresh{
+		input := []yodlee.DataExtractsProviderAccount{
 			{
-				PrtyId:       "p1",
-				PrtyIdTypeCd: "Y",
-				ExtnCnctId:   "c1",
-				BusDt:        "2025-06-12",
-				VendorName:   "BankOfAmerica",
+				Id:          90,
+				LastUpdated: "2025-06-12",
+				RequestId:   "REQUEST",
 			},
 		}
+		result := app.IngestCnctRefreshes(ctx, "p1", input)
 
-		result := app.IngestCnctRefreshes(ctx, input)
-
-		want := []PutResult{
-			{Key: failKey, Origin: input[0]},
+		want := CnctRefreshResult{
+			PutResults: []PutResult[OpsProviderAccountRefresh]{
+				{Key: failKey, Input: OpsProviderAccountRefresh{ProfileId: "p1", DataExtractsProviderAccount: input[0]}},
+			},
 		}
-		testutil.Equal(t, want, result.PutErrors, cmpopts.IgnoreFields(PutResult{}, "Err"))
+		testutil.Equal(t, want, result, cmpopts.IgnoreFields(PutResult[OpsProviderAccountRefresh]{}, "Err"))
 	})
 
 	t.Run("AcctRefresh", func(t *testing.T) {
-		failKey := "p1/Y/c1/a1/2025-06-12"
+		failKey := "p1/1/90/900/2025-06-12"
 		app := setupTest(failKey)
 
-		input := []ExtnAcctRefresh{
+		input := []yodlee.DataExtractsAccount{
 			{
-				PrtyId:       "p1",
-				PrtyIdTypeCd: "Y",
-				ExtnCnctId:   "c1",
-				ExtnAcctId:   "a1",
-				BusDt:        "2025-06-12",
-				AcctName:     "Checking Account",
+				ProviderAccountId: 90,
+				Id:                900,
+				LastUpdated:       "2025-06-12",
+				AccountName:       "Checking Account",
 			},
 		}
 
-		result := app.IngestAcctsRefreshes(ctx, input)
+		result := app.IngestAcctsRefreshes(ctx, "p1", input)
 
-		want := []PutResult{
-			{Key: failKey, Origin: input[0]},
+		want := AcctRefreshResult{
+			PutResults: []PutResult[OpsAccountRefresh]{
+				{Key: failKey, Input: OpsAccountRefresh{ProfileId: "p1", DataExtractsAccount: input[0]}},
+			},
 		}
-		testutil.Equal(t, want, result.PutErrors, cmpopts.IgnoreFields(PutResult{}, "Err"))
+		testutil.Equal(t, want, result, cmpopts.IgnoreFields(PutResult[OpsAccountRefresh]{}, "Err"))
 	})
 
 	t.Run("HoldRefresh", func(t *testing.T) {
-		failKey := "p1/Y/a1/h1/2025-06-12"
+		failKey := "p1/1/900/9000/2025-06-12"
 		app := setupTest(failKey)
 
-		input := []ExtnHoldRefresh{
+		input := []yodlee.DataExtractsHolding{
 			{
-				PrtyId:       "p1",
-				PrtyIdTypeCd: "Y",
-				ExtnAcctId:   "a1",
-				ExtnHoldId:   "h1",
-				BusDt:        "2025-06-12",
-				HoldName:     "Security",
+				AccountId:   900,
+				Id:          9000,
+				LastUpdated: "2025-06-12",
+				HoldingType: "Security",
 			},
 		}
 
-		result := app.IngestHoldRefreshes(ctx, input)
+		result := app.IngestHoldRefreshes(ctx, "p1", input)
 
-		want := []PutResult{
-			{Key: failKey, Origin: input[0]},
+		want := HoldRefreshResult{
+			PutResults: []PutResult[OpsHoldingRefresh]{
+				{Key: failKey, Input: OpsHoldingRefresh{ProfileId: "p1", DataExtractsHolding: input[0]}},
+			},
 		}
-		testutil.Equal(t, want, result.PutErrors, cmpopts.IgnoreFields(PutResult{}, "Err"))
+		testutil.Equal(t, want, result, cmpopts.IgnoreFields(PutResult[OpsHoldingRefresh]{}, "Err"))
 	})
 
 	t.Run("TxnRefresh", func(t *testing.T) {
-		failKey := "p1/Y/a1/t1/2025-06-11T07:06:18Z"
+		failKey := "p1/1/900/9000/2025-06-11T07:06:18Z"
 		app := setupTest(failKey)
 
-		input := []ExtnTxnRefresh{
+		input := []yodlee.DataExtractsTransaction{
 			{
-				PrtyId:       "p1",
-				PrtyIdTypeCd: "Y",
-				ExtnAcctId:   "a1",
-				ExtnTxnId:    "t1",
-				BusDt:        "2025-06-11",
-				TxnDt:        "2025-06-11T07:06:18Z",
-				TxnAmt:       4523,
+				AccountId:   900,
+				Id:          9000,
+				Date:        "2025-06-11T07:06:18Z",
+				CheckNumber: "123",
 			},
 		}
 
-		result := app.IngestTxnRefreshes(ctx, input)
+		result := app.IngestTxnRefreshes(ctx, "p1", input)
 
-		want := []PutResult{
-			{Key: failKey, Origin: input[0]},
+		want := TxnRefreshResult{
+			PutResults: []PutResult[OpsTransactionRefresh]{
+				{Key: failKey, Input: OpsTransactionRefresh{ProfileId: "p1", DataExtractsTransaction: input[0]}},
+			},
 		}
-		testutil.Equal(t, want, result.PutErrors, cmpopts.IgnoreFields(PutResult{}, "Err"))
+		testutil.Equal(t, want, result, cmpopts.IgnoreFields(PutResult[OpsTransactionRefresh]{}, "Err"))
 	})
 }
 
@@ -712,62 +683,50 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	t.Run("CnctRefresh", func(t *testing.T) {
-		app := makeTestAwsClient(t)
+		app := setupIngestionTest(t)
 
-		stable := app.AwsClient.S3Client
-		app.AwsClient.S3Client = &cfg.StubUnstableS3Client{
-			StableS3Client: stable,
+		app.AwsClient.S3Client = infrastub.MakeBadS3Client(app.AwsClient.S3Client, infrastub.BadS3ClientCfg{
 			FailListPrefix: map[string]string{
-				app.TxnBucket: "p1/Y/a1", // fail to list txn by prefix
+				app.TxnBucket: "p1/1/100", // fail to list txn by prefix
 			},
-			FailDeleteKeys: []string{"p1/Y/a1/h1/2025-06-12"}, // fail to delete a holding
-		}
+			FailDeleteKeys: []string{"p1/1/100/1000/2025-06-12"}, // fail to delete a holding
+		})
 
-		result := app.IngestCnctRefreshes(ctx, []ExtnCnctRefresh{
+		result := app.IngestCnctRefreshes(ctx, "p1", []yodlee.DataExtractsProviderAccount{
 			{
-				IsDeleted:    true,
-				PrtyId:       "p1",
-				PrtyIdTypeCd: "Y",
-				ExtnCnctId:   "c1",
-				BusDt:        "2025-06-12",
-				VendorName:   "BankOfAmerica",
+				IsDeleted: true,
+				Id:        10, // contains account 100 and holding 1000 in seeded data.
 			},
 		})
 
-		want := []DeleteResult{{
-			Bucket: app.TxnBucket, Prefix: "p1/Y/a1"},
-			{Bucket: app.HoldBucket, Keys: []string{"p1/Y/a1/h1/2025-06-12"}},
+		want := []DeleteResult{
+			{Bucket: app.TxnBucket, Prefix: "p1/1/100"},
+			{Bucket: app.HoldBucket, Keys: []string{"p1/1/100/1000/2025-06-12"}},
 		}
 		testutil.Equal(t, want, result.DeleteErrors, cmpopts.IgnoreFields(DeleteResult{}, "Err"))
 	})
 
 	t.Run("AcctRefresh", func(t *testing.T) {
-		app := makeTestAwsClient(t)
+		app := setupIngestionTest(t)
 
-		stable := app.AwsClient.S3Client
-		app.AwsClient.S3Client = &cfg.StubUnstableS3Client{
-			StableS3Client: stable,
+		app.AwsClient.S3Client = infrastub.MakeBadS3Client(app.AwsClient.S3Client, infrastub.BadS3ClientCfg{
 			FailListPrefix: map[string]string{
-				app.TxnBucket: "p1/Y/a1", // fail to list txn by prefix
+				app.TxnBucket: "p1/1/100", // fail to list txn by prefix
 			},
-			FailDeleteKeys: []string{"p1/Y/c1/a1/2025-06-12"}, // fail to delete an acct
-		}
+			FailDeleteKeys: []string{"p1/1/10/100/2025-06-12"}, // fail to delete an acct
+		})
 
-		result := app.IngestAcctsRefreshes(ctx, []ExtnAcctRefresh{
+		result := app.IngestAcctsRefreshes(ctx, "p1", []yodlee.DataExtractsAccount{
 			{
-				IsDeleted:    true,
-				PrtyId:       "p1",
-				PrtyIdTypeCd: "Y",
-				ExtnCnctId:   "c1",
-				ExtnAcctId:   "a1",
-				BusDt:        "2025-06-12",
-				AcctName:     "Checking Account",
+				IsDeleted:         true,
+				ProviderAccountId: 10,
+				Id:                100,
 			},
 		})
 
-		want := []DeleteResult{{
-			Bucket: app.TxnBucket, Prefix: "p1/Y/a1"},
-			{Bucket: app.AcctBucket, Keys: []string{"p1/Y/c1/a1/2025-06-12"}},
+		want := []DeleteResult{
+			{Bucket: app.TxnBucket, Prefix: "p1/1/100"},
+			{Bucket: app.AcctBucket, Keys: []string{"p1/1/10/100/2025-06-12"}},
 		}
 		testutil.Equal(t, want, result.DeleteErrors, cmpopts.IgnoreFields(DeleteResult{}, "Err"))
 	})

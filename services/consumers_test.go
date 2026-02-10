@@ -3,136 +3,391 @@ package svc
 import (
 	"context"
 	"encoding/json"
-	"filogger/testutil"
-	"testing"
-	"time"
-
-	"github.com/segmentio/kafka-go"
-	"github.com/stretchr/testify/assert"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/require"
+	"testing"
+	"yodleeops/infra"
+	infrastub "yodleeops/infra/stubs"
+	"yodleeops/internal/yodlee"
+	"yodleeops/testutil"
+
+	"github.com/stretchr/testify/assert"
 )
+
+func setupConsumersTest(t *testing.T) *App {
+	awsClient := testutil.SetupAwsITest(t)
+
+	app := &App{AwsClient: awsClient}
+
+	testutil.SeedS3Buckets(t, app.AwsClient)
+	return app
+}
+
+func handleFiMessage(ctx context.Context, app *App, key string, value any) {
+	switch v := value.(type) {
+	case []yodlee.DataExtractsProviderAccount:
+		app.HandleCnctRefreshMessage(ctx, key, v)
+	case []yodlee.DataExtractsAccount:
+		app.HandleAcctRefreshMessage(ctx, key, v)
+	case []yodlee.DataExtractsHolding:
+		app.HandleHoldRefreshMessage(ctx, key, v)
+	case []yodlee.DataExtractsTransaction:
+		app.HandleTxnRefreshMessage(ctx, key, v)
+	case yodlee.ProviderAccountResponse:
+		app.HandleCnctResponseMessage(ctx, key, v)
+	case yodlee.AccountResponse:
+		app.HandleAcctResponseMessage(ctx, key, v)
+	case yodlee.HoldingResponse:
+		app.HandleHoldResponseMessage(ctx, key, v)
+	case yodlee.TransactionResponse:
+		app.HandleTxnResponseMessage(ctx, key, v)
+	case []DeleteRetry:
+		app.HandleDeleteRecoveryMessage(ctx, key, v)
+	}
+}
+
+func collectProducerStubMsgs(t *testing.T, producerStub *infrastub.Producer) []any {
+	var msgs []any
+	for _, kafkaMsg := range producerStub.Messages {
+		var msg any
+		switch kafkaMsg.Topic {
+		case infra.CnctResponseTopic:
+			msg = unmarshalJsonOrFail[yodlee.ProviderAccountResponse](t, kafkaMsg.Value)
+		case infra.AcctResponseTopic:
+			msg = unmarshalJsonOrFail[yodlee.AccountResponse](t, kafkaMsg.Value)
+		case infra.HoldResponseTopic:
+			msg = unmarshalJsonOrFail[yodlee.HoldingResponse](t, kafkaMsg.Value)
+		case infra.TxnResponseTopic:
+			msg = unmarshalJsonOrFail[yodlee.TransactionResponse](t, kafkaMsg.Value)
+		case infra.CnctRefreshTopic:
+			msg = unmarshalJsonOrFail[[]yodlee.DataExtractsProviderAccount](t, kafkaMsg.Value)
+		case infra.AcctRefreshTopic:
+			msg = unmarshalJsonOrFail[[]yodlee.DataExtractsAccount](t, kafkaMsg.Value)
+		case infra.HoldRefreshTopic:
+			msg = unmarshalJsonOrFail[[]yodlee.DataExtractsHolding](t, kafkaMsg.Value)
+		case infra.TxnRefreshTopic:
+			msg = unmarshalJsonOrFail[[]yodlee.DataExtractsTransaction](t, kafkaMsg.Value)
+		}
+		msgs = append(msgs, msg)
+	}
+	return msgs
+}
 
 func TestFiMessageConsumers(t *testing.T) {
 	// given
-	testCfg := testutil.SetupITest(t, testutil.Aws, testutil.Kafka)
-	app := MakeApp(testCfg)
-	testutil.SeedS3Buckets(t, &app.AwsClient)
+	app := setupConsumersTest(t)
 
-	var produceMsgs []kafka.Message
-
-	for _, input := range []struct {
-		topic string
-		value any
-	}{
-		{topic: app.CnctRefreshTopic, value: []ExtnCnctRefresh{
-			{PrtyId: "p1", PrtyIdTypeCd: "Y", ExtnCnctId: "c1", BusDt: "2025-06-12", VendorName: "BankOfAmerica"},
-			{PrtyId: "p300", PrtyIdTypeCd: "Y", ExtnCnctId: "c10", BusDt: "2025-06-13", VendorName: "GoldmanSachs"},
-		}},
-		{topic: app.AcctRefreshTopic, value: []ExtnAcctRefresh{
-			{PrtyId: "p1", PrtyIdTypeCd: "Y", ExtnCnctId: "c1", ExtnAcctId: "a1", BusDt: "2025-06-12", AcctName: "Checking Account"},
-			{PrtyId: "p300", PrtyIdTypeCd: "Y", ExtnCnctId: "c100", ExtnAcctId: "a200", BusDt: "2025-06-13", AcctName: "Savings Account"},
-		}},
-		{topic: app.HoldRefreshTopic, value: []ExtnHoldRefresh{
-			{PrtyId: "p1", PrtyIdTypeCd: "Y", ExtnAcctId: "a1", ExtnHoldId: "h1", BusDt: "2025-06-12", HoldName: "Security"},
-			{PrtyId: "p300", PrtyIdTypeCd: "Y", ExtnAcctId: "a200", ExtnHoldId: "h100", BusDt: "2025-06-13", HoldName: "Stock"},
-		}},
-		{topic: app.TxnRefreshTopic, value: []ExtnTxnRefresh{
-			{PrtyId: "p1", PrtyIdTypeCd: "Y", ExtnAcctId: "a1", ExtnTxnId: "t1", BusDt: "2025-06-11", TxnDt: "2025-06-11T07:06:18Z", TxnAmt: 4523},
-			{PrtyId: "p300", PrtyIdTypeCd: "Y", ExtnAcctId: "a200", ExtnTxnId: "t200", BusDt: "2025-06-13", TxnDt: "2025-06-13T07:06:18Z", TxnAmt: -1299},
-		}},
-		{topic: app.CnctEnrichmentTopic, value: []ExtnCnctEnrichment{
-			{PrtyId: "p1", PrtyIdTypeCd: "Y", ExtnCnctId: "c1", BusDt: "2025-06-12", VendorName: "BankOfAmerica"},
-			{PrtyId: "p300", PrtyIdTypeCd: "Y", ExtnCnctId: "c10", BusDt: "2025-06-13", VendorName: "GoldmanSachs"},
-		}},
-		{topic: app.AcctEnrichmentTopic, value: []ExtnAcctEnrichment{
-			{PrtyId: "p1", PrtyIdTypeCd: "Y", ExtnCnctId: "c1", ExtnAcctId: "a1", BusDt: "2025-06-12", AcctName: "Checking Account"},
-			{PrtyId: "p300", PrtyIdTypeCd: "Y", ExtnCnctId: "c100", ExtnAcctId: "a200", BusDt: "2025-06-13", AcctName: "Savings Account"},
-		}},
-		{topic: app.HoldEnrichmentTopic, value: []ExtnHoldEnrichment{
-			{PrtyId: "p1", PrtyIdTypeCd: "Y", ExtnAcctId: "a1", ExtnHoldId: "h1", BusDt: "2025-06-12", HoldName: "Security"},
-			{PrtyId: "p300", PrtyIdTypeCd: "Y", ExtnAcctId: "a200", ExtnHoldId: "h100", BusDt: "2025-06-13", HoldName: "Stock"},
-		}},
-		{topic: app.TxnEnrichmentTopic, value: []ExtnTxnEnrichment{
-			{PrtyId: "p1", PrtyIdTypeCd: "Y", ExtnAcctId: "a1", ExtnTxnId: "t1", BusDt: "2025-06-11", TxnDt: "2025-06-11T07:06:18Z", TxnAmt: 4523},
-			{PrtyId: "p300", PrtyIdTypeCd: "Y", ExtnAcctId: "a200", ExtnTxnId: "t200", BusDt: "2025-06-13", TxnDt: "2025-06-13T07:06:18Z", TxnAmt: -1299},
-		}},
-		{topic: app.DeleteRecoveryTopic, value: []DeleteRetry{
-			{
-				Kind:   ListKind,
-				Bucket: app.AcctBucket,
-				Prefix: "p2/Y/c3",
-			},
-			{
-				Kind:   DeleteKind,
-				Bucket: app.CnctBucket,
-				Keys:   []string{"p1/Y/c3/2025-06-15"},
-			},
-		}},
-	} {
-		inputBytes, err := json.Marshal(input.value)
-		require.NoError(t, err)
-
-		produceMsgs = append(produceMsgs, kafka.Message{
-			Topic: input.topic,
-			Value: inputBytes,
-		})
-	}
-	wantConsumeCount := len(produceMsgs) // 1:1 produce -> consume
-
-	ctx, cancel := context.WithTimeout(context.WithValue(t.Context(), "trace", t.Name()), time.Second*60) // consumers respect timeout. timeout must be long due to poor kafka latency.
-	defer cancel()
-
-	mChan := make(chan bool)
+	producerStub := &infrastub.Producer{}
+	app.KafkaClient = &infra.KafkaClient{Producer: producerStub}
 
 	// when
-	app.StartConsumers(ConsumersConfig{
-		Context:     ctx,
-		ConsumeChan: mChan, // used to let us deterministically wait on N messages to be consumed.
-		Concurrency: 2,
-	})
+	key := "p1" // all messages for same profileId.
 
-	for _, msg := range produceMsgs {
-		require.NoError(t, app.Producer.WriteMessages(ctx, msg))
+	for _, test := range []struct {
+		value any
+	}{
+		// Refreshes
+		{
+			value: []yodlee.DataExtractsProviderAccount{
+				{
+					Id:          99,
+					LastUpdated: "2025-06-13",
+					RequestId:   "REQUEST",
+				},
+			},
+		},
+		{
+			value: []yodlee.DataExtractsAccount{
+				{
+					ProviderAccountId: 99,
+					Id:                999,
+					LastUpdated:       "2025-06-13",
+					AccountName:       "Savings Account",
+				},
+			},
+		},
+		{
+			value: []yodlee.DataExtractsHolding{
+				{
+					AccountId:   999,
+					Id:          9999,
+					LastUpdated: "2025-06-13",
+					HoldingType: "Stock",
+				},
+			},
+		},
+		{
+			value: []yodlee.DataExtractsTransaction{
+				{
+					AccountId:   999,
+					Id:          9999,
+					Date:        "2025-06-13T07:06:18Z",
+					CheckNumber: "1299",
+				},
+			},
+		},
+		// Responses
+		{
+			value: yodlee.ProviderAccountResponse{
+				ProviderAccount: []yodlee.ProviderAccount{
+					{
+						Id:          77,
+						LastUpdated: "2025-06-13",
+						RequestId:   "REQUEST",
+					},
+				},
+			},
+		},
+		{
+			value: yodlee.AccountResponse{
+				Account: []yodlee.Account{
+					{
+						ProviderAccountId: 77,
+						Id:                777,
+						LastUpdated:       "2025-06-13",
+						AccountName:       "Savings Account",
+					},
+				},
+			},
+		},
+		{
+			value: yodlee.HoldingResponse{
+				Holding: []yodlee.Holding{
+					{
+						AccountId:   777,
+						Id:          7777,
+						LastUpdated: "2025-06-13",
+						HoldingType: "Stock",
+					},
+				},
+			},
+		},
+		{
+			value: yodlee.TransactionResponse{
+				Transaction: []yodlee.TransactionWithDateTime{
+					{
+						AccountId:   777,
+						Id:          7777,
+						Date:        "2025-06-13T07:06:18Z",
+						CheckNumber: "1299",
+					},
+				},
+			},
+		},
+		{
+			value: []DeleteRetry{
+				{
+					Kind:   ListKind,
+					Bucket: app.TxnBucket,
+					Prefix: "p1/1/100/3000",
+				},
+				{
+					Kind:   DeleteKind,
+					Bucket: app.CnctBucket,
+					Keys:   []string{"p1/1/30/2025-06-15"},
+				},
+			},
+		},
+	} {
+		ctx := t.Context()
+		handleFiMessage(ctx, app, key, test.value)
 	}
 
 	// then
-	// asserts that we consume the expected number of messages and that the events perform the expected state changes to the keyspace
-
-	for range wantConsumeCount {
-		<-mChan
-	}
-	t.Logf("all %d messages consumed", wantConsumeCount)
+	assert.Equal(t, 8, len(producerStub.Messages))
 
 	// removed keys are commented.
-	wantKeys := []string{
-		// Connections
-		"p1/Y/c1/2025-06-12",
-		"p1/Y/c1/2025-06-13",
-		"p1/Y/c2/2025-06-14",
-		// "p1/Y/c3/2025-06-15",
-		"p300/Y/c10/2025-06-13",
+	wantKeys := []testutil.WantKey{
+		{Bucket: app.CnctBucket, Key: "p1/1/10/2025-06-12"},
+		{Bucket: app.CnctBucket, Key: "p1/1/10/2025-06-13"},
+		{Bucket: app.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		//{Bucket: App.CnctBucket, Key: "p1/1/30/2025-06-15"},
+		{Bucket: app.CnctBucket, Key: "p1/1/99/2025-06-13"},
+		{Bucket: app.CnctBucket, Key: "p1/1/77/2025-06-13"},
 
 		// Accounts
-		"p1/Y/c1/a1/2025-06-12",
-		"p1/Y/c1/a1/2025-06-13",
-		"p2/Y/c2/a2/2025-06-14",
-		// "p2/Y/c3/a3/2025-06-15",
-		"p300/Y/c100/a200/2025-06-13",
+		{Bucket: app.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
+		{Bucket: app.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
+		{Bucket: app.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: app.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
+		{Bucket: app.AcctBucket, Key: "p1/1/99/999/2025-06-13"},
+		{Bucket: app.AcctBucket, Key: "p1/1/77/777/2025-06-13"},
 
-		// Holds
-		"p1/Y/a1/h1/2025-06-12",
-		"p1/Y/a1/h1/2025-06-13",
-		"p2/Y/a1/h1/2025-06-14",
-		"p2/Y/a2/h2/2025-06-15",
-		"p300/Y/a200/h100/2025-06-13",
+		// Holdings
+		{Bucket: app.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
+		{Bucket: app.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
+		{Bucket: app.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: app.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
+		{Bucket: app.HoldBucket, Key: "p1/1/999/9999/2025-06-13"},
+		{Bucket: app.HoldBucket, Key: "p1/1/777/7777/2025-06-13"},
 
 		// Transactions
-		"p1/Y/a1/t1/2025-06-12T00:14:37Z",
-		"p1/Y/a1/t1/2025-06-12T02:48:09Z",
-		"p2/Y/a1/t1/2025-06-13T02:48:09Z",
-		"p2/Y/a2/t2/2025-06-14T07:06:18Z",
-		"p1/Y/a1/t1/2025-06-11T07:06:18Z",
-		"p300/Y/a200/t200/2025-06-13T07:06:18Z",
+		//{Bucket: App.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		//{Bucket: App.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		{Bucket: app.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: app.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
+		{Bucket: app.TxnBucket, Key: "p1/1/999/9999/2025-06-13T07:06:18Z"},
+		{Bucket: app.TxnBucket, Key: "p1/1/777/7777/2025-06-13T07:06:18Z"},
 	}
-	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, &app.AwsClient))
+
+	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, app.AwsClient))
+}
+
+func TestFiMessageConsumers_S3Errors(t *testing.T) {
+	// given
+	app := setupConsumersTest(t)
+
+	producerStub := &infrastub.Producer{}
+	app.KafkaClient = &infra.KafkaClient{Producer: producerStub}
+
+	key := "p1" // all messages for same profileId.
+
+	providerAccountRefresh := []yodlee.DataExtractsProviderAccount{
+		{
+			Id:          99,
+			LastUpdated: "2025-06-13",
+			RequestId:   "REQUEST",
+		},
+	}
+	accountRefresh := []yodlee.DataExtractsAccount{
+		{
+			ProviderAccountId: 99,
+			Id:                999,
+			LastUpdated:       "2025-06-13",
+			AccountName:       "Savings Account",
+		},
+	}
+	holdingRefresh := []yodlee.DataExtractsHolding{
+		{
+			AccountId:   999,
+			Id:          9999,
+			LastUpdated: "2025-06-13",
+			HoldingType: "Stock",
+		},
+	}
+	transactionRefresh := []yodlee.DataExtractsTransaction{
+		{
+			AccountId:   999,
+			Id:          9999,
+			Date:        "2025-06-13T07:06:18Z",
+			CheckNumber: "1299",
+		},
+	}
+	providerAccountResponse := yodlee.ProviderAccountResponse{
+		ProviderAccount: []yodlee.ProviderAccount{
+			{
+				Id:          77,
+				LastUpdated: "2025-06-13",
+				RequestId:   "REQUEST",
+			},
+		},
+	}
+	accountResponse := yodlee.AccountResponse{
+		Account: []yodlee.Account{
+			{
+				ProviderAccountId: 77,
+				Id:                777,
+				LastUpdated:       "2025-06-13",
+				AccountName:       "Savings Account",
+			},
+		},
+	}
+	holdingResponse := yodlee.HoldingResponse{
+		Holding: []yodlee.Holding{
+			{
+				AccountId:   777,
+				Id:          7777,
+				LastUpdated: "2025-06-13",
+				HoldingType: "Stock",
+			},
+		},
+	}
+	transactionResponse := yodlee.TransactionResponse{
+		Transaction: []yodlee.TransactionWithDateTime{
+			{
+				AccountId:   777,
+				Id:          7777,
+				Date:        "2025-06-13T07:06:18Z",
+				CheckNumber: "1299",
+			},
+		},
+	}
+
+	// when
+	for _, test := range []struct {
+		failPutKey string
+		value      any
+	}{
+		// Refreshes
+		{
+			failPutKey: "p1/1/99/2025-06-13",
+			value:      providerAccountRefresh,
+		},
+		{
+			failPutKey: "p1/1/99/999/2025-06-13",
+			value:      accountRefresh,
+		},
+		{
+			failPutKey: "p1/1/999/9999/2025-06-13",
+			value:      holdingRefresh,
+		},
+		{
+			failPutKey: "p1/1/999/9999/2025-06-13T07:06:18Z",
+			value:      transactionRefresh,
+		},
+		// Responses
+		{
+			failPutKey: "p1/1/77/2025-06-13",
+			value:      providerAccountResponse,
+		},
+		{
+			failPutKey: "p1/1/77/777/2025-06-13",
+			value:      accountResponse,
+		},
+		{
+			failPutKey: "p1/1/777/7777/2025-06-13",
+			value:      holdingResponse,
+		},
+		{
+			failPutKey: "p1/1/777/7777/2025-06-13T07:06:18Z",
+			value:      transactionResponse,
+		},
+	} {
+		ctx := t.Context()
+
+		if test.failPutKey != "" {
+			app.AwsClient.S3Client = infrastub.MakeBadS3Client(app.AwsClient.S3Client, infrastub.BadS3ClientCfg{
+				FailPutKey: test.failPutKey,
+			})
+		}
+
+		handleFiMessage(ctx, app, key, test.value)
+	}
+
+	// then
+	msgs := collectProducerStubMsgs(t, producerStub)
+
+	wantMsgs := []any{
+		providerAccountResponse, accountResponse, holdingResponse, transactionResponse,
+		providerAccountRefresh, accountRefresh, holdingRefresh, transactionRefresh,
+	}
+	wantKafkaMsgs := []infrastub.KafkaMessage{
+		{Topic: infra.CnctRefreshTopic, Key: "p1"},
+		{Topic: infra.AcctRefreshTopic, Key: "p1"},
+		{Topic: infra.HoldRefreshTopic, Key: "p1"},
+		{Topic: infra.TxnRefreshTopic, Key: "p1"},
+		{Topic: infra.CnctResponseTopic, Key: "p1"},
+		{Topic: infra.AcctResponseTopic, Key: "p1"},
+		{Topic: infra.HoldResponseTopic, Key: "p1"},
+		{Topic: infra.TxnResponseTopic, Key: "p1"},
+	}
+
+	assert.ElementsMatch(t, wantMsgs, msgs)
+	testutil.Equal(t, wantKafkaMsgs, producerStub.Messages, cmpopts.IgnoreFields(infrastub.KafkaMessage{}, "Value"))
+}
+
+func unmarshalJsonOrFail[JSON any](t *testing.T, value []byte) JSON {
+	var v JSON
+	require.NoError(t, json.Unmarshal(value, &v))
+	return v
 }

@@ -2,14 +2,14 @@ package main
 
 import (
 	"context"
-	cfg "filogger/config"
-	svc "filogger/services"
 	"github.com/joho/godotenv"
 	"log"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
+	"time"
+	"yodleeops/infra"
+	svc "yodleeops/services"
 )
 
 func main() {
@@ -18,15 +18,18 @@ func main() {
 		log.Fatalf("failed to load .env file: %v", err)
 	}
 
-	cfg.InitLoggers(nil)
-	config := cfg.MakeConfig(cfg.ReadEnv())
+	infra.InitLoggers(nil)
+	config := infra.MakeConfig(infra.ReadEnv())
+
+	log.Printf("config: %+v", config)
 	config.IsLocal = true
 
 	slog.Info("starting server with configuration", "config", config)
 	app := svc.MakeApp(config)
 
-	consumerContext, cancelConsumer := context.WithCancel(context.Background())
-	app.StartConsumers(svc.ConsumersConfig{Context: consumerContext, Concurrency: config.Concurrency})
+	consumerCtx, cancelConsumer := context.WithCancel(context.Background())
+	app.StartConsumers(svc.ConsumersConfig{Context: consumerCtx, Concurrency: config.Concurrency})
+	defer app.Close()
 
 	go func() {
 		sigChan := make(chan os.Signal, 1)
@@ -35,13 +38,20 @@ func main() {
 
 		slog.Info("shutting down server")
 
-		cancelConsumer()        // stops the listeners
-		app.KafkaClient.Close() // allows the kafka client to flush buffers
+		cancelConsumer() // stops the listeners
 
-		os.Exit(1)
+		os.Exit(0)
 	}()
 
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		log.Fatalf("failed to start server: %v", err)
+	//if err := http.ListenAndServe(":8080", nil); err != nil {
+	//	log.Fatalf("failed to start server: %v", err)
+	//}
+
+	for {
+		select {
+		case <-consumerCtx.Done():
+			return
+		case <-time.After(time.Millisecond * 50):
+		}
 	}
 }

@@ -2,40 +2,38 @@ package svc
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
 type CnctKey struct {
-	PrtyId       string
-	PrtyIdTypeCd string
-	CnctID       string
-	BusDt        string
+	ProfileId string
+	CnctID    int64
+	UpdtTs    string
 }
 
 func (k CnctKey) String() string {
-	return fmt.Sprintf("%s/%s/%s/%s", k.PrtyId, k.PrtyIdTypeCd, k.CnctID, k.BusDt)
+	return fmt.Sprintf("%s/1/%d/%s", k.ProfileId, k.CnctID, k.UpdtTs)
 }
 
 type CnctPrefix struct {
-	PrtyId       string
-	PrtyIdTypeCd string
-	CnctID       string
+	ProfileId string
+	CnctID    int64
 }
 
 func (k CnctPrefix) String() string {
-	return fmt.Sprintf("%s/%s/%s", k.PrtyId, k.PrtyIdTypeCd, k.CnctID)
+	return fmt.Sprintf("%s/1/%d", k.ProfileId, k.CnctID)
 }
 
 type AcctKey struct {
-	PrtyId       string
-	PrtyIdTypeCd string
-	CnctID       string
-	AcctID       string
-	BusDt        string
+	ProfileId string
+	CnctID    int64
+	AcctID    int64
+	UpdtTs    string
 }
 
 func (k AcctKey) String() string {
-	return fmt.Sprintf("%s/%s/%s/%s/%s", k.PrtyId, k.PrtyIdTypeCd, k.CnctID, k.AcctID, k.BusDt)
+	return fmt.Sprintf("%s/1/%d/%d/%s", k.ProfileId, k.CnctID, k.AcctID, k.UpdtTs)
 }
 
 func ParseAcctKey(acctKeyStr string) (AcctKey, error) {
@@ -44,69 +42,75 @@ func ParseAcctKey(acctKeyStr string) (AcctKey, error) {
 		return AcctKey{}, fmt.Errorf("invalid AcctKey %s: expected 5 tokens, got %d", acctKeyStr, len(tokens))
 	}
 
+	cnctIdStr := tokens[2]
+	cnctId, err := strconv.ParseInt(cnctIdStr, 10, 64)
+	if err != nil {
+		return AcctKey{}, fmt.Errorf("invalid AcctKey %s: invalid cnctId %s: %w", acctKeyStr, cnctIdStr, err)
+	}
+
+	acctIdStr := tokens[3]
+	acctId, err := strconv.ParseInt(acctIdStr, 10, 64)
+	if err != nil {
+		return AcctKey{}, fmt.Errorf("invalid AcctKey %s: invalid acctId %s: %w", acctKeyStr, acctIdStr, err)
+	}
+
 	return AcctKey{
-		PrtyId:       tokens[0],
-		PrtyIdTypeCd: tokens[1],
-		CnctID:       tokens[2],
-		AcctID:       tokens[3],
-		BusDt:        tokens[4],
+		ProfileId: tokens[0],
+		CnctID:    cnctId,
+		AcctID:    acctId,
+		UpdtTs:    tokens[4],
 	}, nil
 }
 
-// AcctMemberPrefix is a prefix key to delete txns or holdings.
+// AcctMemberPrefix is a prefix Key to delete txns or holdings.
 type AcctMemberPrefix struct {
-	PrtyId       string
-	PrtyIdTypeCd string
-	AcctID       string
+	ProfileId string
+	AcctID    int64
 }
 
 func (k AcctMemberPrefix) String() string {
-	return fmt.Sprintf("%s/%s/%s", k.PrtyId, k.PrtyIdTypeCd, k.AcctID)
+	return fmt.Sprintf("%s/1/%d", k.ProfileId, k.AcctID)
 }
 
 type AcctPrefix struct {
-	PrtyId       string
-	PrtyIdTypeCd string
-	CnctID       string
-	AcctID       string
+	ProfileId string
+	CnctID    int64
+	AcctID    int64
 }
 
 func (k AcctPrefix) String() string {
-	return fmt.Sprintf("%s/%s/%s/%s", k.PrtyId, k.PrtyIdTypeCd, k.CnctID, k.AcctID)
+	return fmt.Sprintf("%s/1/%d/%d", k.ProfileId, k.CnctID, k.AcctID)
 }
 
 type TxnKey struct {
-	PrtyId       string
-	PrtyIdTypeCd string
-	AcctID       string
-	TxnID        string
-	TxnDt        string
+	ProfileId string
+	AcctID    int64
+	TxnID     int64
+	TxnDt     string
 }
 
 func (k TxnKey) String() string {
-	return fmt.Sprintf("%s/%s/%s/%s/%s", k.PrtyId, k.PrtyIdTypeCd, k.AcctID, k.TxnID, k.TxnDt)
+	return fmt.Sprintf("%s/1/%d/%d/%s", k.ProfileId, k.AcctID, k.TxnID, k.TxnDt)
 }
 
 type HoldKey struct {
-	PrtyId       string
-	PrtyIdTypeCd string
-	AcctID       string
-	HoldID       string
-	BusDt        string
+	ProfileId string
+	AcctID    int64
+	HoldID    int64
+	UpdtTs    string
 }
 
 func (k HoldKey) String() string {
-	return fmt.Sprintf("%s/%s/%s/%s/%s", k.PrtyId, k.PrtyIdTypeCd, k.AcctID, k.HoldID, k.BusDt)
+	return fmt.Sprintf("%s/1/%d/%d/%s", k.ProfileId, k.AcctID, k.HoldID, k.UpdtTs)
 }
 
-// AcctChildPrefix is a prefix key for either a txn or a holding.
+// AcctChildPrefix is a prefix Key for either a txn or a holding.
 type AcctChildPrefix struct {
-	PrtyId       string
-	PrtyIdTypeCd string
-	AcctID       string
-	ChildID      string
+	ProfileId string
+	AcctID    int64
+	ChildID   int64
 }
 
 func (k AcctChildPrefix) String() string {
-	return fmt.Sprintf("%s/%s/%s/%s", k.PrtyId, k.PrtyIdTypeCd, k.AcctID, k.ChildID)
+	return fmt.Sprintf("%s/1/%d/%d", k.ProfileId, k.AcctID, k.ChildID)
 }

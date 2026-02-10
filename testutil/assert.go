@@ -2,15 +2,15 @@ package testutil
 
 import (
 	"context"
-	cfg "filogger/config"
+	"encoding/json"
 	"io"
 	"testing"
+	"yodleeops/infra"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/testing/protocmp"
 )
 
@@ -21,40 +21,53 @@ func Equal[T any](t *testing.T, expected, actual T, opts ...cmp.Option) {
 	}
 }
 
-type WantObject struct {
+type WantObject[JSON any] struct {
 	Bucket string
 	Key    string
-	Value  proto.Message
+	Value  JSON
 }
 
-func AssertProtoObjects(t *testing.T, awsClient *cfg.AwsClient, objects []WantObject, makeValue func() proto.Message) {
+func AssertObjects[JSON any](t *testing.T, awsClient *infra.AwsClient, objects []WantObject[JSON]) {
 	t.Helper()
 
 	for _, object := range objects {
-		data, err := awsClient.S3Client.GetObject(context.Background(), &s3.GetObjectInput{
-			Bucket: aws.String(object.Bucket),
-			Key:    aws.String(object.Key),
-		})
-		if err != nil {
-			t.Errorf("failed to get object %s/%s: %v", object.Bucket, object.Key, err)
-			continue
-		}
+		func() {
+			resp, err := awsClient.S3Client.GetObject(context.Background(), &s3.GetObjectInput{
+				Bucket: aws.String(object.Bucket),
+				Key:    aws.String(object.Key),
+			})
+			if err != nil {
+				t.Fatalf("failed to get object %s/%s: %s", object.Bucket, object.Key, err)
+			}
+			defer resp.Body.Close()
 
-		body, err := io.ReadAll(data.Body)
-		require.NoError(t, err)
+			bodyBytes, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
 
-		t.Logf("got object %s/%s: %s", object.Bucket, object.Key, string(body))
+			t.Logf("got object %s/%s (%d bytes)", object.Bucket, object.Key, len(bodyBytes))
 
-		s3Value := makeValue()
-		require.NoError(t, proto.Unmarshal(body, s3Value))
+			var s3Value JSON
+			//gzipReader, err := gzip.NewReader(bytes.NewReader(bodyBytes))
+			//require.NoError(t, err)
+			//defer gzipReader.Close()
+			//
+			//decompressed, err := io.ReadAll(gzipReader)
+			//require.NoError(t, err)
+			//require.NoError(t, json.Unmarshal(decompressed, &s3Value))
+			require.NoError(t, json.Unmarshal(bodyBytes, &s3Value))
 
-		Equal(t, object.Value, s3Value, protocmp.Transform())
+			Equal(t, object.Value, s3Value, protocmp.Transform())
+		}()
 	}
 }
 
+type WantKey struct {
+	Bucket string
+	Key    string
+}
 
-func GetAllKeys(t *testing.T, awsClient *cfg.AwsClient) []string {
-	var keys []string
+func GetAllKeys(t *testing.T, awsClient *infra.AwsClient) []WantKey {
+	var keys []WantKey
 
 	for _, bucket := range []string{awsClient.CnctBucket, awsClient.AcctBucket, awsClient.HoldBucket, awsClient.TxnBucket} {
 		paginator := s3.NewListObjectsV2Paginator(awsClient.S3Client, &s3.ListObjectsV2Input{Bucket: aws.String(bucket)})
@@ -63,7 +76,10 @@ func GetAllKeys(t *testing.T, awsClient *cfg.AwsClient) []string {
 			page, err := paginator.NextPage(context.Background())
 			require.NoError(t, err)
 			for _, obj := range page.Contents {
-				keys = append(keys, *obj.Key)
+				if obj.Key == nil {
+					continue
+				}
+				keys = append(keys, WantKey{Bucket: bucket, Key: *obj.Key})
 			}
 		}
 	}
