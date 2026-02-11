@@ -3,8 +3,8 @@ package svc
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/stretchr/testify/require"
 	"testing"
 	"yodleeops/infra"
 	infrastub "yodleeops/infra/stubs"
@@ -46,28 +46,60 @@ func handleFiMessage(ctx context.Context, app *App, key string, value any) {
 	}
 }
 
-func collectProducerStubMsgs(t *testing.T, producerStub *infrastub.Producer) []any {
+func stubbedFiMessages(producerStub *infrastub.Producer) []any {
 	var msgs []any
 	for _, kafkaMsg := range producerStub.Messages {
 		var msg any
 		switch kafkaMsg.Topic {
+		case infra.DeleteRecoveryTopic:
+			msg = fmt.Errorf("did not expect message on delete recovery topic: %s", kafkaMsg.Value)
+		case infra.BroadcastTopic:
+			var brd BroadcastOutput
+			if err := json.Unmarshal(kafkaMsg.Value, &brd); err != nil {
+				msg = fmt.Errorf("failed to unmarshal broadcast message: %w", err)
+				break
+			}
+			switch brd.OriginTopic {
+			case infra.CnctResponseTopic:
+				fmt.Printf("unmarshaling broadcast message: %+v", string(brd.Message))
+				msg = unmarshalJsonMono[[]OpsProviderAccount](brd.Message)
+			case infra.AcctResponseTopic:
+				msg = unmarshalJsonMono[[]OpsAccount](brd.Message)
+			case infra.HoldResponseTopic:
+				msg = unmarshalJsonMono[[]OpsHolding](brd.Message)
+			case infra.TxnResponseTopic:
+				msg = unmarshalJsonMono[[]OpsTransaction](brd.Message)
+			case infra.CnctRefreshTopic:
+				msg = unmarshalJsonMono[[]OpsProviderAccountRefresh](brd.Message)
+			case infra.AcctRefreshTopic:
+				msg = unmarshalJsonMono[[]OpsAccountRefresh](brd.Message)
+			case infra.HoldRefreshTopic:
+				msg = unmarshalJsonMono[[]OpsHoldingRefresh](brd.Message)
+			case infra.TxnRefreshTopic:
+				msg = unmarshalJsonMono[[]OpsTransactionRefresh](brd.Message)
+			default:
+				msg = fmt.Sprintf("unexpected broadcast origin topic: %s", kafkaMsg.Topic)
+			}
 		case infra.CnctResponseTopic:
-			msg = unmarshalJsonOrFail[yodlee.ProviderAccountResponse](t, kafkaMsg.Value)
+			msg = unmarshalJsonMono[yodlee.ProviderAccountResponse](kafkaMsg.Value)
 		case infra.AcctResponseTopic:
-			msg = unmarshalJsonOrFail[yodlee.AccountResponse](t, kafkaMsg.Value)
+			msg = unmarshalJsonMono[yodlee.AccountResponse](kafkaMsg.Value)
 		case infra.HoldResponseTopic:
-			msg = unmarshalJsonOrFail[yodlee.HoldingResponse](t, kafkaMsg.Value)
+			msg = unmarshalJsonMono[yodlee.HoldingResponse](kafkaMsg.Value)
 		case infra.TxnResponseTopic:
-			msg = unmarshalJsonOrFail[yodlee.TransactionResponse](t, kafkaMsg.Value)
+			msg = unmarshalJsonMono[yodlee.TransactionResponse](kafkaMsg.Value)
 		case infra.CnctRefreshTopic:
-			msg = unmarshalJsonOrFail[[]yodlee.DataExtractsProviderAccount](t, kafkaMsg.Value)
+			msg = unmarshalJsonMono[[]yodlee.DataExtractsProviderAccount](kafkaMsg.Value)
 		case infra.AcctRefreshTopic:
-			msg = unmarshalJsonOrFail[[]yodlee.DataExtractsAccount](t, kafkaMsg.Value)
+			msg = unmarshalJsonMono[[]yodlee.DataExtractsAccount](kafkaMsg.Value)
 		case infra.HoldRefreshTopic:
-			msg = unmarshalJsonOrFail[[]yodlee.DataExtractsHolding](t, kafkaMsg.Value)
+			msg = unmarshalJsonMono[[]yodlee.DataExtractsHolding](kafkaMsg.Value)
 		case infra.TxnRefreshTopic:
-			msg = unmarshalJsonOrFail[[]yodlee.DataExtractsTransaction](t, kafkaMsg.Value)
+			msg = unmarshalJsonMono[[]yodlee.DataExtractsTransaction](kafkaMsg.Value)
+		default:
+			msg = fmt.Sprintf("unexpected topic: %s", kafkaMsg.Topic)
 		}
+
 		msgs = append(msgs, msg)
 	}
 	return msgs
@@ -80,100 +112,68 @@ func TestFiMessageConsumers(t *testing.T) {
 	producerStub := &infrastub.Producer{}
 	app.KafkaClient = &infra.KafkaClient{Producer: producerStub}
 
-	// when
-	key := "p1" // all messages for same profileId.
+	providerAccountRefresh := yodlee.DataExtractsProviderAccount{
+		Id:          99,
+		LastUpdated: "2025-06-13",
+		RequestId:   "REQUEST",
+	}
+	accountRefresh := yodlee.DataExtractsAccount{
+		ProviderAccountId: 99,
+		Id:                999,
+		LastUpdated:       "2025-06-13",
+		AccountName:       "Savings Account",
+	}
+	holdingRefresh := yodlee.DataExtractsHolding{
+		AccountId:   999,
+		Id:          9999,
+		LastUpdated: "2025-06-13",
+		HoldingType: "Stock",
+	}
+	transactionRefresh := yodlee.DataExtractsTransaction{
+		AccountId:   999,
+		Id:          9999,
+		Date:        "2025-06-13T07:06:18Z",
+		CheckNumber: "1299",
+	}
+	providerAccountResponse := yodlee.ProviderAccount{
+		Id:          77,
+		LastUpdated: "2025-06-13",
+		RequestId:   "REQUEST",
+	}
+	accountResponse := yodlee.Account{
+		ProviderAccountId: 77,
+		Id:                777,
+		LastUpdated:       "2025-06-13",
+		AccountName:       "Savings Account",
+	}
+	holdingResponse := yodlee.Holding{
+		AccountId:   777,
+		Id:          7777,
+		LastUpdated: "2025-06-13",
+		HoldingType: "Stock",
+	}
+	transactionResponse := yodlee.TransactionWithDateTime{
+		AccountId:   777,
+		Id:          7777,
+		Date:        "2025-06-13T07:06:18Z",
+		CheckNumber: "1299",
+	}
 
+	// when
 	for _, test := range []struct {
 		value any
 	}{
 		// Refreshes
-		{
-			value: []yodlee.DataExtractsProviderAccount{
-				{
-					Id:          99,
-					LastUpdated: "2025-06-13",
-					RequestId:   "REQUEST",
-				},
-			},
-		},
-		{
-			value: []yodlee.DataExtractsAccount{
-				{
-					ProviderAccountId: 99,
-					Id:                999,
-					LastUpdated:       "2025-06-13",
-					AccountName:       "Savings Account",
-				},
-			},
-		},
-		{
-			value: []yodlee.DataExtractsHolding{
-				{
-					AccountId:   999,
-					Id:          9999,
-					LastUpdated: "2025-06-13",
-					HoldingType: "Stock",
-				},
-			},
-		},
-		{
-			value: []yodlee.DataExtractsTransaction{
-				{
-					AccountId:   999,
-					Id:          9999,
-					Date:        "2025-06-13T07:06:18Z",
-					CheckNumber: "1299",
-				},
-			},
-		},
+		{value: []yodlee.DataExtractsProviderAccount{providerAccountRefresh}},
+		{value: []yodlee.DataExtractsAccount{accountRefresh}},
+		{value: []yodlee.DataExtractsHolding{holdingRefresh}},
+		{value: []yodlee.DataExtractsTransaction{transactionRefresh}},
+
 		// Responses
-		{
-			value: yodlee.ProviderAccountResponse{
-				ProviderAccount: []yodlee.ProviderAccount{
-					{
-						Id:          77,
-						LastUpdated: "2025-06-13",
-						RequestId:   "REQUEST",
-					},
-				},
-			},
-		},
-		{
-			value: yodlee.AccountResponse{
-				Account: []yodlee.Account{
-					{
-						ProviderAccountId: 77,
-						Id:                777,
-						LastUpdated:       "2025-06-13",
-						AccountName:       "Savings Account",
-					},
-				},
-			},
-		},
-		{
-			value: yodlee.HoldingResponse{
-				Holding: []yodlee.Holding{
-					{
-						AccountId:   777,
-						Id:          7777,
-						LastUpdated: "2025-06-13",
-						HoldingType: "Stock",
-					},
-				},
-			},
-		},
-		{
-			value: yodlee.TransactionResponse{
-				Transaction: []yodlee.TransactionWithDateTime{
-					{
-						AccountId:   777,
-						Id:          7777,
-						Date:        "2025-06-13T07:06:18Z",
-						CheckNumber: "1299",
-					},
-				},
-			},
-		},
+		{value: yodlee.ProviderAccountResponse{ProviderAccount: []yodlee.ProviderAccount{providerAccountResponse}}},
+		{value: yodlee.AccountResponse{Account: []yodlee.Account{accountResponse}}},
+		{value: yodlee.HoldingResponse{Holding: []yodlee.Holding{holdingResponse}}},
+		{value: yodlee.TransactionResponse{Transaction: []yodlee.TransactionWithDateTime{transactionResponse}}},
 		{
 			value: []DeleteRetry{
 				{
@@ -190,11 +190,21 @@ func TestFiMessageConsumers(t *testing.T) {
 		},
 	} {
 		ctx := t.Context()
-		handleFiMessage(ctx, app, key, test.value)
+		handleFiMessage(ctx, app, "p1", test.value)
 	}
 
 	// then
-	assert.Equal(t, 8, len(producerStub.Messages))
+	wantBroadcastMsgs := []any{
+		[]OpsProviderAccountRefresh{{ProfileId: "p1", DataExtractsProviderAccount: providerAccountRefresh}},
+		[]OpsAccountRefresh{{ProfileId: "p1", DataExtractsAccount: accountRefresh}},
+		[]OpsHoldingRefresh{{ProfileId: "p1", DataExtractsHolding: holdingRefresh}},
+		[]OpsTransactionRefresh{{ProfileId: "p1", DataExtractsTransaction: transactionRefresh}},
+		[]OpsProviderAccount{{ProfileId: "p1", ProviderAccount: providerAccountResponse}},
+		[]OpsAccount{{ProfileId: "p1", Account: accountResponse}},
+		[]OpsHolding{{ProfileId: "p1", Holding: holdingResponse}},
+		[]OpsTransaction{{ProfileId: "p1", TransactionWithDateTime: transactionResponse}},
+	}
+	assert.Equal(t, wantBroadcastMsgs, stubbedFiMessages(producerStub))
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
@@ -365,7 +375,7 @@ func TestFiMessageConsumers_S3Errors(t *testing.T) {
 	}
 
 	// then
-	msgs := collectProducerStubMsgs(t, producerStub)
+	msgs := stubbedFiMessages(producerStub)
 
 	wantMsgs := []any{
 		providerAccountResponse, accountResponse, holdingResponse, transactionResponse,
@@ -384,10 +394,4 @@ func TestFiMessageConsumers_S3Errors(t *testing.T) {
 
 	assert.ElementsMatch(t, wantMsgs, msgs)
 	testutil.Equal(t, wantKafkaMsgs, producerStub.Messages, cmpopts.IgnoreFields(infrastub.KafkaMessage{}, "Value"))
-}
-
-func unmarshalJsonOrFail[JSON any](t *testing.T, value []byte) JSON {
-	var v JSON
-	require.NoError(t, json.Unmarshal(value, &v))
-	return v
 }

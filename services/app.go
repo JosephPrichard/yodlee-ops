@@ -7,5 +7,5 @@ import (
 type App struct {
 	*infra.AwsClient
 	*infra.KafkaClient
-	Broadcaster
+	FiMessageBroadcaster
 }

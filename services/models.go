@@ -8,6 +8,11 @@ type YodleeWrapper[YodleeInput any] interface {
 	Inner() YodleeInput
 }
 
+type YodleeInput interface {
+	yodlee.DataExtractsProviderAccount | yodlee.DataExtractsAccount | yodlee.DataExtractsHolding | yodlee.DataExtractsTransaction
+	yodlee.ProviderAccount | yodlee.Account | yodlee.Holding | yodlee.TransactionWithDateTime
+}
+
 // Ops data types are wrappers for yodlee data types that add some additional context to the data type.
 
 type OpsProviderAccountRefresh struct {

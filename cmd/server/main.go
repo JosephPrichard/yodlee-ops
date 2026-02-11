@@ -5,6 +5,7 @@ import (
 	"github.com/joho/godotenv"
 	"log"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"time"
@@ -43,9 +44,10 @@ func main() {
 		os.Exit(0)
 	}()
 
-	//if err := http.ListenAndServe(":8080", nil); err != nil {
-	//	log.Fatalf("failed to start server: %v", err)
-	//}
+	handler := svc.RegisterRoutes(app)
+	if err := http.ListenAndServe(":8080", handler); err != nil {
+		log.Fatalf("failed to start server: %v", err)
+	}
 
 	for {
 		select {

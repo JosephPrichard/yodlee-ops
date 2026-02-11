@@ -51,65 +51,78 @@ func ConsumeFiMessages[Message any](cfg ConsumersConfig, reader infra.Consumer, 
 		if errors.Is(err, context.Canceled) {
 			break
 		} else if err != nil {
-			slog.ErrorContext(ctx, "failed to fetch fi messages", "Topic", readCfg.Topic, "err", err)
+			slog.ErrorContext(ctx, "failed to fetch fi messages", "OriginTopic", readCfg.Topic, "err", err)
 			continue
 		}
 
-		slog.InfoContext(ctx, "read messages from kafka Topic", "count", count, "Topic", readCfg.Topic, "offset", m.Offset, "Key", string(m.Key), "value", string(m.Value))
+		slog.InfoContext(ctx, "read messages from kafka OriginTopic", "count", count, "OriginTopic", readCfg.Topic, "offset", m.Offset, "Key", string(m.Key), "value", string(m.Value))
 		start := time.Now()
 
 		var data Message
 		if err := json.Unmarshal(m.Value, &data); err != nil {
-			slog.ErrorContext(ctx, "failed to unmarshal fi messages", "type", fmt.Sprintf("%T", data), "Topic", readCfg.Topic, "err", err)
+			slog.ErrorContext(ctx, "failed to unmarshal fi messages", "type", fmt.Sprintf("%T", data), "OriginTopic", readCfg.Topic, "err", err)
 			continue
 		}
 
 		onMessage(ctx, string(m.Key), data)
-		slog.InfoContext(ctx, "consumed message from kafka Topic", "count", count, "Topic", readCfg.Topic, "elapsed", time.Since(start))
+		slog.InfoContext(ctx, "consumed message from kafka OriginTopic", "count", count, "OriginTopic", readCfg.Topic, "elapsed", time.Since(start))
 	}
 }
 
-func collectPutResults[Wrap YodleeWrapper[Inner], Inner any](putResults []PutResult[Wrap]) ([]Wrap, []Inner) {
-	var successInputs []Wrap
-	var errInputs []Inner
-	for _, putErr := range putResults {
-		if putErr.Err != nil {
-			errInputs = append(errInputs, putErr.Input.Inner())
-		} else {
-			successInputs = append(successInputs, putErr.Input)
-		}
-	}
-	return successInputs, errInputs
+type PostPublishEvent[Wrap YodleeWrapper[Inner], Inner any] struct {
+	Ctx        context.Context
+	App        *App
+	Topic      string
+	Key        string
+	PutResults []PutResult[Wrap]
 }
 
-type CompleteRefreshEvent[Wrap YodleeWrapper[Inner], Inner any] struct {
-	Ctx    context.Context
-	App    *App
-	Topic  string
-	Key    string
-	Result RefreshResult[Wrap]
-}
-
-func MakeCompleteRefreshEvent[Wrap YodleeWrapper[Inner], Inner any](
+func MakePostPublishEvent[Wrap YodleeWrapper[Inner], Inner any](
 	ctx context.Context,
 	app *App,
 	topic string,
 	key string,
-	result RefreshResult[Wrap],
-) CompleteRefreshEvent[Wrap, Inner] {
-	return CompleteRefreshEvent[Wrap, Inner]{ctx, app, topic, key, result}
+	putResults []PutResult[Wrap],
+) PostPublishEvent[Wrap, Inner] {
+	return PostPublishEvent[Wrap, Inner]{ctx, app, topic, key, putResults}
 }
 
-func (e CompleteRefreshEvent[Wrap, Inner]) Process() {
-	successInputs, errInputs := collectPutResults(e.Result.PutResults)
+type BroadcastInput[Wrap YodleeWrapper[Inner], Inner any] struct {
+	// the content of the fi message, this can actually be
+	FiMessage []Wrap `json:"message"`
+	// the topic that a broadcast to be sent *originally* comes from
+	// if we receive an input on `CnctRefreshTopic` and then need to broadcast the data after success upload, this value will be `CnctRefreshTopic`
+	OriginTopic string `json:"origintopic"`
+}
 
-	if len(successInputs) > 0 {
-		e.App.ProduceJsonMessage(e.Ctx, infra.BroadcastTopic, "", successInputs)
+func (e PostPublishEvent[Wrap, Inner]) Process(mapInputs func([]Inner) any) {
+	var successUploads []Wrap
+	var errInputs []Inner
+
+	for _, putErr := range e.PutResults {
+		if putErr.Err == nil {
+			successUploads = append(successUploads, putErr.Input)
+		} else {
+			errInputs = append(errInputs, putErr.Input.Inner())
+		}
+	}
+
+	if len(successUploads) > 0 {
+		// write success uploads with a small wrapper describing the topic the upload originally came from (for broadcasting).
+		e.App.ProduceJsonMessage(e.Ctx, infra.BroadcastTopic, "", BroadcastInput[Wrap, Inner]{
+			FiMessage:   successUploads,
+			OriginTopic: e.Topic,
+		})
 	}
 	if len(errInputs) > 0 {
-		e.App.ProduceJsonMessage(e.Ctx, e.Topic, e.Key, errInputs)
+		// maps the failed inputs into a new datastructure or writes as is.
+		// mapInputs guarantees that `writeErrInputs` is the same type that `e.OriginTopic` expects.
+		var writeErrInputs any = errInputs
+		if mapInputs != nil {
+			writeErrInputs = mapInputs(errInputs)
+		}
+		e.App.ProduceJsonMessage(e.Ctx, e.Topic, e.Key, writeErrInputs)
 	}
-	e.App.ProduceDeleteErrors(e.Ctx, e.Key, e.Result.DeleteErrors)
 }
 
 func (app *App) HandleCnctRefreshMessage(ctx context.Context, key string, cncts []yodlee.DataExtractsProviderAccount) {
@@ -118,7 +131,8 @@ func (app *App) HandleCnctRefreshMessage(ctx context.Context, key string, cncts 
 	result := app.IngestCnctRefreshes(ctx, key, cncts)
 	slog.InfoContext(ctx, "completed cnct refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	MakeCompleteRefreshEvent(ctx, app, infra.CnctRefreshTopic, key, result).Process()
+	MakePostPublishEvent(ctx, app, infra.CnctRefreshTopic, key, result.PutResults).Process(nil)
+	app.ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
 func (app *App) HandleAcctRefreshMessage(ctx context.Context, key string, accts []yodlee.DataExtractsAccount) {
@@ -127,7 +141,8 @@ func (app *App) HandleAcctRefreshMessage(ctx context.Context, key string, accts 
 	result := app.IngestAcctsRefreshes(ctx, key, accts)
 	slog.InfoContext(ctx, "completed acct refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	MakeCompleteRefreshEvent(ctx, app, infra.AcctRefreshTopic, key, result).Process()
+	MakePostPublishEvent(ctx, app, infra.AcctRefreshTopic, key, result.PutResults).Process(nil)
+	app.ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
 func (app *App) HandleTxnRefreshMessage(ctx context.Context, key string, txns []yodlee.DataExtractsTransaction) {
@@ -136,7 +151,8 @@ func (app *App) HandleTxnRefreshMessage(ctx context.Context, key string, txns []
 	result := app.IngestTxnRefreshes(ctx, key, txns)
 	slog.InfoContext(ctx, "completed txn refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	MakeCompleteRefreshEvent(ctx, app, infra.TxnRefreshTopic, key, result).Process()
+	MakePostPublishEvent(ctx, app, infra.TxnRefreshTopic, key, result.PutResults).Process(nil)
+	app.ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
 func (app *App) HandleHoldRefreshMessage(ctx context.Context, key string, holds []yodlee.DataExtractsHolding) {
@@ -145,7 +161,8 @@ func (app *App) HandleHoldRefreshMessage(ctx context.Context, key string, holds 
 	result := app.IngestHoldRefreshes(ctx, key, holds)
 	slog.InfoContext(ctx, "completed hold refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	MakeCompleteRefreshEvent(ctx, app, infra.HoldRefreshTopic, key, result).Process()
+	MakePostPublishEvent(ctx, app, infra.HoldRefreshTopic, key, result.PutResults).Process(nil)
+	app.ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
 func (app *App) HandleCnctResponseMessage(ctx context.Context, key string, cncts yodlee.ProviderAccountResponse) {
@@ -153,15 +170,9 @@ func (app *App) HandleCnctResponseMessage(ctx context.Context, key string, cncts
 
 	putResults := app.IngestCnctResponses(ctx, key, cncts)
 
-	successInputs, errInputs := collectPutResults(putResults)
-
-	if len(successInputs) > 0 {
-		app.ProduceJsonMessage(ctx, infra.BroadcastTopic, "", successInputs)
-	}
-	if len(errInputs) > 0 {
-		nextInput := yodlee.ProviderAccountResponse{ProviderAccount: errInputs}
-		app.ProduceJsonMessage(ctx, infra.CnctResponseTopic, key, nextInput)
-	}
+	MakePostPublishEvent(ctx, app, infra.CnctResponseTopic, key, putResults).Process(func(errInputs []yodlee.ProviderAccount) any {
+		return yodlee.ProviderAccountResponse{ProviderAccount: errInputs}
+	})
 }
 
 func (app *App) HandleAcctResponseMessage(ctx context.Context, key string, accts yodlee.AccountResponse) {
@@ -169,15 +180,9 @@ func (app *App) HandleAcctResponseMessage(ctx context.Context, key string, accts
 
 	putResults := app.IngestAcctResponses(ctx, key, accts)
 
-	successInputs, errInputs := collectPutResults(putResults)
-
-	if len(successInputs) > 0 {
-		app.ProduceJsonMessage(ctx, infra.BroadcastTopic, "", successInputs)
-	}
-	if len(errInputs) > 0 {
-		nextInput := yodlee.AccountResponse{Account: errInputs}
-		app.ProduceJsonMessage(ctx, infra.AcctResponseTopic, key, nextInput)
-	}
+	MakePostPublishEvent(ctx, app, infra.AcctResponseTopic, key, putResults).Process(func(errInputs []yodlee.Account) any {
+		return yodlee.AccountResponse{Account: errInputs}
+	})
 }
 
 func (app *App) HandleTxnResponseMessage(ctx context.Context, key string, txns yodlee.TransactionResponse) {
@@ -185,15 +190,9 @@ func (app *App) HandleTxnResponseMessage(ctx context.Context, key string, txns y
 
 	putResults := app.IngestTxnResponses(ctx, key, txns)
 
-	successInputs, errInputs := collectPutResults(putResults)
-
-	if len(successInputs) > 0 {
-		app.ProduceJsonMessage(ctx, infra.BroadcastTopic, "", successInputs)
-	}
-	if len(errInputs) > 0 {
-		nextInput := yodlee.TransactionResponse{Transaction: errInputs}
-		app.ProduceJsonMessage(ctx, infra.TxnResponseTopic, key, nextInput)
-	}
+	MakePostPublishEvent(ctx, app, infra.TxnResponseTopic, key, putResults).Process(func(errInputs []yodlee.TransactionWithDateTime) any {
+		return yodlee.TransactionResponse{Transaction: errInputs}
+	})
 }
 
 func (app *App) HandleHoldResponseMessage(ctx context.Context, key string, holds yodlee.HoldingResponse) {
@@ -201,15 +200,9 @@ func (app *App) HandleHoldResponseMessage(ctx context.Context, key string, holds
 
 	putResults := app.IngestHoldResponses(ctx, key, holds)
 
-	successInputs, errInputs := collectPutResults(putResults)
-
-	if len(successInputs) > 0 {
-		app.ProduceJsonMessage(ctx, infra.BroadcastTopic, "", successInputs)
-	}
-	if len(errInputs) > 0 {
-		nextInput := yodlee.HoldingResponse{Holding: errInputs}
-		app.ProduceJsonMessage(ctx, infra.HoldResponseTopic, key, nextInput)
-	}
+	MakePostPublishEvent(ctx, app, infra.HoldResponseTopic, key, putResults).Process(func(errInputs []yodlee.Holding) any {
+		return yodlee.HoldingResponse{Holding: errInputs}
+	})
 }
 
 func (app *App) HandleDeleteRecoveryMessage(ctx context.Context, key string, deleteRetries []DeleteRetry) {
@@ -219,9 +212,15 @@ func (app *App) HandleDeleteRecoveryMessage(ctx context.Context, key string, del
 	app.ProduceDeleteErrors(ctx, key, deleteErrors)
 }
 
-func (app *App) HandleBroadcastMessage(ctx context.Context, _ string, broadcasts []json.RawMessage) {
+type BroadcastOutput struct {
+	OriginTopic string          `json:"origintopic"`
+	Message     json.RawMessage `json:"message" json:"message"`
+}
+
+func (app *App) HandleBroadcastMessage(ctx context.Context, _ string, broadcasts []BroadcastOutput) {
 	for _, brd := range broadcasts {
-		slog.InfoContext(ctx, "broadcasting message", "message", string(brd))
-		app.Broadcaster.Broadcast(brd)
+		strMsg := string(brd.Message)
+		slog.InfoContext(ctx, "broadcasting message", "topic", brd.OriginTopic, "message", strMsg)
+		app.FiMessageBroadcaster.Broadcast(brd.OriginTopic, strMsg)
 	}
 }
