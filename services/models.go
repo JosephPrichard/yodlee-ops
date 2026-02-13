@@ -6,6 +6,7 @@ import (
 
 type YodleeWrapper[YodleeInput any] interface {
 	Inner() YodleeInput
+	ProfileID() string
 }
 
 type YodleeInput interface {
@@ -14,6 +15,10 @@ type YodleeInput interface {
 }
 
 // Ops data types are wrappers for yodlee data types that add some additional context to the data type.
+
+type OpsPartial struct {
+	ProfileId string `json:"profileId"`
+}
 
 type OpsProviderAccountRefresh struct {
 	ProfileId                   string                             `json:"profileId"`
@@ -68,6 +73,16 @@ func (r OpsProviderAccount) Inner() yodlee.ProviderAccount     { return r.Provid
 func (r OpsAccount) Inner() yodlee.Account                     { return r.Account }
 func (r OpsHolding) Inner() yodlee.Holding                     { return r.Holding }
 func (r OpsTransaction) Inner() yodlee.TransactionWithDateTime { return r.TransactionWithDateTime }
+
+func (r OpsProviderAccountRefresh) ProfileID() string { return r.ProfileId }
+func (r OpsAccountRefresh) ProfileID() string         { return r.ProfileId }
+func (r OpsHoldingRefresh) ProfileID() string         { return r.ProfileId }
+func (r OpsTransactionRefresh) ProfileID() string     { return r.ProfileId }
+
+func (r OpsProviderAccount) ProfileID() string { return r.ProfileId }
+func (r OpsAccount) ProfileID() string         { return r.ProfileId }
+func (r OpsHolding) ProfileID() string         { return r.ProfileId }
+func (r OpsTransaction) ProfileID() string     { return r.ProfileId }
 
 const (
 	DeleteKind = "delete"

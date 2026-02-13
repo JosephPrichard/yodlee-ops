@@ -24,12 +24,13 @@ func main() {
 	config.IsLocal = true
 
 	app := &svc.App{
-		AwsClient:   infra.MakeAwsClient(config),
-		KafkaClient: infra.MakeKafkaConsumerProducer(config),
+		AwsClient:            infra.MakeAwsClient(config),
+		KafkaClient:          infra.MakeKafkaConsumerProducer(config),
+		FiMessageBroadcaster: &svc.FiMessageBroadcaster{},
 	}
 
 	consumerCtx, cancelConsumer := context.WithCancel(context.Background())
-	app.StartConsumers(svc.ConsumersConfig{Context: consumerCtx, Concurrency: 100})
+	app.StartConsumers(svc.ConsumersConfig{Context: consumerCtx, Concurrency: 3})
 	defer app.Close()
 
 	go func() {
@@ -44,7 +45,7 @@ func main() {
 		os.Exit(0)
 	}()
 
-	handler := svc.RegisterRoutes(app)
+	handler := svc.MakeRoot(app)
 	if err := http.ListenAndServe(":8080", handler); err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}

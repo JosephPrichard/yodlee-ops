@@ -49,58 +49,62 @@ func handleFiMessage(ctx context.Context, app *App, key string, value any) {
 func stubbedFiMessages(producerStub *infrastub.Producer) []any {
 	var msgs []any
 	for _, kafkaMsg := range producerStub.Messages {
-		var msg any
+		var result any
 		switch kafkaMsg.Topic {
+		case infra.CnctResponseTopic:
+			result = unmarshalJsonMono[yodlee.ProviderAccountResponse](kafkaMsg.Value)
+		case infra.AcctResponseTopic:
+			result = unmarshalJsonMono[yodlee.AccountResponse](kafkaMsg.Value)
+		case infra.HoldResponseTopic:
+			result = unmarshalJsonMono[yodlee.HoldingResponse](kafkaMsg.Value)
+		case infra.TxnResponseTopic:
+			result = unmarshalJsonMono[yodlee.TransactionResponse](kafkaMsg.Value)
+		case infra.CnctRefreshTopic:
+			result = unmarshalJsonMono[[]yodlee.DataExtractsProviderAccount](kafkaMsg.Value)
+		case infra.AcctRefreshTopic:
+			result = unmarshalJsonMono[[]yodlee.DataExtractsAccount](kafkaMsg.Value)
+		case infra.HoldRefreshTopic:
+			result = unmarshalJsonMono[[]yodlee.DataExtractsHolding](kafkaMsg.Value)
+		case infra.TxnRefreshTopic:
+			result = unmarshalJsonMono[[]yodlee.DataExtractsTransaction](kafkaMsg.Value)
 		case infra.DeleteRecoveryTopic:
-			msg = fmt.Errorf("did not expect message on delete recovery topic: %s", kafkaMsg.Value)
+			result = fmt.Errorf("did not expect message on delete recovery topic: %s", kafkaMsg.Value)
 		case infra.BroadcastTopic:
-			var brd BroadcastOutput
+			type broadcastOutput struct {
+				OriginTopic string          `json:"origintopic"`
+				FiMessages  json.RawMessage `json:"messages"`
+			}
+			var brd broadcastOutput
 			if err := json.Unmarshal(kafkaMsg.Value, &brd); err != nil {
-				msg = fmt.Errorf("failed to unmarshal broadcast message: %w", err)
+				result = fmt.Errorf("failed to unmarshal broadcast message: %w", err)
 				break
 			}
 			switch brd.OriginTopic {
 			case infra.CnctResponseTopic:
-				fmt.Printf("unmarshaling broadcast message: %+v", string(brd.Message))
-				msg = unmarshalJsonMono[[]OpsProviderAccount](brd.Message)
+				fmt.Printf("unmarshaling broadcast message: %+v", string(brd.FiMessages))
+				result = unmarshalJsonMono[[]OpsProviderAccount](brd.FiMessages)
 			case infra.AcctResponseTopic:
-				msg = unmarshalJsonMono[[]OpsAccount](brd.Message)
+				result = unmarshalJsonMono[[]OpsAccount](brd.FiMessages)
 			case infra.HoldResponseTopic:
-				msg = unmarshalJsonMono[[]OpsHolding](brd.Message)
+				result = unmarshalJsonMono[[]OpsHolding](brd.FiMessages)
 			case infra.TxnResponseTopic:
-				msg = unmarshalJsonMono[[]OpsTransaction](brd.Message)
+				result = unmarshalJsonMono[[]OpsTransaction](brd.FiMessages)
 			case infra.CnctRefreshTopic:
-				msg = unmarshalJsonMono[[]OpsProviderAccountRefresh](brd.Message)
+				result = unmarshalJsonMono[[]OpsProviderAccountRefresh](brd.FiMessages)
 			case infra.AcctRefreshTopic:
-				msg = unmarshalJsonMono[[]OpsAccountRefresh](brd.Message)
+				result = unmarshalJsonMono[[]OpsAccountRefresh](brd.FiMessages)
 			case infra.HoldRefreshTopic:
-				msg = unmarshalJsonMono[[]OpsHoldingRefresh](brd.Message)
+				result = unmarshalJsonMono[[]OpsHoldingRefresh](brd.FiMessages)
 			case infra.TxnRefreshTopic:
-				msg = unmarshalJsonMono[[]OpsTransactionRefresh](brd.Message)
+				result = unmarshalJsonMono[[]OpsTransactionRefresh](brd.FiMessages)
 			default:
-				msg = fmt.Sprintf("unexpected broadcast origin topic: %s", kafkaMsg.Topic)
+				result = fmt.Sprintf("unexpected broadcast origin topic: %s", kafkaMsg.Topic)
 			}
-		case infra.CnctResponseTopic:
-			msg = unmarshalJsonMono[yodlee.ProviderAccountResponse](kafkaMsg.Value)
-		case infra.AcctResponseTopic:
-			msg = unmarshalJsonMono[yodlee.AccountResponse](kafkaMsg.Value)
-		case infra.HoldResponseTopic:
-			msg = unmarshalJsonMono[yodlee.HoldingResponse](kafkaMsg.Value)
-		case infra.TxnResponseTopic:
-			msg = unmarshalJsonMono[yodlee.TransactionResponse](kafkaMsg.Value)
-		case infra.CnctRefreshTopic:
-			msg = unmarshalJsonMono[[]yodlee.DataExtractsProviderAccount](kafkaMsg.Value)
-		case infra.AcctRefreshTopic:
-			msg = unmarshalJsonMono[[]yodlee.DataExtractsAccount](kafkaMsg.Value)
-		case infra.HoldRefreshTopic:
-			msg = unmarshalJsonMono[[]yodlee.DataExtractsHolding](kafkaMsg.Value)
-		case infra.TxnRefreshTopic:
-			msg = unmarshalJsonMono[[]yodlee.DataExtractsTransaction](kafkaMsg.Value)
 		default:
-			msg = fmt.Sprintf("unexpected topic: %s", kafkaMsg.Topic)
+			result = fmt.Sprintf("unexpected topic: %s", kafkaMsg.Topic)
 		}
 
-		msgs = append(msgs, msg)
+		msgs = append(msgs, result)
 	}
 	return msgs
 }

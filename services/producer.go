@@ -54,7 +54,7 @@ func MakeDeleteErrorsMsgs(ctx context.Context, profileId string, deleteErrs []De
 			Prefix: deleteErr.Prefix,
 			Keys:   deleteErr.Keys,
 		}
-		slog.InfoContext(ctx, "producing delete error", "OriginTopic", infra.DeleteRecoveryTopic, "deleteRetry", deleteRetry)
+		slog.InfoContext(ctx, "producing delete error", "topic", infra.DeleteRecoveryTopic, "deleteRetry", deleteRetry)
 
 		msgs = append(msgs, DeleteErrorMsg{
 			Key:   profileId,

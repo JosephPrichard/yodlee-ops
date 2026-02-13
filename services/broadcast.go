@@ -1,6 +1,7 @@
 package svc
 
 import (
+	"hash/fnv"
 	"slices"
 	"sync"
 )
@@ -12,10 +13,25 @@ type FiMessageBroadcaster struct {
 	subscribers []Subscriber
 }
 
-func (b *FiMessageBroadcaster) Broadcast(topic string, msg string) {
+func hash(s string) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(s))
+	return h.Sum64()
+}
+
+func (b *FiMessageBroadcaster) Broadcast(profileID string, topic string, msg string) {
+	profileIDHash := hash(profileID)
+	topicHash := hash(topic)
+	//profileIDHash := profileID
+	//topicHash := topic
+
 	b.lock.Lock()
 	for _, subscriber := range b.subscribers {
-		if !slices.Contains(subscriber.topics, topic) {
+		isTopicsListProvided := len(subscriber.topics) > 0
+		isTopicDisallowed := isTopicsListProvided && !slices.Contains(subscriber.topics, topicHash)
+		isProfileDisallowed := !slices.Contains(subscriber.profileIDs, profileIDHash)
+
+		if isTopicDisallowed || isProfileDisallowed {
 			continue
 		}
 		select {
@@ -27,16 +43,38 @@ func (b *FiMessageBroadcaster) Broadcast(topic string, msg string) {
 	b.lock.Unlock()
 }
 
-type Subscriber struct {
-	ch     chan string
-	topics []string
+type SubscriberFilter struct {
+	Topics     []string // allowlist for topics. receive all if empty.
+	ProfileIDs []string // allowlist for profile ids.
 }
 
-func (b *FiMessageBroadcaster) Subscribe(topics []string) chan string {
+type Subscriber struct {
+	ch         chan string
+	topics     []uint64
+	profileIDs []uint64
+}
+
+func (b *FiMessageBroadcaster) Subscribe(filter SubscriberFilter) chan string {
+	var topics []uint64
+	var profileIDS []uint64
+
+	for _, topic := range filter.Topics {
+		if topic == "" {
+			continue
+		}
+		topics = append(topics, hash(topic))
+	}
+	for _, profileID := range filter.ProfileIDs {
+		if profileID == "" {
+			continue
+		}
+		profileIDS = append(profileIDS, hash(profileID))
+	}
+
 	ch := make(chan string, MaxSubscribeMessages)
 
 	b.lock.Lock()
-	b.subscribers = append(b.subscribers, Subscriber{ch: ch, topics: topics})
+	b.subscribers = append(b.subscribers, Subscriber{ch: ch, topics: topics, profileIDs: profileIDS})
 	b.lock.Unlock()
 
 	return ch

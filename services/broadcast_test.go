@@ -8,35 +8,47 @@ import (
 func TestFiMessageBroadcaster(t *testing.T) {
 	b := FiMessageBroadcaster{}
 
-	ch1 := b.Subscribe([]string{"topic1"})
-	ch2 := b.Subscribe([]string{"topic2"})
-	ch3 := b.Subscribe([]string{"topic1", "topic2"})
-	ch4 := b.Subscribe([]string{})
+	ch1 := b.Subscribe(SubscriberFilter{
+		ProfileIDs: []string{"profile1"},
+		Topics:     []string{"topic1"},
+	})
+	ch2 := b.Subscribe(SubscriberFilter{
+		ProfileIDs: []string{"profile2"},
+		Topics:     []string{"topic2"},
+	})
+	ch3 := b.Subscribe(SubscriberFilter{
+		ProfileIDs: []string{"profile1"},
+		Topics:     []string{"topic1", "topic2"},
+	})
+	ch4 := b.Subscribe(SubscriberFilter{
+		ProfileIDs: []string{"profile1"},
+	})
 
-	b.Broadcast("topic1", "msg1")
-	b.Broadcast("topic2", "msg2")
+	b.Broadcast("profile1", "topic1", "msg1")
+	b.Broadcast("profile2", "topic2", "msg2")
+	b.Broadcast("profile1", "topic2", "msg3")
 
 	b.Unsubscribe(ch3)
-	b.Broadcast("topic2", "msg3")
+	b.Broadcast("profile1", "topic2", "msg4")
 
 	b.Unsubscribe(ch1)
 	b.Unsubscribe(ch2)
 	b.Unsubscribe(ch4)
 
-	var allMessages [][]string
+	var msgTable [][]string
 	for _, ch := range []chan string{ch1, ch2, ch3, ch4} {
-		chMessages := make([]string, 0)
+		msgs := make([]string, 0)
 		for msg := range ch {
-			chMessages = append(chMessages, msg)
+			msgs = append(msgs, msg)
 		}
-		allMessages = append(allMessages, chMessages)
+		msgTable = append(msgTable, msgs)
 	}
 
 	wantMessages := [][]string{
 		{"msg1"},
-		{"msg2", "msg3"},
-		{"msg1", "msg2"},
-		{},
+		{"msg2"},
+		{"msg1", "msg3"},
+		{"msg1", "msg3", "msg4"},
 	}
-	assert.Equal(t, wantMessages, allMessages)
+	assert.Equal(t, wantMessages, msgTable)
 }

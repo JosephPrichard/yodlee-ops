@@ -51,21 +51,19 @@ func ConsumeFiMessages[Message any](cfg ConsumersConfig, reader infra.Consumer, 
 		if errors.Is(err, context.Canceled) {
 			break
 		} else if err != nil {
-			slog.ErrorContext(ctx, "failed to fetch fi messages", "OriginTopic", readCfg.Topic, "err", err)
+			slog.ErrorContext(ctx, "failed to fetch fi message", "topic", readCfg.Topic, "err", err)
 			continue
 		}
-
-		slog.InfoContext(ctx, "read messages from kafka OriginTopic", "count", count, "OriginTopic", readCfg.Topic, "offset", m.Offset, "Key", string(m.Key), "value", string(m.Value))
+		slog.InfoContext(ctx, "read messages from kafka topic", "count", count, "topic", readCfg.Topic, "offset", m.Offset, "Key", string(m.Key), "value", string(m.Value))
 		start := time.Now()
 
 		var data Message
 		if err := json.Unmarshal(m.Value, &data); err != nil {
-			slog.ErrorContext(ctx, "failed to unmarshal fi messages", "type", fmt.Sprintf("%T", data), "OriginTopic", readCfg.Topic, "err", err)
+			slog.ErrorContext(ctx, "failed to unmarshal fi messages", "type", fmt.Sprintf("%T", data), "topic", readCfg.Topic, "err", err)
 			continue
 		}
-
 		onMessage(ctx, string(m.Key), data)
-		slog.InfoContext(ctx, "consumed message from kafka OriginTopic", "count", count, "OriginTopic", readCfg.Topic, "elapsed", time.Since(start))
+		slog.InfoContext(ctx, "consumed message from kafka topic", "count", count, "topic", readCfg.Topic, "elapsed", time.Since(start))
 	}
 }
 
@@ -88,8 +86,8 @@ func MakePostPublishEvent[Wrap YodleeWrapper[Inner], Inner any](
 }
 
 type BroadcastInput[Wrap YodleeWrapper[Inner], Inner any] struct {
-	// the content of the fi message, this can actually be
-	FiMessage []Wrap `json:"message"`
+	// content of the fi messages, data extracts, response, etc.
+	FiMessages []Wrap `json:"messages"`
 	// the topic that a broadcast to be sent *originally* comes from
 	// if we receive an input on `CnctRefreshTopic` and then need to broadcast the data after success upload, this value will be `CnctRefreshTopic`
 	OriginTopic string `json:"origintopic"`
@@ -110,7 +108,7 @@ func (e PostPublishEvent[Wrap, Inner]) Process(mapInputs func([]Inner) any) {
 	if len(successUploads) > 0 {
 		// write success uploads with a small wrapper describing the topic the upload originally came from (for broadcasting).
 		e.App.ProduceJsonMessage(e.Ctx, infra.BroadcastTopic, "", BroadcastInput[Wrap, Inner]{
-			FiMessage:   successUploads,
+			FiMessages:  successUploads,
 			OriginTopic: e.Topic,
 		})
 	}
@@ -213,14 +211,19 @@ func (app *App) HandleDeleteRecoveryMessage(ctx context.Context, key string, del
 }
 
 type BroadcastOutput struct {
-	OriginTopic string          `json:"origintopic"`
-	Message     json.RawMessage `json:"message" json:"message"`
+	OriginTopic string            `json:"origintopic"`
+	FiMessages  []json.RawMessage `json:"messages"`
 }
 
-func (app *App) HandleBroadcastMessage(ctx context.Context, _ string, broadcasts []BroadcastOutput) {
-	for _, brd := range broadcasts {
-		strMsg := string(brd.Message)
-		slog.InfoContext(ctx, "broadcasting message", "topic", brd.OriginTopic, "message", strMsg)
-		app.FiMessageBroadcaster.Broadcast(brd.OriginTopic, strMsg)
+func (app *App) HandleBroadcastMessage(ctx context.Context, _ string, broadcast BroadcastOutput) {
+	for _, msg := range broadcast.FiMessages {
+		var partial OpsPartial
+		if err := json.Unmarshal(msg, &partial); err != nil {
+			slog.ErrorContext(ctx, "failed to unmarshal broadcast message partial", "err", err)
+			continue
+		}
+		strMsg := string(msg)
+		slog.InfoContext(ctx, "broadcasting message", "topic", broadcast.OriginTopic, "message", strMsg)
+		app.FiMessageBroadcaster.Broadcast(partial.ProfileId, broadcast.OriginTopic, strMsg)
 	}
 }
