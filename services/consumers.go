@@ -51,15 +51,15 @@ func ConsumeFiMessages[Message any](cfg ConsumersConfig, reader infra.Consumer, 
 		if errors.Is(err, context.Canceled) {
 			break
 		} else if err != nil {
-			slog.ErrorContext(ctx, "failed to fetch fi message", "topic", readCfg.Topic, "err", err)
+			slog.ErrorContext(ctx, "failed to fetch message", "topic", readCfg.Topic, "err", err)
 			continue
 		}
-		slog.InfoContext(ctx, "read messages from kafka topic", "count", count, "topic", readCfg.Topic, "offset", m.Offset, "Key", string(m.Key), "value", string(m.Value))
+		slog.InfoContext(ctx, "read message from kafka topic", "count", count, "topic", readCfg.Topic, "offset", m.Offset, "Key", string(m.Key), "value", string(m.Value))
 		start := time.Now()
 
 		var data Message
 		if err := json.Unmarshal(m.Value, &data); err != nil {
-			slog.ErrorContext(ctx, "failed to unmarshal fi messages", "type", fmt.Sprintf("%T", data), "topic", readCfg.Topic, "err", err)
+			slog.ErrorContext(ctx, "failed to unmarshal message", "type", fmt.Sprintf("%T", data), "topic", readCfg.Topic, "err", err)
 			continue
 		}
 		onMessage(ctx, string(m.Key), data)
@@ -217,7 +217,7 @@ type BroadcastOutput struct {
 
 func (app *App) HandleBroadcastMessage(ctx context.Context, _ string, broadcast BroadcastOutput) {
 	for _, msg := range broadcast.FiMessages {
-		var partial OpsPartial
+		var partial OpsFiMessage
 		if err := json.Unmarshal(msg, &partial); err != nil {
 			slog.ErrorContext(ctx, "failed to unmarshal broadcast message partial", "err", err)
 			continue

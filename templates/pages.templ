@@ -1,0 +1,134 @@
+package templates
+
+import (
+    "fmt"
+    "strings"
+)
+
+templ Head(title string) {
+    <head>
+        <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js" integrity="sha384-/TgkGk7p307TH7EXJDuUlgG3Ce1UVolAOFopFekQkkXihi5u/6OCvVKyz1W+idaz" crossorigin="anonymous"></script>
+        <script src="https://cdn.jsdelivr.net/npm/htmx-ext-sse@2.2.4" integrity="sha384-A986SAtodyH8eg8x8irJnYUk7i9inVQqYigD6qZ9evobksGNIXfeFvDwLSHcp31N" crossorigin="anonymous"></script>
+        <link rel="stylesheet" href="./index.css"/>
+        <script src="./index.js"></script>
+        <title> { title } </title>
+    </head>
+}
+
+var rainbow = []string{
+	"#ff3b3b", // bright red
+	"#ff8800", // vibrant orange
+	"#fff200", // vivid yellow
+	"#00c853", // bright green
+	"#2979ff", // bright blue
+	"#651fff", // vivid indigo
+	"#d500f9", // bright violet
+}
+
+templ JsonTree(jsonTree any, depth int) {
+    {{
+        color := rainbow[depth % len(rainbow)]
+        style := fmt.Sprintf("color: %s;", color)
+    }}
+
+    switch json := jsonTree.(type) {
+    case map[string]any:
+        {{ i, count := 0, len(json) }}
+        if count > 0 {
+            <div class="json">{"{"}</div>
+            for key, value := range json {
+                <div style="margin-left: 25px;">
+                    <div class="json">{"\""}</div>
+                    <div class="json" style={style}>{ key }</div>
+                    <div class="json">{"\":"}</div>
+                    @JsonTree(value, depth + 1)
+                    if i != count-1 {
+                        <div class="json">,</div>
+                    }
+                </div>
+                {{ i++ }}
+            }
+            <div class="json">{"}"}</div>
+        } else {
+            <div class="json">{"{}"}</div>
+        }
+    case []any:
+        <span class="json">{"["}</span>
+        <div style="margin-left: 25px;">
+            for i, value := range json {
+                @JsonTree(value, depth + 1)
+                if i != len(json) - 1 {
+                    <div class="json">,</div>
+                }
+            }
+        </div>
+        <div class="json">{"]"}</div>
+    case string:
+        <div class="json">{"\""}</div>
+        <div class="json" style={style}>{ json }</div>
+        <div class="json">{"\""}</div>
+    case float64:
+        <div class="json" style={style}>{json}</div>
+    case bool:
+        <div class="json" style={style}>{json}</div>
+    default:
+        if json == nil {
+            <div class="json">null</div>
+        }
+    }
+}
+
+templ LogMsg(args LogArgs) {
+    <div class="log-container" hx-on:click={ templ.JSFuncCall("toggleElementHidden", args.ID) }>
+        <div class="log-header-wrapper">
+            <span class="log-header log-timestamp"> { args.Timestamp } </span>
+            <span class="log-header log-topic"> { args.Topic } </span>
+            <span class={ fmt.Sprintf("%s log-header log-text", args.ID) }> { args.Json } </span>
+        </div>
+        <div class={ fmt.Sprintf("%s hidden log-body", args.ID) }>
+            @JsonTree(args.JsonTree, 0)
+        </div>
+    </div>
+}
+
+templ LogPage(args LogsPageArgs) {
+    {{
+        profileIDsStr := strings.Join(args.ProfileIDs, ",")
+        topicsStr := strings.Join(args.Topics, ",")
+        tailLogQuery := fmt.Sprintf("?profileIDs=%s&topics=%s", profileIDsStr , topicsStr)
+    }}
+
+    @Head("Yodlee Ops | Logs")
+    <div class="banner"></div>
+    <div class="container">
+        <form method="GET" action="" class="form-container">
+            <div class="form-element">
+                <label>
+                    <span class="label-text">Profiles</span>
+                    <input class="text-input" type="text" name="profileIDs" value={profileIDsStr} />
+                </label>
+                <div class="label-tooltip">
+                    *Enter PIDs to subsribe to, separated by commas
+                </div>
+            </div>
+            <div class="form-element">
+                <label for="topics">
+                    <span class="label-text">Topics</span>
+                </label>
+                <div class="input-anchor">
+                    <input id="topics" class="text-input" type="text" name="topics" value={topicsStr} />
+                </div>
+                <div class="label-tooltip">
+                    *Enter topics (connections, accounts, transactions, holdings) to subscribe to, separated by commas
+                </div>
+            </div>
+            <button type="submit">Update</button>
+        </form>
+        <div hx-ext="sse"
+             hx-swap="afterbegin"
+             sse-swap="log"
+             sse-connect={ templ.URL(fmt.Sprintf("/taillog%s", tailLogQuery)) }
+             class="logs-container">
+        </div>
+    </div>
+}

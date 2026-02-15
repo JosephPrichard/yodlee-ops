@@ -125,7 +125,7 @@ func TestFiMessageConsumers(t *testing.T) {
 		ProviderAccountId: 99,
 		Id:                999,
 		LastUpdated:       "2025-06-13",
-		AccountName:       "Savings Account",
+		AccountName:       "Savings Data",
 	}
 	holdingRefresh := yodlee.DataExtractsHolding{
 		AccountId:   999,
@@ -148,7 +148,7 @@ func TestFiMessageConsumers(t *testing.T) {
 		ProviderAccountId: 77,
 		Id:                777,
 		LastUpdated:       "2025-06-13",
-		AccountName:       "Savings Account",
+		AccountName:       "Savings Data",
 	}
 	holdingResponse := yodlee.Holding{
 		AccountId:   777,
@@ -199,14 +199,14 @@ func TestFiMessageConsumers(t *testing.T) {
 
 	// then
 	wantBroadcastMsgs := []any{
-		[]OpsProviderAccountRefresh{{ProfileId: "p1", DataExtractsProviderAccount: providerAccountRefresh}},
-		[]OpsAccountRefresh{{ProfileId: "p1", DataExtractsAccount: accountRefresh}},
-		[]OpsHoldingRefresh{{ProfileId: "p1", DataExtractsHolding: holdingRefresh}},
-		[]OpsTransactionRefresh{{ProfileId: "p1", DataExtractsTransaction: transactionRefresh}},
-		[]OpsProviderAccount{{ProfileId: "p1", ProviderAccount: providerAccountResponse}},
-		[]OpsAccount{{ProfileId: "p1", Account: accountResponse}},
-		[]OpsHolding{{ProfileId: "p1", Holding: holdingResponse}},
-		[]OpsTransaction{{ProfileId: "p1", TransactionWithDateTime: transactionResponse}},
+		[]OpsProviderAccountRefresh{{ProfileId: "p1", Data: providerAccountRefresh}},
+		[]OpsAccountRefresh{{ProfileId: "p1", Data: accountRefresh}},
+		[]OpsHoldingRefresh{{ProfileId: "p1", Data: holdingRefresh}},
+		[]OpsTransactionRefresh{{ProfileId: "p1", Data: transactionRefresh}},
+		[]OpsProviderAccount{{ProfileId: "p1", Data: providerAccountResponse}},
+		[]OpsAccount{{ProfileId: "p1", Data: accountResponse}},
+		[]OpsHolding{{ProfileId: "p1", Data: holdingResponse}},
+		[]OpsTransaction{{ProfileId: "p1", Data: transactionResponse}},
 	}
 	assert.Equal(t, wantBroadcastMsgs, stubbedFiMessages(producerStub))
 
@@ -268,7 +268,7 @@ func TestFiMessageConsumers_S3Errors(t *testing.T) {
 			ProviderAccountId: 99,
 			Id:                999,
 			LastUpdated:       "2025-06-13",
-			AccountName:       "Savings Account",
+			AccountName:       "Savings Data",
 		},
 	}
 	holdingRefresh := []yodlee.DataExtractsHolding{
@@ -302,7 +302,7 @@ func TestFiMessageConsumers_S3Errors(t *testing.T) {
 				ProviderAccountId: 77,
 				Id:                777,
 				LastUpdated:       "2025-06-13",
-				AccountName:       "Savings Account",
+				AccountName:       "Savings Data",
 			},
 		},
 	}

@@ -1,6 +1,7 @@
 package svc
 
 import (
+	"time"
 	"yodleeops/internal/yodlee"
 )
 
@@ -16,63 +17,65 @@ type YodleeInput interface {
 
 // Ops data types are wrappers for yodlee data types that add some additional context to the data type.
 
-type OpsPartial struct {
-	ProfileId string `json:"profileId"`
+type OpsFiMessage struct {
+	ProfileId   string    `json:"profileId"`
+	Timestamp   time.Time `json:"timestamp"`
+	OriginTopic string    `json:"originTopic"`
 }
 
 type OpsProviderAccountRefresh struct {
-	ProfileId                   string                             `json:"profileId"`
-	DataExtractsProviderAccount yodlee.DataExtractsProviderAccount `json:"dataExtractsProviderAccount"`
+	OpsFiMessage
+	Data yodlee.DataExtractsProviderAccount `json:"data"`
 }
 
 type OpsAccountRefresh struct {
-	ProfileId           string                     `json:"profileId"`
-	DataExtractsAccount yodlee.DataExtractsAccount `json:"dataExtractsAccount"`
+	OpsFiMessage
+	Data yodlee.DataExtractsAccount `json:"data"`
 }
 
 type OpsHoldingRefresh struct {
-	ProfileId           string                     `json:"profileId"`
-	DataExtractsHolding yodlee.DataExtractsHolding `json:"dataExtractsHolding"`
+	OpsFiMessage
+	Data yodlee.DataExtractsHolding `json:"data"`
 }
 
 type OpsTransactionRefresh struct {
-	ProfileId               string                         `json:"profileId"`
-	DataExtractsTransaction yodlee.DataExtractsTransaction `json:"dataExtractsTransaction"`
+	OpsFiMessage
+	Data yodlee.DataExtractsTransaction `json:"data"`
 }
 
 type OpsProviderAccount struct {
-	ProfileId       string                 `json:"profileId"`
-	ProviderAccount yodlee.ProviderAccount `json:"providerAccount"`
+	OpsFiMessage
+	Data yodlee.ProviderAccount `json:"data"`
 }
 
 type OpsAccount struct {
-	ProfileId string         `json:"profileId"`
-	Account   yodlee.Account `json:"account"`
+	OpsFiMessage
+	Data yodlee.Account `json:"data"`
 }
 
 type OpsHolding struct {
-	ProfileId string         `json:"profileId"`
-	Holding   yodlee.Holding `json:"holding"`
+	OpsFiMessage
+	Data yodlee.Holding `json:"data"`
 }
 
 type OpsTransaction struct {
-	ProfileId               string                         `json:"profileId"`
-	TransactionWithDateTime yodlee.TransactionWithDateTime `json:"transactionWithDateTime"`
+	OpsFiMessage
+	Data yodlee.TransactionWithDateTime `json:"data"`
 }
 
 func (r OpsProviderAccountRefresh) Inner() yodlee.DataExtractsProviderAccount {
-	return r.DataExtractsProviderAccount
+	return r.Data
 }
-func (r OpsAccountRefresh) Inner() yodlee.DataExtractsAccount { return r.DataExtractsAccount }
-func (r OpsHoldingRefresh) Inner() yodlee.DataExtractsHolding { return r.DataExtractsHolding }
+func (r OpsAccountRefresh) Inner() yodlee.DataExtractsAccount { return r.Data }
+func (r OpsHoldingRefresh) Inner() yodlee.DataExtractsHolding { return r.Data }
 func (r OpsTransactionRefresh) Inner() yodlee.DataExtractsTransaction {
-	return r.DataExtractsTransaction
+	return r.Data
 }
 
-func (r OpsProviderAccount) Inner() yodlee.ProviderAccount     { return r.ProviderAccount }
-func (r OpsAccount) Inner() yodlee.Account                     { return r.Account }
-func (r OpsHolding) Inner() yodlee.Holding                     { return r.Holding }
-func (r OpsTransaction) Inner() yodlee.TransactionWithDateTime { return r.TransactionWithDateTime }
+func (r OpsProviderAccount) Inner() yodlee.ProviderAccount     { return r.Data }
+func (r OpsAccount) Inner() yodlee.Account                     { return r.Data }
+func (r OpsHolding) Inner() yodlee.Holding                     { return r.Data }
+func (r OpsTransaction) Inner() yodlee.TransactionWithDateTime { return r.Data }
 
 func (r OpsProviderAccountRefresh) ProfileID() string { return r.ProfileId }
 func (r OpsAccountRefresh) ProfileID() string         { return r.ProfileId }

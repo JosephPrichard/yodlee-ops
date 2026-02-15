@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+	"yodleeops/infra"
 )
 
 func scanEvents(resp *http.Response, wantEvents int) []string {
@@ -56,20 +57,21 @@ func TestHandleTailLogSSE(t *testing.T) {
 	defer cancel()
 
 	// when
-	query := fmt.Sprintf("%s/taillog?profileIds=profile1,profile2,profile3&topics=topic1,topic2", testServer.URL+BasePathApi)
+	query := fmt.Sprintf("%s/taillog?profileIds=profile1,profile2,profile3&topics=%s,%s", testServer.URL, HoldingsInput, TransactionsInput)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, query, nil)
 	require.NoError(t, err)
+	req.Header.Set("Accept", "text/plain")
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	go func() {
-		app.Broadcast("profile1", "topic2", "event1")
-		app.Broadcast("profile2", "topic2", "event2")
-		app.Broadcast("profile3", "topic1", "event3")
-		app.Broadcast("profile1", "topic1", "event4")
-		app.Broadcast("profile4", "topic4", "event5")
+		app.Broadcast("profile1", infra.HoldRefreshTopic, "event1")
+		app.Broadcast("profile2", infra.HoldResponseTopic, "event2")
+		app.Broadcast("profile3", infra.TxnRefreshTopic, "event3")
+		app.Broadcast("profile1", infra.TxnResponseTopic, "event4")
+		app.Broadcast("profile4", infra.CnctRefreshTopic, "event5")
 	}()
 
 	// then

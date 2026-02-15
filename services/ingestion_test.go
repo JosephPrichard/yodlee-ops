@@ -51,12 +51,12 @@ func TestIngestCnctResponses(t *testing.T) {
 		{
 			Bucket: app.CnctBucket,
 			Key:    "p1/1/1/2025-06-12",
-			Value:  OpsProviderAccount{ProfileId: "p1", ProviderAccount: yodlee.ProviderAccount{Id: 1, LastUpdated: "2025-06-12", RequestId: "REQUEST"}},
+			Value:  OpsProviderAccount{ProfileId: "p1", Data: yodlee.ProviderAccount{Id: 1, LastUpdated: "2025-06-12", RequestId: "REQUEST"}},
 		},
 		{
 			Bucket: app.CnctBucket,
 			Key:    "p1/1/100/2025-06-13",
-			Value:  OpsProviderAccount{ProfileId: "p1", ProviderAccount: yodlee.ProviderAccount{Id: 100, LastUpdated: "2025-06-13", RequestId: "REQUEST"}},
+			Value:  OpsProviderAccount{ProfileId: "p1", Data: yodlee.ProviderAccount{Id: 100, LastUpdated: "2025-06-13", RequestId: "REQUEST"}},
 		},
 	}
 	testutil.AssertObjects(t, app.AwsClient, wantObjects)
@@ -75,13 +75,13 @@ func TestIngestAcctResponses(t *testing.T) {
 				ProviderAccountId: 1,
 				Id:                1,
 				LastUpdated:       "2025-06-12",
-				AccountName:       "Checking Account",
+				AccountName:       "Checking Data",
 			},
 			{
 				ProviderAccountId: 100,
 				Id:                200,
 				LastUpdated:       "2025-06-13",
-				AccountName:       "Savings Account",
+				AccountName:       "Savings Data",
 			},
 		},
 	})
@@ -92,12 +92,12 @@ func TestIngestAcctResponses(t *testing.T) {
 		{
 			Bucket: app.AcctBucket,
 			Key:    "p1/1/1/1/2025-06-12",
-			Value:  OpsAccount{ProfileId: "p1", Account: yodlee.Account{ProviderAccountId: 1, Id: 1, LastUpdated: "2025-06-12", AccountName: "Checking Account"}},
+			Value:  OpsAccount{ProfileId: "p1", Data: yodlee.Account{ProviderAccountId: 1, Id: 1, LastUpdated: "2025-06-12", AccountName: "Checking Data"}},
 		},
 		{
 			Bucket: app.AcctBucket,
 			Key:    "p1/1/100/200/2025-06-13",
-			Value:  OpsAccount{ProfileId: "p1", Account: yodlee.Account{ProviderAccountId: 100, Id: 200, LastUpdated: "2025-06-13", AccountName: "Savings Account"}},
+			Value:  OpsAccount{ProfileId: "p1", Data: yodlee.Account{ProviderAccountId: 100, Id: 200, LastUpdated: "2025-06-13", AccountName: "Savings Data"}},
 		},
 	}
 	testutil.AssertObjects(t, app.AwsClient, wantObjects)
@@ -132,12 +132,12 @@ func TestIngestHoldResponses(t *testing.T) {
 		{
 			Bucket: app.HoldBucket,
 			Key:    "p1/1/1/1/2025-06-12",
-			Value:  OpsHolding{ProfileId: "p1", Holding: yodlee.Holding{AccountId: 1, Id: 1, LastUpdated: "2025-06-12", HoldingType: "Security"}},
+			Value:  OpsHolding{ProfileId: "p1", Data: yodlee.Holding{AccountId: 1, Id: 1, LastUpdated: "2025-06-12", HoldingType: "Security"}},
 		},
 		{
 			Bucket: app.HoldBucket,
 			Key:    "p1/1/200/100/2025-06-13",
-			Value:  OpsHolding{ProfileId: "p1", Holding: yodlee.Holding{AccountId: 200, Id: 100, LastUpdated: "2025-06-13", HoldingType: "Stock"}},
+			Value:  OpsHolding{ProfileId: "p1", Data: yodlee.Holding{AccountId: 200, Id: 100, LastUpdated: "2025-06-13", HoldingType: "Stock"}},
 		},
 	}
 	testutil.AssertObjects(t, app.AwsClient, wantObjects)
@@ -174,13 +174,13 @@ func TestIngestTxnResponses(t *testing.T) {
 			Bucket: app.TxnBucket,
 			Key:    "p1/1/1/1/2025-06-11T07:06:18Z",
 			Value: OpsTransaction{ProfileId: "p1",
-				TransactionWithDateTime: yodlee.TransactionWithDateTime{AccountId: 1, Id: 1, Date: "2025-06-11T07:06:18Z", CheckNumber: "123"}},
+				Data: yodlee.TransactionWithDateTime{AccountId: 1, Id: 1, Date: "2025-06-11T07:06:18Z", CheckNumber: "123"}},
 		},
 		{
 			Bucket: app.TxnBucket,
 			Key:    "p1/1/200/200/2025-06-13T07:06:18Z",
 			Value: OpsTransaction{ProfileId: "p1",
-				TransactionWithDateTime: yodlee.TransactionWithDateTime{AccountId: 200, Id: 200, Date: "2025-06-13T07:06:18Z", CheckNumber: "123"}},
+				Data: yodlee.TransactionWithDateTime{AccountId: 200, Id: 200, Date: "2025-06-13T07:06:18Z", CheckNumber: "123"}},
 		},
 	}
 	testutil.AssertObjects(t, app.AwsClient, wantObjects)
@@ -212,7 +212,7 @@ func TestIngestCnctRefreshes(t *testing.T) {
 		{
 			Bucket: app.CnctBucket,
 			Key:    "p1/1/99/2025-06-13",
-			Value:  OpsProviderAccountRefresh{ProfileId: "p1", DataExtractsProviderAccount: yodlee.DataExtractsProviderAccount{Id: 99, LastUpdated: "2025-06-13", RequestId: "REQUEST"}},
+			Value:  OpsProviderAccountRefresh{ProfileId: "p1", Data: yodlee.DataExtractsProviderAccount{Id: 99, LastUpdated: "2025-06-13", RequestId: "REQUEST"}},
 		},
 	}
 	testutil.AssertObjects(t, app.AwsClient, wantObjects)
@@ -264,7 +264,7 @@ func TestIngestAcctRefreshes(t *testing.T) {
 			ProviderAccountId: 99,
 			Id:                999,
 			LastUpdated:       "2025-06-13",
-			AccountName:       "Savings Account",
+			AccountName:       "Savings Data",
 		},
 	})
 	assert.Equal(t, 1, len(result.PutResults))
@@ -275,7 +275,7 @@ func TestIngestAcctRefreshes(t *testing.T) {
 		{
 			Bucket: app.AcctBucket,
 			Key:    "p1/1/99/999/2025-06-13",
-			Value:  OpsAccountRefresh{ProfileId: "p1", DataExtractsAccount: yodlee.DataExtractsAccount{ProviderAccountId: 99, Id: 999, LastUpdated: "2025-06-13", AccountName: "Savings Account"}},
+			Value:  OpsAccountRefresh{ProfileId: "p1", Data: yodlee.DataExtractsAccount{ProviderAccountId: 99, Id: 999, LastUpdated: "2025-06-13", AccountName: "Savings Data"}},
 		},
 	}
 	testutil.AssertObjects(t, app.AwsClient, wantObjects)
@@ -338,7 +338,7 @@ func TestIngestTxnRefreshes(t *testing.T) {
 		{
 			Bucket: app.TxnBucket,
 			Key:    "p1/1/999/9999/2025-06-13T07:06:18Z",
-			Value:  OpsTransactionRefresh{ProfileId: "p1", DataExtractsTransaction: yodlee.DataExtractsTransaction{AccountId: 999, Id: 9999, Date: "2025-06-13T07:06:18Z", CheckNumber: "123"}},
+			Value:  OpsTransactionRefresh{ProfileId: "p1", Data: yodlee.DataExtractsTransaction{AccountId: 999, Id: 9999, Date: "2025-06-13T07:06:18Z", CheckNumber: "123"}},
 		},
 	}
 	testutil.AssertObjects(t, app.AwsClient, wantObjects)
@@ -402,7 +402,7 @@ func TestIngestHoldRefreshes(t *testing.T) {
 		{
 			Bucket: app.HoldBucket,
 			Key:    "p1/1/999/9999/2025-06-13",
-			Value:  OpsHoldingRefresh{ProfileId: "p1", DataExtractsHolding: yodlee.DataExtractsHolding{AccountId: 999, Id: 9999, LastUpdated: "2025-06-13", HoldingType: "Stock"}},
+			Value:  OpsHoldingRefresh{ProfileId: "p1", Data: yodlee.DataExtractsHolding{AccountId: 999, Id: 9999, LastUpdated: "2025-06-13", HoldingType: "Stock"}},
 		},
 	}
 	testutil.AssertObjects(t, app.AwsClient, wantObjects)
@@ -517,7 +517,7 @@ func TestIngest_PutFailure(t *testing.T) {
 		putResults := app.IngestCnctResponses(ctx, "p1", input)
 
 		want := []PutCnctResult{
-			{Key: failKey, Input: OpsProviderAccount{ProfileId: "p1", ProviderAccount: input.ProviderAccount[0]}},
+			{Key: failKey, Input: OpsProviderAccount{ProfileId: "p1", Data: input.ProviderAccount[0]}},
 		}
 		testutil.Equal(t, want, putResults, cmpopts.IgnoreFields(PutCnctResult{}, "Err"))
 	})
@@ -532,14 +532,14 @@ func TestIngest_PutFailure(t *testing.T) {
 					ProviderAccountId: 90,
 					Id:                900,
 					LastUpdated:       "2025-06-12",
-					AccountName:       "Checking Account",
+					AccountName:       "Checking Data",
 				},
 			},
 		}
 		putResults := app.IngestAcctResponses(ctx, "p1", input)
 
 		want := []PutAcctResult{
-			{Key: failKey, Input: OpsAccount{ProfileId: "p1", Account: input.Account[0]}},
+			{Key: failKey, Input: OpsAccount{ProfileId: "p1", Data: input.Account[0]}},
 		}
 		testutil.Equal(t, want, putResults, cmpopts.IgnoreFields(PutAcctResult{}, "Err"))
 	})
@@ -561,7 +561,7 @@ func TestIngest_PutFailure(t *testing.T) {
 		putResults := app.IngestHoldResponses(ctx, "p1", input)
 
 		want := []PutHoldResult{
-			{Key: failKey, Input: OpsHolding{ProfileId: "p1", Holding: input.Holding[0]}},
+			{Key: failKey, Input: OpsHolding{ProfileId: "p1", Data: input.Holding[0]}},
 		}
 		testutil.Equal(t, want, putResults, cmpopts.IgnoreFields(PutHoldResult{}, "Err"))
 	})
@@ -583,7 +583,7 @@ func TestIngest_PutFailure(t *testing.T) {
 		putResults := app.IngestTxnResponses(ctx, "p1", input)
 
 		want := []PutTxnResult{
-			{Key: failKey, Input: OpsTransaction{ProfileId: "p1", TransactionWithDateTime: input.Transaction[0]}},
+			{Key: failKey, Input: OpsTransaction{ProfileId: "p1", Data: input.Transaction[0]}},
 		}
 		testutil.Equal(t, want, putResults, cmpopts.IgnoreFields(PutTxnResult{}, "Err"))
 	})
@@ -603,7 +603,7 @@ func TestIngest_PutFailure(t *testing.T) {
 
 		want := CnctRefreshResult{
 			PutResults: []PutResult[OpsProviderAccountRefresh]{
-				{Key: failKey, Input: OpsProviderAccountRefresh{ProfileId: "p1", DataExtractsProviderAccount: input[0]}},
+				{Key: failKey, Input: OpsProviderAccountRefresh{ProfileId: "p1", Data: input[0]}},
 			},
 		}
 		testutil.Equal(t, want, result, cmpopts.IgnoreFields(PutResult[OpsProviderAccountRefresh]{}, "Err"))
@@ -618,7 +618,7 @@ func TestIngest_PutFailure(t *testing.T) {
 				ProviderAccountId: 90,
 				Id:                900,
 				LastUpdated:       "2025-06-12",
-				AccountName:       "Checking Account",
+				AccountName:       "Checking Data",
 			},
 		}
 
@@ -626,7 +626,7 @@ func TestIngest_PutFailure(t *testing.T) {
 
 		want := AcctRefreshResult{
 			PutResults: []PutResult[OpsAccountRefresh]{
-				{Key: failKey, Input: OpsAccountRefresh{ProfileId: "p1", DataExtractsAccount: input[0]}},
+				{Key: failKey, Input: OpsAccountRefresh{ProfileId: "p1", Data: input[0]}},
 			},
 		}
 		testutil.Equal(t, want, result, cmpopts.IgnoreFields(PutResult[OpsAccountRefresh]{}, "Err"))
@@ -649,7 +649,7 @@ func TestIngest_PutFailure(t *testing.T) {
 
 		want := HoldRefreshResult{
 			PutResults: []PutResult[OpsHoldingRefresh]{
-				{Key: failKey, Input: OpsHoldingRefresh{ProfileId: "p1", DataExtractsHolding: input[0]}},
+				{Key: failKey, Input: OpsHoldingRefresh{ProfileId: "p1", Data: input[0]}},
 			},
 		}
 		testutil.Equal(t, want, result, cmpopts.IgnoreFields(PutResult[OpsHoldingRefresh]{}, "Err"))
@@ -672,7 +672,7 @@ func TestIngest_PutFailure(t *testing.T) {
 
 		want := TxnRefreshResult{
 			PutResults: []PutResult[OpsTransactionRefresh]{
-				{Key: failKey, Input: OpsTransactionRefresh{ProfileId: "p1", DataExtractsTransaction: input[0]}},
+				{Key: failKey, Input: OpsTransactionRefresh{ProfileId: "p1", Data: input[0]}},
 			},
 		}
 		testutil.Equal(t, want, result, cmpopts.IgnoreFields(PutResult[OpsTransactionRefresh]{}, "Err"))

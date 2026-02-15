@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"yodleeops/infra"
 	"yodleeops/internal/yodlee"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -36,7 +37,10 @@ func (app *App) IngestCnctResponses(ctx context.Context, profileId string, respo
 			CnctID:    cnct.Id,
 			UpdtTs:    cnct.LastUpdated,
 		}
-		cnct := OpsProviderAccount{ProfileId: profileId, ProviderAccount: cnct}
+		cnct := OpsProviderAccount{
+			Data:         cnct,
+			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: infra.CnctResponseTopic},
+		}
 		putList = append(putList, PutInput[OpsProviderAccount]{Key: key.String(), Input: cnct})
 	}
 
@@ -58,7 +62,10 @@ func (app *App) IngestAcctResponses(ctx context.Context, profileId string, respo
 			AcctID:    acct.Id,
 			UpdtTs:    acct.LastUpdated,
 		}
-		acct := OpsAccount{ProfileId: profileId, Account: acct}
+		acct := OpsAccount{
+			Data:         acct,
+			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: infra.AcctResponseTopic},
+		}
 		putList = append(putList, PutInput[OpsAccount]{Key: key.String(), Input: acct})
 	}
 
@@ -80,7 +87,10 @@ func (app *App) IngestHoldResponses(ctx context.Context, profileId string, respo
 			HoldID:    hold.Id,
 			UpdtTs:    hold.LastUpdated,
 		}
-		hold := OpsHolding{ProfileId: profileId, Holding: hold}
+		hold := OpsHolding{
+			Data:         hold,
+			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: infra.HoldResponseTopic},
+		}
 		putList = append(putList, PutInput[OpsHolding]{Key: key.String(), Input: hold})
 	}
 
@@ -102,7 +112,10 @@ func (app *App) IngestTxnResponses(ctx context.Context, profileId string, respon
 			TxnID:     txn.Id,
 			TxnDt:     txn.Date,
 		}
-		txn := OpsTransaction{ProfileId: profileId, TransactionWithDateTime: txn}
+		txn := OpsTransaction{
+			Data:         txn,
+			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: infra.TxnResponseTopic},
+		}
 		putList = append(putList, PutInput[OpsTransaction]{Key: key.String(), Input: txn})
 	}
 
@@ -138,7 +151,10 @@ func (app *App) IngestCnctRefreshes(ctx context.Context, profileId string, cncts
 		if cnct.IsDeleted {
 			removeCnctKeys = append(removeCnctKeys, key)
 		} else {
-			cnct := OpsProviderAccountRefresh{ProfileId: profileId, DataExtractsProviderAccount: *cnct}
+			cnct := OpsProviderAccountRefresh{
+				Data:         *cnct,
+				OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: infra.CnctRefreshTopic},
+			}
 			putList = append(putList, PutInput[OpsProviderAccountRefresh]{Key: key.String(), Input: cnct})
 		}
 	}
@@ -168,7 +184,10 @@ func (app *App) IngestAcctsRefreshes(ctx context.Context, profileId string, acct
 		if acct.IsDeleted {
 			removeAcctKeys = append(removeAcctKeys, key)
 		} else {
-			acct := OpsAccountRefresh{ProfileId: profileId, DataExtractsAccount: *acct}
+			acct := OpsAccountRefresh{
+				Data:         *acct,
+				OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: infra.AcctRefreshTopic},
+			}
 			putList = append(putList, PutInput[OpsAccountRefresh]{Key: key.String(), Input: acct})
 		}
 	}
@@ -193,7 +212,10 @@ func (app *App) IngestHoldRefreshes(ctx context.Context, profileId string, holds
 			HoldID:    hold.Id,
 			UpdtTs:    hold.LastUpdated,
 		}
-		hold := OpsHoldingRefresh{ProfileId: profileId, DataExtractsHolding: hold}
+		hold := OpsHoldingRefresh{
+			Data:         hold,
+			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: infra.HoldRefreshTopic},
+		}
 		putList = append(putList, PutInput[OpsHoldingRefresh]{Key: key.String(), Input: hold})
 	}
 
@@ -226,7 +248,10 @@ func (app *App) IngestTxnRefreshes(ctx context.Context, profileId string, txns [
 				TxnID:     txn.Id,
 				TxnDt:     txn.Date,
 			}
-			txn := OpsTransactionRefresh{ProfileId: profileId, DataExtractsTransaction: *txn}
+			txn := OpsTransactionRefresh{
+				Data:         *txn,
+				OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: infra.TxnRefreshTopic},
+			}
 			putList = append(putList, PutInput[OpsTransactionRefresh]{Key: key.String(), Input: txn})
 		}
 	}
@@ -292,7 +317,7 @@ func MakePutObjectEvent[Input any](ctx context.Context, app *App, bucket string,
 func (event PutObjectEvent[Input]) Queue() func() []PutResult[Input] {
 	ctx := event.Ctx
 
-	errs := make([]PutResult[Input], len(event.InputObjects))
+	results := make([]PutResult[Input], len(event.InputObjects))
 
 	var bodyCount atomic.Int64
 
@@ -318,19 +343,26 @@ func (event PutObjectEvent[Input]) Queue() func() []PutResult[Input] {
 				bodyCount.Add(1)
 			}
 
-			errs[i] = PutResult[Input]{Key: object.Key, Input: object.Input, Err: err}
+			results[i] = PutResult[Input]{Key: object.Key, Input: object.Input, Err: err}
 		}()
 	}
 
 	return func() []PutResult[Input] {
 		wg.Wait()
 
+		var errs []PutResult[Input]
+		for _, result := range results {
+			if result.Err != nil {
+				errs = append(errs, result)
+			}
+		}
+
 		if len(errs) == 0 {
 			slog.InfoContext(ctx, "finished put objects call", "count", bodyCount.Load())
 		} else {
 			slog.ErrorContext(ctx, "finished put objects call", "errs", errs)
 		}
-		return errs
+		return results
 	}
 }
 
