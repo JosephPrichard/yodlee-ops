@@ -45,8 +45,7 @@ func main() {
 		os.Exit(0)
 	}()
 
-	handler := svc.MakeRoot(app, config.AllowOrigins)
-	if err := http.ListenAndServe(":8080", handler); err != nil {
+	if err := http.ListenAndServe(":8080", svc.MakeRoot(app, config.AllowOrigins)); err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}
 

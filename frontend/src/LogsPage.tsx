@@ -138,7 +138,6 @@ export const LogsPage: React.FC<LogsPageProps> = ({ profileIDs, topics }) => {
                         <div className="json-viewer">
                             <ReactJsonView
                                 src={selectedLog.data}
-                                showComma
                                 theme={{
                                     // Background layers (top)
                                     base00: "#0b0f1a",   // deepest background (midnight)

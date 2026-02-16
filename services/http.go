@@ -7,6 +7,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"yodleeops/infra"
@@ -41,6 +43,17 @@ func MakeRoot(app *App, allowOrigins string) http.Handler {
 	routeMiddleware := RouteMiddleware(allowOrigins)
 
 	mux.Handle("/taillog", routeMiddleware(http.HandlerFunc(app.HandleSSELogs)))
+
+	distDir := "./frontend/dist"
+	fs := http.FileServer(http.Dir(distDir))
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		path := filepath.Join(distDir, r.URL.Path)
+		if info, err := os.Stat(path); err == nil && !info.IsDir() {
+			fs.ServeHTTP(w, r)
+			return
+		}
+		http.ServeFile(w, r, filepath.Join(distDir, "index.html"))
+	})
 
 	return mux
 }
