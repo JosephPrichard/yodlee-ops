@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/a-h/templ"
-	"github.com/google/uuid"
 	"io"
 	"log/slog"
 	"net/http"
@@ -20,10 +19,12 @@ func MakeRoot(app *App) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/taillog", app.HandleSSELogs)
-	mux.HandleFunc("/", HandleIndexPage)
 	mux.HandleFunc("/admin", HandleAdminPage)
 	mux.HandleFunc("/logs", HandleLogsPage)
-	mux.Handle("/", http.FileServer(http.Dir("./static")))
+	mux.Handle("/static/",
+		http.StripPrefix("/static/",
+			http.FileServer(http.Dir("./static"))))
+	mux.HandleFunc("/", HandleIndexPage)
 
 	return mux
 }
@@ -51,7 +52,10 @@ func HandleIndexPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleAdminPage(w http.ResponseWriter, r *http.Request) {
+	slog.InfoContext(r.Context(), "rendering admin page")
 
+	component := templates.AdminPage(templates.AdminPageArgs{})
+	templ.Handler(component).ServeHTTP(w, r)
 }
 
 func HandleLogsPage(w http.ResponseWriter, r *http.Request) {
@@ -63,7 +67,7 @@ func HandleLogsPage(w http.ResponseWriter, r *http.Request) {
 
 	slog.InfoContext(r.Context(), "rendering tail log page", "topics", topics, "profileIds", profileIds)
 
-	component := templates.LogPage(templates.LogsPageArgs{
+	component := templates.LogsPage(templates.LogsPageArgs{
 		ProfileIDs:        profileIds,
 		Topics:            topics,
 		InputTopicOptions: DefautSubscribeTopics,
@@ -105,7 +109,6 @@ func RenderHTMLBroadcast(brdJson string) (string, error) {
 	}
 
 	component := templates.LogMsg(templates.LogArgs{
-		ID:        uuid.NewString(),
 		Topic:     broadcast.OriginTopic,
 		Timestamp: broadcast.Timestamp.Format(time.RFC1123),
 		Json:      string(rawData),

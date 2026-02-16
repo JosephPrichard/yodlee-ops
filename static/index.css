@@ -160,3 +160,15 @@ button:hover {
     color: rgb(160,160,160);
     display: inline-block;
 }
+
+.admin-container {
+    margin-left: 12%;
+    margin-right: 12%;
+}
+
+@media screen and (max-width: 768px) {
+    .admin-container {
+        margin-left: 25px;
+        margin-right: 25px;
+    }
+}

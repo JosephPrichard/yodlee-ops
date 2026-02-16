@@ -9,20 +9,10 @@ templ Head(title string) {
     <head>
         <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js" integrity="sha384-/TgkGk7p307TH7EXJDuUlgG3Ce1UVolAOFopFekQkkXihi5u/6OCvVKyz1W+idaz" crossorigin="anonymous"></script>
         <script src="https://cdn.jsdelivr.net/npm/htmx-ext-sse@2.2.4" integrity="sha384-A986SAtodyH8eg8x8irJnYUk7i9inVQqYigD6qZ9evobksGNIXfeFvDwLSHcp31N" crossorigin="anonymous"></script>
-        <link rel="stylesheet" href="./index.css"/>
-        <script src="./index.js"></script>
+        <link rel="stylesheet" href="./static/index.css"/>
+        <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
         <title> { title } </title>
     </head>
-}
-
-var rainbow = []string{
-	"#ff3b3b", // bright red
-	"#ff8800", // vibrant orange
-	"#fff200", // vivid yellow
-	"#00c853", // bright green
-	"#2979ff", // bright blue
-	"#651fff", // vivid indigo
-	"#d500f9", // bright violet
 }
 
 templ JsonTree(jsonTree any, depth int) {
@@ -78,20 +68,42 @@ templ JsonTree(jsonTree any, depth int) {
     }
 }
 
+templ AdminPage(args AdminPageArgs) {
+    @Head("Yodlee Ops | Admin")
+    <div class="banner"></div>
+    <div class="admin-container">
+        <form method="GET" action="" class="form-container">
+            <div class="form-element">
+                <label for="profile-id">
+                    <span class="label-text">Profile ID</span>
+                </label>
+                <div class="input-anchor">
+                    <input id="profile-id" class="text-input" type="text" name="profile-id" value={args.ProfileID} />
+                </div>
+            </div>
+            <button type="submit">Search</button>
+        </form>
+    </div>
+}
+
 templ LogMsg(args LogArgs) {
-    <div class="log-container" hx-on:click={ templ.JSFuncCall("toggleElementHidden", args.ID) }>
+    <div
+        x-data="{ openBody: false }"
+        class="log-container"
+        @click="openBody = !openBody"
+    >
         <div class="log-header-wrapper">
             <span class="log-header log-timestamp"> { args.Timestamp } </span>
             <span class="log-header log-topic"> { args.Topic } </span>
-            <span class={ fmt.Sprintf("%s log-header log-text", args.ID) }> { args.Json } </span>
+            <span x-show="!openBody" class="log-header log-text"> { args.Json } </span>
         </div>
-        <div class={ fmt.Sprintf("%s hidden log-body", args.ID) }>
+        <div x-show="openBody" class="log-body">
             @JsonTree(args.JsonTree, 0)
         </div>
     </div>
 }
 
-templ LogPage(args LogsPageArgs) {
+templ LogsPage(args LogsPageArgs) {
     {{
         profileIDsStr := strings.Join(args.ProfileIDs, ",")
         topicsStr := strings.Join(args.Topics, ",")
@@ -124,11 +136,12 @@ templ LogPage(args LogsPageArgs) {
             </div>
             <button type="submit">Update</button>
         </form>
-        <div hx-ext="sse"
-             hx-swap="afterbegin"
-             sse-swap="log"
-             sse-connect={ templ.URL(fmt.Sprintf("/taillog%s", tailLogQuery)) }
-             class="logs-container">
-        </div>
+        <div
+            hx-ext="sse"
+            hx-swap="afterbegin"
+            sse-swap="log"
+            sse-connect={ templ.URL(fmt.Sprintf("/taillog%s", tailLogQuery)) }
+            class="logs-container"
+        ></div>
     </div>
 }
