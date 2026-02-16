@@ -49,7 +49,7 @@ func TestHandleTailLogSSE(t *testing.T) {
 		FiMessageBroadcaster: &FiMessageBroadcaster{},
 	}
 
-	testServer := httptest.NewServer(MakeRoot(app))
+	testServer := httptest.NewServer(MakeRoot(app, ""))
 	defer testServer.Close()
 
 	// optimistic timeout in case of a deadlock.
@@ -57,21 +57,20 @@ func TestHandleTailLogSSE(t *testing.T) {
 	defer cancel()
 
 	// when
-	query := fmt.Sprintf("%s/taillog?profileIds=profile1,profile2,profile3&topics=%s,%s", testServer.URL, HoldingsInput, TransactionsInput)
+	query := fmt.Sprintf("%s/taillog?profileIDs=profile1,profile2,profile3&topics=%s,%s", testServer.URL, HoldingsInput, TransactionsInput)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, query, nil)
 	require.NoError(t, err)
-	req.Header.Set("Accept", "text/plain")
 
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	go func() {
-		app.Broadcast("profile1", infra.HoldRefreshTopic, "event1")
-		app.Broadcast("profile2", infra.HoldResponseTopic, "event2")
-		app.Broadcast("profile3", infra.TxnRefreshTopic, "event3")
-		app.Broadcast("profile1", infra.TxnResponseTopic, "event4")
-		app.Broadcast("profile4", infra.CnctRefreshTopic, "event5")
+		app.FiMessageBroadcaster.Broadcast("profile1", infra.HoldRefreshTopic, "event1")
+		app.FiMessageBroadcaster.Broadcast("profile2", infra.HoldResponseTopic, "event2")
+		app.FiMessageBroadcaster.Broadcast("profile3", infra.TxnRefreshTopic, "event3")
+		app.FiMessageBroadcaster.Broadcast("profile1", infra.TxnResponseTopic, "event4")
+		app.FiMessageBroadcaster.Broadcast("profile4", infra.CnctRefreshTopic, "event5")
 	}()
 
 	// then

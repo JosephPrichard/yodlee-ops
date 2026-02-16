@@ -27,7 +27,9 @@ type WantObject[JSON any] struct {
 	Value  JSON
 }
 
-func AssertObjects[JSON any](t *testing.T, awsClient *infra.AwsClient, objects []WantObject[JSON]) {
+func AssertObjects[JSON any](t *testing.T, awsClient *infra.AwsClient, objects []WantObject[JSON], opts ...cmp.Option) {
+	opts = append([]cmp.Option{protocmp.Transform()}, opts...)
+
 	t.Helper()
 
 	for _, object := range objects {
@@ -56,7 +58,7 @@ func AssertObjects[JSON any](t *testing.T, awsClient *infra.AwsClient, objects [
 			//require.NoError(t, json.Unmarshal(decompressed, &s3Value))
 			require.NoError(t, json.Unmarshal(bodyBytes, &s3Value))
 
-			Equal(t, object.Value, s3Value, protocmp.Transform())
+			Equal(t, object.Value, s3Value, opts...)
 		}()
 	}
 }

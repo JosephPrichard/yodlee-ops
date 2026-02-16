@@ -1,7 +1,6 @@
 package svc
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -23,26 +22,26 @@ func setupConsumersTest(t *testing.T) *App {
 	return app
 }
 
-func handleFiMessage(ctx context.Context, app *App, key string, value any) {
+func handleFiMessage(ctx AppContext, key string, value any) {
 	switch v := value.(type) {
 	case []yodlee.DataExtractsProviderAccount:
-		app.HandleCnctRefreshMessage(ctx, key, v)
+		HandleCnctRefreshMessage(ctx, key, v)
 	case []yodlee.DataExtractsAccount:
-		app.HandleAcctRefreshMessage(ctx, key, v)
+		HandleAcctRefreshMessage(ctx, key, v)
 	case []yodlee.DataExtractsHolding:
-		app.HandleHoldRefreshMessage(ctx, key, v)
+		HandleHoldRefreshMessage(ctx, key, v)
 	case []yodlee.DataExtractsTransaction:
-		app.HandleTxnRefreshMessage(ctx, key, v)
+		HandleTxnRefreshMessage(ctx, key, v)
 	case yodlee.ProviderAccountResponse:
-		app.HandleCnctResponseMessage(ctx, key, v)
+		HandleCnctResponseMessage(ctx, key, v)
 	case yodlee.AccountResponse:
-		app.HandleAcctResponseMessage(ctx, key, v)
+		HandleAcctResponseMessage(ctx, key, v)
 	case yodlee.HoldingResponse:
-		app.HandleHoldResponseMessage(ctx, key, v)
+		HandleHoldResponseMessage(ctx, key, v)
 	case yodlee.TransactionResponse:
-		app.HandleTxnResponseMessage(ctx, key, v)
+		HandleTxnResponseMessage(ctx, key, v)
 	case []DeleteRetry:
-		app.HandleDeleteRecoveryMessage(ctx, key, v)
+		HandleDeleteRecoveryMessage(ctx, key, v)
 	}
 }
 
@@ -112,6 +111,7 @@ func stubbedFiMessages(producerStub *infrastub.Producer) []any {
 func TestFiMessageConsumers(t *testing.T) {
 	// given
 	app := setupConsumersTest(t)
+	appCtx := AppContext{Context: t.Context(), App: app}
 
 	producerStub := &infrastub.Producer{}
 	app.KafkaClient = &infra.KafkaClient{Producer: producerStub}
@@ -193,22 +193,38 @@ func TestFiMessageConsumers(t *testing.T) {
 			},
 		},
 	} {
-		ctx := t.Context()
-		handleFiMessage(ctx, app, "p1", test.value)
+		handleFiMessage(appCtx, "p1", test.value)
 	}
 
 	// then
 	wantBroadcastMsgs := []any{
-		[]OpsProviderAccountRefresh{{ProfileId: "p1", Data: providerAccountRefresh}},
-		[]OpsAccountRefresh{{ProfileId: "p1", Data: accountRefresh}},
-		[]OpsHoldingRefresh{{ProfileId: "p1", Data: holdingRefresh}},
-		[]OpsTransactionRefresh{{ProfileId: "p1", Data: transactionRefresh}},
-		[]OpsProviderAccount{{ProfileId: "p1", Data: providerAccountResponse}},
-		[]OpsAccount{{ProfileId: "p1", Data: accountResponse}},
-		[]OpsHolding{{ProfileId: "p1", Data: holdingResponse}},
-		[]OpsTransaction{{ProfileId: "p1", Data: transactionResponse}},
+		[]OpsProviderAccountRefresh{
+			{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.CnctRefreshTopic}, Data: providerAccountRefresh},
+		},
+		[]OpsAccountRefresh{
+			{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.AcctRefreshTopic}, Data: accountRefresh},
+		},
+		[]OpsHoldingRefresh{
+			{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.HoldRefreshTopic}, Data: holdingRefresh},
+		},
+		[]OpsTransactionRefresh{
+			{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.TxnRefreshTopic}, Data: transactionRefresh},
+		},
+		[]OpsProviderAccount{
+			{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.CnctResponseTopic}, Data: providerAccountResponse},
+		},
+		[]OpsAccount{
+			{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.AcctResponseTopic}, Data: accountResponse},
+		},
+		[]OpsHolding{
+			{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.HoldResponseTopic}, Data: holdingResponse},
+		},
+		[]OpsTransaction{
+			{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.TxnResponseTopic}, Data: transactionResponse},
+		},
 	}
-	assert.Equal(t, wantBroadcastMsgs, stubbedFiMessages(producerStub))
+	broadcastMsgs := stubbedFiMessages(producerStub)
+	testutil.Equal(t, wantBroadcastMsgs, broadcastMsgs, cmpopts.IgnoreFields(OpsFiMessage{}, "Timestamp"))
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
@@ -250,6 +266,7 @@ func TestFiMessageConsumers(t *testing.T) {
 func TestFiMessageConsumers_S3Errors(t *testing.T) {
 	// given
 	app := setupConsumersTest(t)
+	appCtx := AppContext{Context: t.Context(), App: app}
 
 	producerStub := &infrastub.Producer{}
 	app.KafkaClient = &infra.KafkaClient{Producer: producerStub}
@@ -367,15 +384,13 @@ func TestFiMessageConsumers_S3Errors(t *testing.T) {
 			value:      transactionResponse,
 		},
 	} {
-		ctx := t.Context()
-
 		if test.failPutKey != "" {
 			app.AwsClient.S3Client = infrastub.MakeBadS3Client(app.AwsClient.S3Client, infrastub.BadS3ClientCfg{
 				FailPutKey: test.failPutKey,
 			})
 		}
 
-		handleFiMessage(ctx, app, key, test.value)
+		handleFiMessage(appCtx, key, test.value)
 	}
 
 	// then

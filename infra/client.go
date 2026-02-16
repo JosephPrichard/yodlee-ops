@@ -37,6 +37,7 @@ type Config struct {
 	AwsDefaultRegion string
 	IsLocal          bool // a special flag to tell the app to use hardcoded credentials when connecting to local infra.
 	KafkaBrokers     []string
+	AllowOrigins     string
 }
 
 func MakeConfig() Config {
@@ -53,6 +54,7 @@ func MakeConfig() Config {
 		AwsEndpoint:      envMap["AWS_ENDPOINT"],
 		AwsDefaultRegion: envMap["AWS_DEFAULT_REGION"],
 		KafkaBrokers:     strings.Split(envMap["KAFKA_BROKERS"], ","),
+		AllowOrigins:     envMap["ALLOW_ORIGINS"],
 	}
 }
 

@@ -1,12 +1,18 @@
 body {
     margin: 0;
     font-family: "Open Sans","Helvetica Neue",helvetica,arial,sans-serif;
-    background: #f5f6f7; /* soft white-gray */
+    background: #0f1115; /* deep dark background */
+    color: #e5e7eb;
 }
 
+:root {
+    color-scheme: dark;
+}
+
+/* Banner */
 .banner {
     width: 100%;
-    background: #005eb8;
+    background: #2563eb;
     height: 45px;
     text-align: center;
     font-size: 18px;
@@ -14,14 +20,15 @@ body {
     color: white;
 }
 
+/* Inputs */
 input[type="text"],
 input[type="password"],
 input[type="email"] {
     width: 100%;
     font-size: 16px;
     border: none;
-    color: rgb(80,80,80);
-    border-bottom: 3px solid #bfc5cc;
+    color: #f3f4f6;
+    border-bottom: 3px solid #374151;
     padding: 6px 0;
     margin: 5px 0;
     outline: none;
@@ -29,46 +36,49 @@ input[type="email"] {
 }
 
 input:focus {
-    border-bottom: 3px solid #005eb8;
+    border-bottom: 3px solid #3b82f6;
 }
 
 input::placeholder {
-    color: #6b7280;
+    color: #9ca3af;
 }
 
+/* Labels + helper text */
 .label-tooltip {
     font-size: 12px;
-    color: #6b7280;
+    color: #9ca3af;
     margin-top: 3px;
     margin-bottom: 3px;
+}
+
+.label-text {
+    color: #d1d5db;
 }
 
 .form-element {
     margin-bottom: 20px;
 }
 
-.label-text {
-    color: rgb(80,80,80);
-}
-
+/* Buttons */
 button {
     margin-top: 22px;
     width: 160px;
     padding: 12px 0;
     font-size: 15px;
     font-weight: 600;
-    background: #005eb8;
+    background: #2563eb;
     color: white;
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
     transition: background 0.2s ease;
 }
 
 button:hover {
-    background: #004a93;
+    background: #1d4ed8;
 }
 
+/* Layout Containers */
 .container {
     margin: 45px auto 0;
     display: flex;
@@ -84,11 +94,14 @@ button:hover {
     width: calc(100% - 450px);
     margin: 0 20px 50px;
     height: calc(100vh - 145px);
-    border: 1px solid #ddd;
+    border: 1px solid #374151;
+    background: #111827;
     display: block;
     overflow-y: scroll;
+
 }
 
+/* Responsive */
 @media screen and (max-width: 768px) {
     .container {
         flex-direction: column;
@@ -105,20 +118,21 @@ button:hover {
     }
 }
 
+/* Log Blocks */
 .log-container {
     display: flex;
     flex-direction: column;
     padding: 12px 12px;
-    background-color: rgb(240,240,240);
-    border-bottom: 1px solid #ddd;
-    border-radius: 2px;
+    background-color: #1f2937;
+    border-bottom: 1px solid #374151;
     align-items: center;
     cursor: pointer;
     overflow: hidden;
+    transition: background 0.15s ease;
 }
 
 .log-container:hover {
-    background-color: rgb(230,230,230);
+    background-color: #273549;
 }
 
 .log-header-wrapper {
@@ -127,17 +141,17 @@ button:hover {
 
 .log-header {
     margin-right: 5px;
-    color: rgb(50,50,50);
+    margin-top: 2px;
+    margin-bottom: 2px;
+    color: #f9fafb;
 }
 
-.log-timestamp {}
-
 .log-topic {
-    color: mediumpurple;
+    color: #c084fc; /* purple accent */
 }
 
 .log-text {
-    color: #6495ED;
+    color: #60a5fa;
     width: 100%;
     min-width: 0;
     white-space: nowrap;
@@ -146,21 +160,28 @@ button:hover {
     text-overflow: ellipsis;
 }
 
+.log-timestamp {
+    color: rgb(190,190,190);
+}
+
 .log-body {
     margin-top: 10px;
     width: 100%;
     float: left;
 }
 
+/* JSON */
+.json {
+    color: #9ca3af;
+    display: inline-block;
+}
+
+/* Hidden */
 .hidden {
     display: none;
 }
 
-.json {
-    color: rgb(160,160,160);
-    display: inline-block;
-}
-
+/* Admin container */
 .admin-container {
     margin-left: 12%;
     margin-right: 12%;

@@ -8,7 +8,7 @@ import (
 	"yodleeops/infra"
 )
 
-func (app *App) ProduceJsonMessage(ctx context.Context, topic string, key string, fiMessage any) {
+func ProduceJsonMessage(ctx AppContext, topic string, key string, fiMessage any) {
 	inputBytes, err := json.Marshal(fiMessage)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to republish json messages", "err", err)
@@ -16,7 +16,7 @@ func (app *App) ProduceJsonMessage(ctx context.Context, topic string, key string
 	}
 	slog.InfoContext(ctx, "producing json messages", "topic", topic, "size", len(inputBytes), "json", string(inputBytes))
 
-	if err := app.Producer.WriteMessages(ctx, kafka.Message{
+	if err := ctx.Producer.WriteMessages(ctx, kafka.Message{
 		Key:   []byte(key),
 		Topic: topic,
 		Value: inputBytes,
@@ -65,7 +65,7 @@ func MakeDeleteErrorsMsgs(ctx context.Context, profileId string, deleteErrs []De
 	return msgs
 }
 
-func (app *App) ProduceDeleteErrors(ctx context.Context, profileId string, deleteErrs []DeleteResult) {
+func ProduceDeleteErrors(ctx AppContext, profileId string, deleteErrs []DeleteResult) {
 	deleteErrorMsgs := MakeDeleteErrorsMsgs(ctx, profileId, deleteErrs)
 
 	var msgs []kafka.Message
@@ -83,7 +83,7 @@ func (app *App) ProduceDeleteErrors(ctx context.Context, profileId string, delet
 	}
 
 	if len(msgs) > 0 {
-		if err := app.Producer.WriteMessages(ctx, msgs...); err != nil {
+		if err := ctx.Producer.WriteMessages(ctx, msgs...); err != nil {
 			slog.ErrorContext(ctx, "failed to produce delete errors to kafka", "err", err)
 		}
 	}

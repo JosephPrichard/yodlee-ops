@@ -30,7 +30,7 @@ func main() {
 	}
 
 	consumerCtx, cancelConsumer := context.WithCancel(context.Background())
-	app.StartConsumers(svc.ConsumersConfig{Context: consumerCtx, Concurrency: 3})
+	svc.StartConsumers(consumerCtx, app, 3)
 	defer app.Close()
 
 	go func() {
@@ -45,7 +45,7 @@ func main() {
 		os.Exit(0)
 	}()
 
-	handler := svc.MakeRoot(app)
+	handler := svc.MakeRoot(app, config.AllowOrigins)
 	if err := http.ListenAndServe(":8080", handler); err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}

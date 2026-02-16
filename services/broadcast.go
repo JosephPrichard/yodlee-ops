@@ -27,7 +27,7 @@ func (b *FiMessageBroadcaster) Broadcast(profileID string, topic string, msg str
 
 	b.lock.Lock()
 	for _, subscriber := range b.subscribers {
-		isTopicDisallowed := !slices.Contains(subscriber.topics, topicHash)
+		isTopicDisallowed := len(subscriber.topics) > 0 && !slices.Contains(subscriber.topics, topicHash)
 		isProfileDisallowed := !slices.Contains(subscriber.profileIDs, profileIDHash)
 
 		if isTopicDisallowed || isProfileDisallowed {

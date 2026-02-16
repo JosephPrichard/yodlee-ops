@@ -2,9 +2,11 @@ package svc
 
 import (
 	"context"
+	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"yodleeops/infra"
 	"yodleeops/infra/stubs"
 	"yodleeops/internal/yodlee"
 	"yodleeops/testutil"
@@ -12,6 +14,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/stretchr/testify/require"
 )
+
+var fiMessageOpts = []cmp.Option{cmpopts.IgnoreFields(OpsFiMessage{}, "Timestamp")}
 
 func setupIngestionTest(t *testing.T) *App {
 	awsClient := testutil.SetupAwsITest(t)
@@ -28,9 +32,10 @@ func TestIngestCnctResponses(t *testing.T) {
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	app := setupIngestionTest(t)
+	appCtx := AppContext{Context: ctx, App: app}
 
 	// when
-	putResults := app.IngestCnctResponses(ctx, "p1", yodlee.ProviderAccountResponse{
+	putResults := IngestCnctResponses(appCtx, "p1", yodlee.ProviderAccountResponse{
 		ProviderAccount: []yodlee.ProviderAccount{
 			{
 				Id:          1,
@@ -51,15 +56,21 @@ func TestIngestCnctResponses(t *testing.T) {
 		{
 			Bucket: app.CnctBucket,
 			Key:    "p1/1/1/2025-06-12",
-			Value:  OpsProviderAccount{ProfileId: "p1", Data: yodlee.ProviderAccount{Id: 1, LastUpdated: "2025-06-12", RequestId: "REQUEST"}},
+			Value: OpsProviderAccount{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.CnctResponseTopic},
+				Data:         yodlee.ProviderAccount{Id: 1, LastUpdated: "2025-06-12", RequestId: "REQUEST"},
+			},
 		},
 		{
 			Bucket: app.CnctBucket,
 			Key:    "p1/1/100/2025-06-13",
-			Value:  OpsProviderAccount{ProfileId: "p1", Data: yodlee.ProviderAccount{Id: 100, LastUpdated: "2025-06-13", RequestId: "REQUEST"}},
+			Value: OpsProviderAccount{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.CnctResponseTopic},
+				Data:         yodlee.ProviderAccount{Id: 100, LastUpdated: "2025-06-13", RequestId: "REQUEST"},
+			},
 		},
 	}
-	testutil.AssertObjects(t, app.AwsClient, wantObjects)
+	testutil.AssertObjects(t, app.AwsClient, wantObjects, fiMessageOpts...)
 }
 
 func TestIngestAcctResponses(t *testing.T) {
@@ -67,9 +78,10 @@ func TestIngestAcctResponses(t *testing.T) {
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	app := setupIngestionTest(t)
+	appCtx := AppContext{Context: ctx, App: app}
 
 	// when
-	putResults := app.IngestAcctResponses(ctx, "p1", yodlee.AccountResponse{
+	putResults := IngestAcctResponses(appCtx, "p1", yodlee.AccountResponse{
 		Account: []yodlee.Account{
 			{
 				ProviderAccountId: 1,
@@ -92,15 +104,21 @@ func TestIngestAcctResponses(t *testing.T) {
 		{
 			Bucket: app.AcctBucket,
 			Key:    "p1/1/1/1/2025-06-12",
-			Value:  OpsAccount{ProfileId: "p1", Data: yodlee.Account{ProviderAccountId: 1, Id: 1, LastUpdated: "2025-06-12", AccountName: "Checking Data"}},
+			Value: OpsAccount{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.AcctResponseTopic},
+				Data:         yodlee.Account{ProviderAccountId: 1, Id: 1, LastUpdated: "2025-06-12", AccountName: "Checking Data"},
+			},
 		},
 		{
 			Bucket: app.AcctBucket,
 			Key:    "p1/1/100/200/2025-06-13",
-			Value:  OpsAccount{ProfileId: "p1", Data: yodlee.Account{ProviderAccountId: 100, Id: 200, LastUpdated: "2025-06-13", AccountName: "Savings Data"}},
+			Value: OpsAccount{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.AcctResponseTopic},
+				Data:         yodlee.Account{ProviderAccountId: 100, Id: 200, LastUpdated: "2025-06-13", AccountName: "Savings Data"},
+			},
 		},
 	}
-	testutil.AssertObjects(t, app.AwsClient, wantObjects)
+	testutil.AssertObjects(t, app.AwsClient, wantObjects, fiMessageOpts...)
 }
 
 func TestIngestHoldResponses(t *testing.T) {
@@ -108,8 +126,10 @@ func TestIngestHoldResponses(t *testing.T) {
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	app := setupIngestionTest(t)
+	appCtx := AppContext{Context: ctx, App: app}
+
 	// when
-	putResults := app.IngestHoldResponses(ctx, "p1", yodlee.HoldingResponse{
+	putResults := IngestHoldResponses(appCtx, "p1", yodlee.HoldingResponse{
 		Holding: []yodlee.Holding{
 			{
 				AccountId:   1,
@@ -132,15 +152,21 @@ func TestIngestHoldResponses(t *testing.T) {
 		{
 			Bucket: app.HoldBucket,
 			Key:    "p1/1/1/1/2025-06-12",
-			Value:  OpsHolding{ProfileId: "p1", Data: yodlee.Holding{AccountId: 1, Id: 1, LastUpdated: "2025-06-12", HoldingType: "Security"}},
+			Value: OpsHolding{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.HoldResponseTopic},
+				Data:         yodlee.Holding{AccountId: 1, Id: 1, LastUpdated: "2025-06-12", HoldingType: "Security"},
+			},
 		},
 		{
 			Bucket: app.HoldBucket,
 			Key:    "p1/1/200/100/2025-06-13",
-			Value:  OpsHolding{ProfileId: "p1", Data: yodlee.Holding{AccountId: 200, Id: 100, LastUpdated: "2025-06-13", HoldingType: "Stock"}},
+			Value: OpsHolding{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.HoldResponseTopic},
+				Data:         yodlee.Holding{AccountId: 200, Id: 100, LastUpdated: "2025-06-13", HoldingType: "Stock"},
+			},
 		},
 	}
-	testutil.AssertObjects(t, app.AwsClient, wantObjects)
+	testutil.AssertObjects(t, app.AwsClient, wantObjects, fiMessageOpts...)
 }
 
 func TestIngestTxnResponses(t *testing.T) {
@@ -148,9 +174,10 @@ func TestIngestTxnResponses(t *testing.T) {
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	app := setupIngestionTest(t)
+	appCtx := AppContext{Context: ctx, App: app}
 
 	// when
-	putResults := app.IngestTxnResponses(ctx, "p1", yodlee.TransactionResponse{
+	putResults := IngestTxnResponses(appCtx, "p1", yodlee.TransactionResponse{
 		Transaction: []yodlee.TransactionWithDateTime{
 			{
 				AccountId:   1,
@@ -173,17 +200,21 @@ func TestIngestTxnResponses(t *testing.T) {
 		{
 			Bucket: app.TxnBucket,
 			Key:    "p1/1/1/1/2025-06-11T07:06:18Z",
-			Value: OpsTransaction{ProfileId: "p1",
-				Data: yodlee.TransactionWithDateTime{AccountId: 1, Id: 1, Date: "2025-06-11T07:06:18Z", CheckNumber: "123"}},
+			Value: OpsTransaction{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.TxnResponseTopic},
+				Data:         yodlee.TransactionWithDateTime{AccountId: 1, Id: 1, Date: "2025-06-11T07:06:18Z", CheckNumber: "123"},
+			},
 		},
 		{
 			Bucket: app.TxnBucket,
 			Key:    "p1/1/200/200/2025-06-13T07:06:18Z",
-			Value: OpsTransaction{ProfileId: "p1",
-				Data: yodlee.TransactionWithDateTime{AccountId: 200, Id: 200, Date: "2025-06-13T07:06:18Z", CheckNumber: "123"}},
+			Value: OpsTransaction{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.TxnResponseTopic},
+				Data:         yodlee.TransactionWithDateTime{AccountId: 200, Id: 200, Date: "2025-06-13T07:06:18Z", CheckNumber: "123"},
+			},
 		},
 	}
-	testutil.AssertObjects(t, app.AwsClient, wantObjects)
+	testutil.AssertObjects(t, app.AwsClient, wantObjects, fiMessageOpts...)
 }
 
 func TestIngestCnctRefreshes(t *testing.T) {
@@ -191,9 +222,10 @@ func TestIngestCnctRefreshes(t *testing.T) {
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	app := setupIngestionTest(t)
+	appCtx := AppContext{Context: ctx, App: app}
 
 	// when
-	result := app.IngestCnctRefreshes(ctx, "p1", []yodlee.DataExtractsProviderAccount{
+	result := IngestCnctRefreshes(appCtx, "p1", []yodlee.DataExtractsProviderAccount{
 		{
 			IsDeleted: true,
 			Id:        10,
@@ -212,10 +244,13 @@ func TestIngestCnctRefreshes(t *testing.T) {
 		{
 			Bucket: app.CnctBucket,
 			Key:    "p1/1/99/2025-06-13",
-			Value:  OpsProviderAccountRefresh{ProfileId: "p1", Data: yodlee.DataExtractsProviderAccount{Id: 99, LastUpdated: "2025-06-13", RequestId: "REQUEST"}},
+			Value: OpsProviderAccountRefresh{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.CnctRefreshTopic},
+				Data:         yodlee.DataExtractsProviderAccount{Id: 99, LastUpdated: "2025-06-13", RequestId: "REQUEST"},
+			},
 		},
 	}
-	testutil.AssertObjects(t, app.AwsClient, wantObjects)
+	testutil.AssertObjects(t, app.AwsClient, wantObjects, fiMessageOpts...)
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
@@ -252,9 +287,10 @@ func TestIngestAcctRefreshes(t *testing.T) {
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	app := setupIngestionTest(t)
+	appCtx := AppContext{Context: ctx, App: app}
 
 	// when
-	result := app.IngestAcctsRefreshes(ctx, "p1", []yodlee.DataExtractsAccount{
+	result := IngestAcctsRefreshes(appCtx, "p1", []yodlee.DataExtractsAccount{
 		{
 			IsDeleted:         true,
 			ProviderAccountId: 10,
@@ -275,10 +311,13 @@ func TestIngestAcctRefreshes(t *testing.T) {
 		{
 			Bucket: app.AcctBucket,
 			Key:    "p1/1/99/999/2025-06-13",
-			Value:  OpsAccountRefresh{ProfileId: "p1", Data: yodlee.DataExtractsAccount{ProviderAccountId: 99, Id: 999, LastUpdated: "2025-06-13", AccountName: "Savings Data"}},
+			Value: OpsAccountRefresh{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.AcctRefreshTopic},
+				Data:         yodlee.DataExtractsAccount{ProviderAccountId: 99, Id: 999, LastUpdated: "2025-06-13", AccountName: "Savings Data"},
+			},
 		},
 	}
-	testutil.AssertObjects(t, app.AwsClient, wantObjects)
+	testutil.AssertObjects(t, app.AwsClient, wantObjects, fiMessageOpts...)
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
@@ -315,9 +354,10 @@ func TestIngestTxnRefreshes(t *testing.T) {
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	app := setupIngestionTest(t)
+	appCtx := AppContext{Context: ctx, App: app}
 
 	// when
-	result := app.IngestTxnRefreshes(ctx, "p1", []yodlee.DataExtractsTransaction{
+	result := IngestTxnRefreshes(appCtx, "p1", []yodlee.DataExtractsTransaction{
 		{
 			IsDeleted: true,
 			AccountId: 100,
@@ -338,10 +378,13 @@ func TestIngestTxnRefreshes(t *testing.T) {
 		{
 			Bucket: app.TxnBucket,
 			Key:    "p1/1/999/9999/2025-06-13T07:06:18Z",
-			Value:  OpsTransactionRefresh{ProfileId: "p1", Data: yodlee.DataExtractsTransaction{AccountId: 999, Id: 9999, Date: "2025-06-13T07:06:18Z", CheckNumber: "123"}},
+			Value: OpsTransactionRefresh{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.TxnRefreshTopic},
+				Data:         yodlee.DataExtractsTransaction{AccountId: 999, Id: 9999, Date: "2025-06-13T07:06:18Z", CheckNumber: "123"},
+			},
 		},
 	}
-	testutil.AssertObjects(t, app.AwsClient, wantObjects)
+	testutil.AssertObjects(t, app.AwsClient, wantObjects, fiMessageOpts...)
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
@@ -378,9 +421,10 @@ func TestIngestHoldRefreshes(t *testing.T) {
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	app := setupIngestionTest(t)
+	appCtx := AppContext{Context: ctx, App: app}
 
 	// when
-	result := app.IngestHoldRefreshes(ctx, "p1", []yodlee.DataExtractsHolding{
+	result := IngestHoldRefreshes(appCtx, "p1", []yodlee.DataExtractsHolding{
 		// holdings can't be deleted individually (only the account that contains the holdings can be deleted).
 		//{
 		//	IsDeleted:   true,
@@ -402,10 +446,13 @@ func TestIngestHoldRefreshes(t *testing.T) {
 		{
 			Bucket: app.HoldBucket,
 			Key:    "p1/1/999/9999/2025-06-13",
-			Value:  OpsHoldingRefresh{ProfileId: "p1", Data: yodlee.DataExtractsHolding{AccountId: 999, Id: 9999, LastUpdated: "2025-06-13", HoldingType: "Stock"}},
+			Value: OpsHoldingRefresh{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.HoldRefreshTopic},
+				Data:         yodlee.DataExtractsHolding{AccountId: 999, Id: 9999, LastUpdated: "2025-06-13", HoldingType: "Stock"},
+			},
 		},
 	}
-	testutil.AssertObjects(t, app.AwsClient, wantObjects)
+	testutil.AssertObjects(t, app.AwsClient, wantObjects, fiMessageOpts...)
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
@@ -442,9 +489,10 @@ func TestIngestDeleteRetries(t *testing.T) {
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	app := setupIngestionTest(t)
+	appCtx := AppContext{Context: ctx, App: app}
 
 	// when
-	results := app.IngestDeleteRetries(ctx, []DeleteRetry{
+	results := IngestDeleteRetries(appCtx, []DeleteRetry{
 		{
 			Kind:   ListKind,
 			Bucket: app.AcctBucket,
@@ -488,6 +536,14 @@ func TestIngestDeleteRetries(t *testing.T) {
 	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, app.AwsClient))
 }
 
+func putResultOpts[T any]() []cmp.Option {
+	var value T
+	return []cmp.Option{
+		cmpopts.IgnoreFields(OpsFiMessage{}, "Timestamp"),
+		cmpopts.IgnoreFields(value, "Err"),
+	}
+}
+
 func TestIngest_PutFailure(t *testing.T) {
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
@@ -504,6 +560,7 @@ func TestIngest_PutFailure(t *testing.T) {
 	t.Run("CnctResponse", func(t *testing.T) {
 		failKey := "p1/1/90/2025-06-12"
 		app := setupTest(failKey)
+		appCtx := AppContext{Context: ctx, App: app}
 
 		input := yodlee.ProviderAccountResponse{
 			ProviderAccount: []yodlee.ProviderAccount{
@@ -514,17 +571,21 @@ func TestIngest_PutFailure(t *testing.T) {
 				},
 			},
 		}
-		putResults := app.IngestCnctResponses(ctx, "p1", input)
+		putResults := IngestCnctResponses(appCtx, "p1", input)
 
 		want := []PutCnctResult{
-			{Key: failKey, Input: OpsProviderAccount{ProfileId: "p1", Data: input.ProviderAccount[0]}},
+			{
+				Key:   failKey,
+				Input: OpsProviderAccount{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.CnctResponseTopic}, Data: input.ProviderAccount[0]},
+			},
 		}
-		testutil.Equal(t, want, putResults, cmpopts.IgnoreFields(PutCnctResult{}, "Err"))
+		testutil.Equal(t, want, putResults, putResultOpts[PutCnctResult]()...)
 	})
 
 	t.Run("AcctResponse", func(t *testing.T) {
 		failKey := "p1/1/90/900/2025-06-12"
 		app := setupTest(failKey)
+		appCtx := AppContext{Context: ctx, App: app}
 
 		input := yodlee.AccountResponse{
 			Account: []yodlee.Account{
@@ -536,17 +597,21 @@ func TestIngest_PutFailure(t *testing.T) {
 				},
 			},
 		}
-		putResults := app.IngestAcctResponses(ctx, "p1", input)
+		putResults := IngestAcctResponses(appCtx, "p1", input)
 
 		want := []PutAcctResult{
-			{Key: failKey, Input: OpsAccount{ProfileId: "p1", Data: input.Account[0]}},
+			{
+				Key:   failKey,
+				Input: OpsAccount{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.AcctResponseTopic}, Data: input.Account[0]},
+			},
 		}
-		testutil.Equal(t, want, putResults, cmpopts.IgnoreFields(PutAcctResult{}, "Err"))
+		testutil.Equal(t, want, putResults, putResultOpts[PutAcctResult]()...)
 	})
 
 	t.Run("HoldResponse", func(t *testing.T) {
 		failKey := "p1/1/900/9000/2025-06-12"
 		app := setupTest(failKey)
+		appCtx := AppContext{Context: ctx, App: app}
 
 		input := yodlee.HoldingResponse{
 			Holding: []yodlee.Holding{
@@ -558,17 +623,21 @@ func TestIngest_PutFailure(t *testing.T) {
 				},
 			},
 		}
-		putResults := app.IngestHoldResponses(ctx, "p1", input)
+		putResults := IngestHoldResponses(appCtx, "p1", input)
 
 		want := []PutHoldResult{
-			{Key: failKey, Input: OpsHolding{ProfileId: "p1", Data: input.Holding[0]}},
+			{
+				Key:   failKey,
+				Input: OpsHolding{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.HoldResponseTopic}, Data: input.Holding[0]},
+			},
 		}
-		testutil.Equal(t, want, putResults, cmpopts.IgnoreFields(PutHoldResult{}, "Err"))
+		testutil.Equal(t, want, putResults, putResultOpts[PutHoldResult]()...)
 	})
 
 	t.Run("TxnResponse", func(t *testing.T) {
 		failKey := "p1/1/900/9000/2025-06-11T07:06:18Z"
 		app := setupTest(failKey)
+		appCtx := AppContext{Context: ctx, App: app}
 
 		input := yodlee.TransactionResponse{
 			Transaction: []yodlee.TransactionWithDateTime{
@@ -580,17 +649,21 @@ func TestIngest_PutFailure(t *testing.T) {
 				},
 			},
 		}
-		putResults := app.IngestTxnResponses(ctx, "p1", input)
+		putResults := IngestTxnResponses(appCtx, "p1", input)
 
 		want := []PutTxnResult{
-			{Key: failKey, Input: OpsTransaction{ProfileId: "p1", Data: input.Transaction[0]}},
+			{
+				Key:   failKey,
+				Input: OpsTransaction{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.TxnResponseTopic}, Data: input.Transaction[0]},
+			},
 		}
-		testutil.Equal(t, want, putResults, cmpopts.IgnoreFields(PutTxnResult{}, "Err"))
+		testutil.Equal(t, want, putResults, putResultOpts[PutTxnResult]()...)
 	})
 
 	t.Run("CnctRefresh", func(t *testing.T) {
 		failKey := "p1/1/90/2025-06-12"
 		app := setupTest(failKey)
+		appCtx := AppContext{Context: ctx, App: app}
 
 		input := []yodlee.DataExtractsProviderAccount{
 			{
@@ -599,19 +672,23 @@ func TestIngest_PutFailure(t *testing.T) {
 				RequestId:   "REQUEST",
 			},
 		}
-		result := app.IngestCnctRefreshes(ctx, "p1", input)
+		result := IngestCnctRefreshes(appCtx, "p1", input)
 
 		want := CnctRefreshResult{
 			PutResults: []PutResult[OpsProviderAccountRefresh]{
-				{Key: failKey, Input: OpsProviderAccountRefresh{ProfileId: "p1", Data: input[0]}},
+				{
+					Key:   failKey,
+					Input: OpsProviderAccountRefresh{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.CnctRefreshTopic}, Data: input[0]},
+				},
 			},
 		}
-		testutil.Equal(t, want, result, cmpopts.IgnoreFields(PutResult[OpsProviderAccountRefresh]{}, "Err"))
+		testutil.Equal(t, want, result, putResultOpts[PutResult[OpsProviderAccountRefresh]]()...)
 	})
 
 	t.Run("AcctRefresh", func(t *testing.T) {
 		failKey := "p1/1/90/900/2025-06-12"
 		app := setupTest(failKey)
+		appCtx := AppContext{Context: ctx, App: app}
 
 		input := []yodlee.DataExtractsAccount{
 			{
@@ -622,19 +699,23 @@ func TestIngest_PutFailure(t *testing.T) {
 			},
 		}
 
-		result := app.IngestAcctsRefreshes(ctx, "p1", input)
+		result := IngestAcctsRefreshes(appCtx, "p1", input)
 
 		want := AcctRefreshResult{
 			PutResults: []PutResult[OpsAccountRefresh]{
-				{Key: failKey, Input: OpsAccountRefresh{ProfileId: "p1", Data: input[0]}},
+				{
+					Key:   failKey,
+					Input: OpsAccountRefresh{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.AcctRefreshTopic}, Data: input[0]},
+				},
 			},
 		}
-		testutil.Equal(t, want, result, cmpopts.IgnoreFields(PutResult[OpsAccountRefresh]{}, "Err"))
+		testutil.Equal(t, want, result, putResultOpts[PutResult[OpsAccountRefresh]]()...)
 	})
 
 	t.Run("HoldRefresh", func(t *testing.T) {
 		failKey := "p1/1/900/9000/2025-06-12"
 		app := setupTest(failKey)
+		appCtx := AppContext{Context: ctx, App: app}
 
 		input := []yodlee.DataExtractsHolding{
 			{
@@ -645,19 +726,23 @@ func TestIngest_PutFailure(t *testing.T) {
 			},
 		}
 
-		result := app.IngestHoldRefreshes(ctx, "p1", input)
+		result := IngestHoldRefreshes(appCtx, "p1", input)
 
 		want := HoldRefreshResult{
 			PutResults: []PutResult[OpsHoldingRefresh]{
-				{Key: failKey, Input: OpsHoldingRefresh{ProfileId: "p1", Data: input[0]}},
+				{
+					Key:   failKey,
+					Input: OpsHoldingRefresh{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.HoldRefreshTopic}, Data: input[0]},
+				},
 			},
 		}
-		testutil.Equal(t, want, result, cmpopts.IgnoreFields(PutResult[OpsHoldingRefresh]{}, "Err"))
+		testutil.Equal(t, want, result, putResultOpts[PutResult[OpsHoldingRefresh]]()...)
 	})
 
 	t.Run("TxnRefresh", func(t *testing.T) {
 		failKey := "p1/1/900/9000/2025-06-11T07:06:18Z"
 		app := setupTest(failKey)
+		appCtx := AppContext{Context: ctx, App: app}
 
 		input := []yodlee.DataExtractsTransaction{
 			{
@@ -668,22 +753,28 @@ func TestIngest_PutFailure(t *testing.T) {
 			},
 		}
 
-		result := app.IngestTxnRefreshes(ctx, "p1", input)
+		result := IngestTxnRefreshes(appCtx, "p1", input)
 
 		want := TxnRefreshResult{
 			PutResults: []PutResult[OpsTransactionRefresh]{
-				{Key: failKey, Input: OpsTransactionRefresh{ProfileId: "p1", Data: input[0]}},
+				{
+					Key:   failKey,
+					Input: OpsTransactionRefresh{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.TxnRefreshTopic}, Data: input[0]},
+				},
 			},
 		}
-		testutil.Equal(t, want, result, cmpopts.IgnoreFields(PutResult[OpsTransactionRefresh]{}, "Err"))
+		testutil.Equal(t, want, result, putResultOpts[PutResult[OpsTransactionRefresh]]()...)
 	})
 }
+
+var deleteResultOpts = []cmp.Option{cmpopts.IgnoreFields(DeleteResult{}, "Err")}
 
 func TestIngest_RefreshDeleteFailure(t *testing.T) {
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	t.Run("CnctRefresh", func(t *testing.T) {
 		app := setupIngestionTest(t)
+		appCtx := AppContext{Context: ctx, App: app}
 
 		app.AwsClient.S3Client = infrastub.MakeBadS3Client(app.AwsClient.S3Client, infrastub.BadS3ClientCfg{
 			FailListPrefix: map[string]string{
@@ -692,7 +783,7 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 			FailDeleteKeys: []string{"p1/1/100/1000/2025-06-12"}, // fail to delete a holding
 		})
 
-		result := app.IngestCnctRefreshes(ctx, "p1", []yodlee.DataExtractsProviderAccount{
+		result := IngestCnctRefreshes(appCtx, "p1", []yodlee.DataExtractsProviderAccount{
 			{
 				IsDeleted: true,
 				Id:        10, // contains account 100 and holding 1000 in seeded data.
@@ -703,11 +794,12 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 			{Bucket: app.TxnBucket, Prefix: "p1/1/100"},
 			{Bucket: app.HoldBucket, Keys: []string{"p1/1/100/1000/2025-06-12"}},
 		}
-		testutil.Equal(t, want, result.DeleteErrors, cmpopts.IgnoreFields(DeleteResult{}, "Err"))
+		testutil.Equal(t, want, result.DeleteErrors, deleteResultOpts...)
 	})
 
 	t.Run("AcctRefresh", func(t *testing.T) {
 		app := setupIngestionTest(t)
+		appCtx := AppContext{Context: ctx, App: app}
 
 		app.AwsClient.S3Client = infrastub.MakeBadS3Client(app.AwsClient.S3Client, infrastub.BadS3ClientCfg{
 			FailListPrefix: map[string]string{
@@ -716,7 +808,7 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 			FailDeleteKeys: []string{"p1/1/10/100/2025-06-12"}, // fail to delete an acct
 		})
 
-		result := app.IngestAcctsRefreshes(ctx, "p1", []yodlee.DataExtractsAccount{
+		result := IngestAcctsRefreshes(appCtx, "p1", []yodlee.DataExtractsAccount{
 			{
 				IsDeleted:         true,
 				ProviderAccountId: 10,
@@ -728,6 +820,6 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 			{Bucket: app.TxnBucket, Prefix: "p1/1/100"},
 			{Bucket: app.AcctBucket, Keys: []string{"p1/1/10/100/2025-06-12"}},
 		}
-		testutil.Equal(t, want, result.DeleteErrors, cmpopts.IgnoreFields(DeleteResult{}, "Err"))
+		testutil.Equal(t, want, result.DeleteErrors, deleteResultOpts...)
 	})
 }
