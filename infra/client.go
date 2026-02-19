@@ -172,13 +172,17 @@ func (k *KafkaClient) Close() error {
 	)
 }
 
-type AwsClient struct {
-	S3Client   S3Client
-	PageLength *int32
+type S3Buckets struct {
 	CnctBucket string
 	AcctBucket string
 	HoldBucket string
 	TxnBucket  string
+}
+
+type AwsClient struct {
+	S3Client   S3Client
+	PageLength *int32
+	S3Buckets
 }
 
 type S3Client interface {
@@ -209,9 +213,11 @@ func MakeAwsClient(cfg Config) *AwsClient {
 			}
 		}),
 		PageLength: nil,
-		CnctBucket: CnctBucket,
-		AcctBucket: AcctBucket,
-		HoldBucket: HoldBucket,
-		TxnBucket:  TxnBucket,
+		S3Buckets: S3Buckets{
+			CnctBucket: CnctBucket,
+			AcctBucket: AcctBucket,
+			HoldBucket: HoldBucket,
+			TxnBucket:  TxnBucket,
+		},
 	}
 }

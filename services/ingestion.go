@@ -314,6 +314,7 @@ func PutObjects[Input any](ctx AppContext, bucket string, inputObjects []PutInpu
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			// todo: add gzip compression
 			_, err := ctx.S3Client.PutObject(ctx, &s3.PutObjectInput{
 				Bucket: aws.String(bucket),
 				Key:    aws.String(object.Key),

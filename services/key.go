@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
+	"yodleeops/infra"
 )
 
 type CnctKey struct {
@@ -113,4 +115,93 @@ type AcctChildPrefix struct {
 
 func (k AcctChildPrefix) String() string {
 	return fmt.Sprintf("%s/1/%d/%d", k.ProfileId, k.AcctID, k.ChildID)
+}
+
+type OpsFiMetadata struct {
+	Key          string
+	LastModified time.Time
+	// parsed key data - any unused fields will be zeroed out.
+	ProfileID         string
+	ProviderAccountID string
+	PartyIDTypeCd     string
+	AccountID         string
+	HoldingID         string
+	TransactionID     string
+	LastUpdated       time.Time
+}
+
+type ParseOpsFiMetadataError struct {
+	Key              string
+	Bucket           string
+	WantTokenCount   int
+	ActualTokenCount int
+}
+
+func (e ParseOpsFiMetadataError) Error() string {
+	return fmt.Sprintf("invalid key for bucket %s, %s: expected %d tokens, got %d", e.Bucket, e.Key, e.WantTokenCount, e.ActualTokenCount)
+}
+
+func TimeParseLax(dateString string) (time.Time, error) {
+	for _, layout := range []string{
+		time.RFC3339,
+		time.RFC3339Nano,
+		time.DateOnly,
+	} {
+		if t, err := time.Parse(layout, dateString); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("parse time with any known layout: %s", dateString)
+}
+
+func (o *OpsFiMetadata) ParseOpsFiMetadata(buckets infra.S3Buckets, bucket string, key string) error {
+	tokens := strings.Split(key, "/")
+
+	switch bucket {
+	case buckets.CnctBucket:
+		wantTokenCount := 4
+		if len(tokens) != wantTokenCount {
+			return ParseOpsFiMetadataError{Key: key, Bucket: bucket, WantTokenCount: wantTokenCount, ActualTokenCount: len(tokens)}
+		}
+		o.ProfileID = tokens[0]
+		o.ProviderAccountID = tokens[1]
+		o.PartyIDTypeCd = tokens[2]
+	case buckets.AcctBucket:
+		wantTokenCount := 5
+		if len(tokens) != wantTokenCount {
+			return ParseOpsFiMetadataError{Key: key, Bucket: bucket, WantTokenCount: wantTokenCount, ActualTokenCount: len(tokens)}
+		}
+		o.ProfileID = tokens[0]
+		o.ProviderAccountID = tokens[1]
+		o.PartyIDTypeCd = tokens[2]
+		o.AccountID = tokens[3]
+	case buckets.HoldBucket:
+		wantTokenCount := 5
+		if len(tokens) != wantTokenCount {
+			return ParseOpsFiMetadataError{Key: key, Bucket: bucket, WantTokenCount: wantTokenCount, ActualTokenCount: len(tokens)}
+		}
+		o.ProfileID = tokens[0]
+		o.PartyIDTypeCd = tokens[1]
+		o.AccountID = tokens[2]
+		o.HoldingID = tokens[3]
+	case buckets.TxnBucket:
+		wantTokenCount := 5
+		if len(tokens) != wantTokenCount {
+			return ParseOpsFiMetadataError{Key: key, Bucket: bucket, WantTokenCount: wantTokenCount, ActualTokenCount: len(tokens)}
+		}
+		o.ProfileID = tokens[0]
+		o.PartyIDTypeCd = tokens[1]
+		o.AccountID = tokens[2]
+		o.TransactionID = tokens[3]
+	default:
+		return fmt.Errorf("invalid bucket %s", bucket)
+	}
+
+	lastUpdated, err := TimeParseLax(tokens[len(tokens)-1])
+	if err != nil {
+		return err
+	}
+	o.LastUpdated = lastUpdated
+
+	return nil
 }

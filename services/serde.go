@@ -17,7 +17,7 @@ func SerializeYodleeData(v any) ([]byte, bool) {
 	//defer gzipWriter.Close()
 	//
 	//if _, err := gzipWriter.Write(jsonData); err != nil {
-	//	slog.Error("gzip write failed", "err", err)
+	//	slog.ErrorCode("gzip write failed", "err", err)
 	//	return nil, false
 	//}
 	//return buf.Bytes(), true

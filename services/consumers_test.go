@@ -75,7 +75,7 @@ func stubbedFiMessages(producerStub *infrastub.Producer) []any {
 			}
 			var brd broadcastOutput
 			if err := json.Unmarshal(kafkaMsg.Value, &brd); err != nil {
-				result = fmt.Errorf("failed to unmarshal broadcast message: %w", err)
+				result = fmt.Errorf("unmarshal broadcast message: %w", err)
 				break
 			}
 			switch brd.OriginTopic {

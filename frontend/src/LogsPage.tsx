@@ -68,8 +68,7 @@ export const LogsPage: React.FC<LogsPageProps> = ({ profileIDs, topics }) => {
         setSelectedLog(null);
 
         const tailLogQuery = `?profileIDs=${profileIDs}&topics=${topics}`;
-        // @ts-ignore
-        const evtSource = new EventSource(`${API_URL}/taillog${tailLogQuery}`, { cors: "true" });
+        const evtSource = new EventSource(`${API_URL}/taillog${tailLogQuery}`);
 
         const handleLog = (event: MessageEvent) => {
             try {

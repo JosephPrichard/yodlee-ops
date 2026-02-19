@@ -1,0 +1,185 @@
+openapi: 3.0.3
+info:
+  title: Yodlee Ops API
+  version: 1.0.0
+  description: API for Yodlee Ops service
+
+servers:
+  - url: /yodlee-ops/api/v1
+
+paths:
+  /fimetadata:
+    get:
+      summary: Get FI metadata
+      description: Returns a list of FI metadata records filtered by query parameters.
+      operationId: getFiMetadata
+      parameters:
+        - name: profileIDs
+          in: query
+          description: Profile IDs to filter by (comma-separated string).
+          required: false
+          schema:
+            type: string
+          example: "p1,p2"
+        - name: cursors
+          in: query
+          description: Cursors to paginate by (comma-seperated string). Remember to url encode it, ListObjectsV2 cursors contain unsafe URL characters.
+          required: false
+          schema:
+            type: string
+          example: "cDEvMS8xMDAvMjAyNS0wNi0xMw==,cDEvMS8xMDAvMjAyNS0wNi0xMw=="
+        - name: subject
+          in: query
+          description: Subject filter value.
+          required: false
+          schema:
+            type: string
+            enum:
+              - connections
+              - accounts
+              - transactions
+              - holdings
+          example: "accounts"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListFiMetadataResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResp"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResp"
+
+  /fiobject:
+    get:
+      summary: Get FI object
+      description: Returns the FI object data for the given key and subject.
+      operationId: getFiObject
+      parameters:
+        - name: key
+          in: query
+          description: Key identifying the FI object.
+          required: true
+          schema:
+            type: string
+          example: "p1/1/10/100/2025-06-12"
+        - name: subject
+          in: query
+          description: Subject filter value.
+          required: false
+          schema:
+            type: string
+            enum:
+              - connections
+              - accounts
+              - transactions
+              - holdings
+          example: "accounts"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profileId:
+                    type: string
+                    example: "p1"
+                  timestamp:
+                    type: string
+                    format: date-time
+                    example: "2026-02-19T04:33:11Z"
+                  originTopic:
+                    type: string
+                    example: "acctResponseTopic"
+                  data:
+                    type: object
+                    description: Arbitrary JSON payload
+                    additionalProperties: true
+                    example:
+                      accountId: "100"
+                      balance: 5000
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResp"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResp"
+
+components:
+  schemas:
+    OpsFiMetadata:
+      type: object
+      properties:
+        key:
+          type: string
+          example: "p1/1/10/100/2025-06-12"
+        lastModified:
+          type: string
+          format: date-time
+          example: "2026-02-19T04:33:11Z"
+        profileID:
+          type: string
+          example: "p1"
+        providerAccountID:
+          type: string
+          example: "1"
+        partyIDTypeCd:
+          type: string
+          example: "10"
+        accountID:
+          type: string
+          example: "100"
+        holdingID:
+          type: string
+          example: "1000"
+        transactionID:
+          type: string
+          example: "1000"
+        lastUpdated:
+          type: string
+          format: date-time
+          example: "2025-06-12T00:00:00Z"
+
+    ListFiMetadataResponse:
+      type: object
+      properties:
+        opsFiMetadata:
+          type: array
+          items:
+            $ref: "#/components/schemas/OpsFiMetadata"
+        cursors:
+          type: object
+          description: Map of cursors for pagination from profileID to cursor. Set to "null" all elements for profileID are exhausted.
+          additionalProperties:
+            type: string
+          example:
+            p1: "cDEvMS8xMDAvMjAyNS0wNi0xMw=="
+            p2: "cDEvMS8xMDAvMjAyNS0wNi0xMw=="
+
+    ErrorResp:
+      type: object
+      properties:
+        errorcode:
+          type: string
+          example: "400"
+        errorDesc:
+          type: string
+          example: "Invalid query parameter"

@@ -22,8 +22,6 @@ func hash(s string) uint64 {
 func (b *FiMessageBroadcaster) Broadcast(profileID string, topic string, msg string) {
 	profileIDHash := hash(profileID)
 	topicHash := hash(topic)
-	//profileIDHash := profileID
-	//topicHash := topic
 
 	b.lock.Lock()
 	for _, subscriber := range b.subscribers {
