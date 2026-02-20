@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/go-faster/jx"
 	"golang.org/x/sync/errgroup"
 	"log/slog"
 	"slices"
@@ -15,7 +16,7 @@ import (
 
 type OpsFiGeneric struct {
 	OpsFiMessage
-	Data json.RawMessage `json:"data"`
+	Data map[string]jx.Raw `json:"data"`
 }
 
 type ProfileIDCursorPair struct {
@@ -24,15 +25,15 @@ type ProfileIDCursorPair struct {
 }
 
 type ListFiMetadataResult struct {
-	OpsFiMetadata []OpsFiMetadata    `json:"opsFiMetadata"`
-	Cursors       map[string]*string `json:"cursors"`
+	OpsFiMetadata []OpsFiMetadata   `json:"opsFiMetadata"`
+	Cursors       map[string]string `json:"cursors"`
 }
 
 func ListFiMetadataByProfileIDs(appCtx AppContext, bucket string, pairs []ProfileIDCursorPair) (results ListFiMetadataResult, err error) {
 	nestedOpsFiMetadata := make([][]OpsFiMetadata, len(pairs))
 
 	var cursorsLock sync.Mutex
-	cursors := make(map[string]*string, len(pairs))
+	cursors := make(map[string]string, len(pairs))
 
 	eg, egCtx := errgroup.WithContext(appCtx)
 	appEgCtx := AppContext{Context: egCtx, App: appCtx.App}
@@ -46,7 +47,9 @@ func ListFiMetadataByProfileIDs(appCtx AppContext, bucket string, pairs []Profil
 			nestedOpsFiMetadata[i] = opsFiMetadata
 
 			cursorsLock.Lock()
-			cursors[pair.ProfileID] = nextCursor
+			if nextCursor != "" {
+				cursors[pair.ProfileID] = nextCursor
+			}
 			cursorsLock.Unlock()
 
 			return nil
@@ -69,7 +72,7 @@ func ListFiMetadataByProfileIDs(appCtx AppContext, bucket string, pairs []Profil
 	return ListFiMetadataResult{OpsFiMetadata: opsFiMetadata, Cursors: cursors}, nil
 }
 
-func ListFiMetadataByProfileID(ctx AppContext, bucket string, profileID string, cursor string) ([]OpsFiMetadata, *string, error) {
+func ListFiMetadataByProfileID(ctx AppContext, bucket string, profileID string, cursor string) ([]OpsFiMetadata, string, error) {
 	var continuationToken *string
 	if cursor != "" {
 		continuationToken = aws.String(cursor)
@@ -81,7 +84,7 @@ func ListFiMetadataByProfileID(ctx AppContext, bucket string, profileID string, 
 		MaxKeys:           ctx.AwsClient.PageLength,
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("list objects by profileID=%s, cursor=%s and bucket=%s: %w", profileID, cursor, bucket, err)
+		return nil, "", fmt.Errorf("list objects by profileID=%s, cursor=%s and bucket=%s: %w", profileID, cursor, bucket, err)
 	}
 
 	opsFiMetadata := make([]OpsFiMetadata, 0)
@@ -101,9 +104,9 @@ func ListFiMetadataByProfileID(ctx AppContext, bucket string, profileID string, 
 	}
 
 	hasMore := output.IsTruncated != nil && *output.IsTruncated
-	var nextCursor *string
-	if hasMore {
-		nextCursor = output.NextContinuationToken
+	nextCursor := ""
+	if hasMore && output.NextContinuationToken != nil {
+		nextCursor = *output.NextContinuationToken
 	}
 
 	slog.InfoContext(ctx, "retrieved metadata records", "bucket", bucket, "profileID", profileID, "opsFiMetadata", opsFiMetadata, "nextCursor", nextCursor)
@@ -112,7 +115,7 @@ func ListFiMetadataByProfileID(ctx AppContext, bucket string, profileID string, 
 
 var ErrKeyNotFound = errors.New("key not found")
 
-func GetFiObject(ctx AppContext, bucket string, key string) (fiMessage OpsFiGeneric, err error) {
+func GetFiObject(ctx AppContext, bucket string, key string) (OpsFiGeneric, error) {
 	object, err := ctx.S3Client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
@@ -120,9 +123,10 @@ func GetFiObject(ctx AppContext, bucket string, key string) (fiMessage OpsFiGene
 	if err != nil {
 		var nsk *types.NoSuchKey
 		if errors.As(err, &nsk) {
-			return fiMessage, ErrKeyNotFound
+			return OpsFiGeneric{}, ErrKeyNotFound
+		} else {
+			return OpsFiGeneric{}, fmt.Errorf("get object %s/%s: %w", bucket, key, err)
 		}
-		return fiMessage, fmt.Errorf("read object %s/%s: %w", bucket, key, err)
 	}
 	defer object.Body.Close()
 
@@ -130,8 +134,9 @@ func GetFiObject(ctx AppContext, bucket string, key string) (fiMessage OpsFiGene
 
 	// todo: add gzip decompression
 
+	var fiMessage OpsFiGeneric
 	if err := json.NewDecoder(object.Body).Decode(&fiMessage); err != nil {
-		return fiMessage, fmt.Errorf("parse object: %w", err)
+		return OpsFiGeneric{}, fmt.Errorf("parse object: %w", err)
 	}
 	return fiMessage, nil
 }

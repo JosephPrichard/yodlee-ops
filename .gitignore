@@ -29,6 +29,8 @@ go.work.sum
 
 frontend/dist
 
+openapi/sources
+
 # Editor/IDE
 # .idea/
 # .vscode/

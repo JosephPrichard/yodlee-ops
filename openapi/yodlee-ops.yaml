@@ -17,14 +17,14 @@ paths:
         - name: profileIDs
           in: query
           description: Profile IDs to filter by (comma-separated string).
-          required: false
+          required: true
           schema:
             type: string
           example: "p1,p2"
         - name: cursors
           in: query
           description: Cursors to paginate by (comma-seperated string). Remember to url encode it, ListObjectsV2 cursors contain unsafe URL characters.
-          required: false
+          required: true
           schema:
             type: string
           example: "cDEvMS8xMDAvMjAyNS0wNi0xMw==,cDEvMS8xMDAvMjAyNS0wNi0xMw=="
@@ -33,12 +33,7 @@ paths:
           description: Subject filter value.
           required: false
           schema:
-            type: string
-            enum:
-              - connections
-              - accounts
-              - transactions
-              - holdings
+            $ref: "#/components/schemas/FiSubject"
           example: "accounts"
       responses:
         "200":
@@ -53,7 +48,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResp"
-        "500":
+        default:
           description: Internal Server Error
           content:
             application/json:
@@ -78,12 +73,7 @@ paths:
           description: Subject filter value.
           required: false
           schema:
-            type: string
-            enum:
-              - connections
-              - accounts
-              - transactions
-              - holdings
+            $ref: "#/components/schemas/FiSubject"
           example: "accounts"
       responses:
         "200":
@@ -91,6 +81,11 @@ paths:
           content:
             application/json:
               schema:
+                required:
+                  - profileId
+                  - timestamp
+                  - originTopic
+                  - data
                 type: object
                 properties:
                   profileId:
@@ -116,7 +111,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResp"
-        "500":
+        default:
           description: Internal Server Error
           content:
             application/json:
@@ -125,8 +120,28 @@ paths:
 
 components:
   schemas:
+
+    FiSubject:
+      type: string
+      description: Subject filter value
+      enum:
+        - connections
+        - accounts
+        - transactions
+        - holdings
+
     OpsFiMetadata:
       type: object
+      required:
+        - key
+        - lastModified
+        - profileID
+        - providerAccountID
+        - partyIDTypeCd
+        - accountID
+        - holdingID
+        - transactionID
+        - lastUpdated
       properties:
         key:
           type: string
@@ -160,6 +175,9 @@ components:
 
     ListFiMetadataResponse:
       type: object
+      required:
+        - opsFiMetadata
+        - cursors
       properties:
         opsFiMetadata:
           type: array
@@ -174,12 +192,22 @@ components:
             p1: "cDEvMS8xMDAvMjAyNS0wNi0xMw=="
             p2: "cDEvMS8xMDAvMjAyNS0wNi0xMw=="
 
+    ErrorCode:
+      type: string
+      description: Machine readable error code
+      enum:
+        - PROFILE_ID_CURSOR_LENGTH
+        - KEY_NOT_FOUND
+        - FATAL_ERROR
+
     ErrorResp:
       type: object
+      required:
+        - errorCode
+        - errorDesc
       properties:
-        errorcode:
-          type: string
-          example: "400"
+        errorCode:
+          $ref: "#/components/schemas/ErrorCode"
         errorDesc:
           type: string
           example: "Invalid query parameter"

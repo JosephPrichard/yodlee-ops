@@ -2,7 +2,6 @@ package svc
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/google/uuid"
@@ -14,108 +13,43 @@ import (
 	"strings"
 	"time"
 	"yodleeops/infra"
+	openapi "yodleeops/openapi/sources"
 )
 
-func RouteMiddleware(allowedOrigins string) func(handlerFunc http.HandlerFunc) http.HandlerFunc {
-	return func(next http.HandlerFunc) http.HandlerFunc {
-		return func(w http.ResponseWriter, r *http.Request) {
-			trace := r.Header.Get("X-trace")
-			if trace == "" {
-				trace = uuid.NewString()
-			}
-			r = r.WithContext(context.WithValue(r.Context(), "trace", trace))
-
-			w.Header().Set("Access-Control-Allow-Origin", allowedOrigins)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-trace")
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-
-			if r.Method == "OPTIONS" {
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-			next.ServeHTTP(w, r)
-		}
-	}
-}
-
-func writeJSON(w http.ResponseWriter, v any) {
-	b, err := json.Marshal(v)
-	if err != nil {
-		slog.Error("failed to marshal response", "err", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-		return
-	}
-	if _, err := w.Write(b); err != nil {
-		slog.Error("failed to marshal response", "err", err)
-		http.Error(w, "internal server error", http.StatusInternalServerError)
-	}
-}
-
-type ErrorResp struct {
-	ErrorCode string `json:"errorcode"`
-	ErrorDesc string `json:"errorDesc"`
-}
-
-var ErrHttpInternalServer = errors.New("INTERNAL_SERVER_ERROR")
-var ErrHttpProfileIDsCursorLength = errors.New("PROFILE_IDS_AND_CURSORS_LENGTH_MISMATCH")
-var ErrHttpKeyNotFound = errors.New("KEY_NOT_FOUND")
-
-func errorHandler(handler func(w http.ResponseWriter, r *http.Request) error) http.HandlerFunc {
-	writeErrorMsg := func(w http.ResponseWriter, resp ErrorResp, status int) {
-		b, err := json.Marshal(resp)
-		if err != nil {
-			slog.Error("failed to marshal error response", "err", err)
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(status)
-		w.Header().Set("Content-Type", "application/json")
-		if _, err := w.Write(b); err != nil {
-			slog.Error("failed to marshal error response", "err", err)
-			http.Error(w, "internal server error", http.StatusInternalServerError)
-			return
-		}
-	}
-
-	return func(w http.ResponseWriter, r *http.Request) {
-		if err := handler(w, r); err != nil {
-			slog.ErrorContext(r.Context(), "failed to handle request", "err", err)
-
-			var errorCode error
-			var statusCode int
-			var errorDesc string
-
-			switch {
-			case errors.Is(err, ErrKeyNotFound):
-				errorCode = ErrHttpKeyNotFound
-				statusCode = http.StatusNotFound
-				errorDesc = err.Error()
-			case errorsAsType[ProfileIDsCursorLengthError](err):
-				errorCode = ErrHttpProfileIDsCursorLength
-				statusCode = http.StatusBadRequest
-				errorDesc = err.Error()
-			default:
-				errorCode = ErrHttpInternalServer
-				statusCode = http.StatusInternalServerError
-				errorDesc = "internal server error"
-			}
-
-			writeErrorMsg(w, ErrorResp{ErrorCode: errorCode.Error(), ErrorDesc: errorDesc}, statusCode)
-		}
-	}
-}
-
 const BaseURL = "/yodlee-ops/api/v1"
+
+func RootMiddleware(allowedOrigins string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		trace := r.Header.Get("X-trace")
+		if trace == "" {
+			trace = uuid.NewString()
+		}
+		r = r.WithContext(context.WithValue(r.Context(), "trace", trace))
+
+		w.Header().Set("Access-Control-Allow-Origin", allowedOrigins)
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-trace")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 func MakeRoot(app *App, allowOrigins string) http.Handler {
 	mux := http.NewServeMux()
 
-	routeMiddleware := RouteMiddleware(allowOrigins)
+	oGenServer, err := openapi.NewServer(&FiObjectHandler{App: app})
+	if err != nil {
+		panic(fmt.Sprintf("failed to make root: %v", err))
+	}
 
-	mux.Handle(BaseURL+"/taillog", routeMiddleware(app.HandleSSELogs))
-	mux.Handle(BaseURL+"/fimetadata", routeMiddleware(errorHandler(app.HandleListFiMetadata)))
-	mux.Handle(BaseURL+"/fiobject", routeMiddleware(errorHandler(app.HandleGetFiObject)))
+	mux.Handle(BaseURL+"/taillog", RootMiddleware(allowOrigins, http.HandlerFunc(app.HandleSSELogs)))
+	// a trailing slash is needed for prefix matching. strip prefix allows ogen to do exact path matching
+	mux.Handle(BaseURL+"/", http.StripPrefix(BaseURL, RootMiddleware(allowOrigins, oGenServer)))
 
 	distDir := "./frontend/dist"
 	fs := http.FileServer(http.Dir(distDir))
@@ -147,21 +81,6 @@ const (
 	TransactionsInput = "transactions"
 	HoldingsInput     = "holdings"
 )
-
-func (app *App) InputCodeToBucket(inputCode string) string {
-	switch inputCode {
-	case ConnectionsInput:
-		return app.CnctBucket
-	case AccountsInput:
-		return app.AcctBucket
-	case TransactionsInput:
-		return app.TxnBucket
-	case HoldingsInput:
-		return app.HoldBucket
-	default:
-		return app.CnctBucket
-	}
-}
 
 func FFormatEvent(w io.Writer, topic string, msg string) {
 	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", topic, msg)
@@ -228,52 +147,97 @@ func (app *App) HandleSSELogs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type ProfileIDsCursorLengthError struct {
-	ProfileIDsLength int
-	CursorsLength    int
+func BucketFromSubject(buckets infra.S3Buckets, subject openapi.FiSubject) string {
+	var bucket string
+	switch subject {
+	case openapi.FiSubjectConnections:
+		bucket = buckets.CnctBucket
+	case openapi.FiSubjectAccounts:
+		bucket = buckets.AcctBucket
+	case openapi.FiSubjectTransactions:
+		bucket = buckets.TxnBucket
+	case openapi.FiSubjectHoldings:
+		bucket = buckets.HoldBucket
+	default:
+		bucket = buckets.CnctBucket
+	}
+	return bucket
 }
 
-func (e ProfileIDsCursorLengthError) Error() string {
-	return fmt.Sprintf("profileIDs and cursors must have the same length, got %d and %d", e.ProfileIDsLength, e.CursorsLength)
+type FiObjectHandler struct {
+	*App
 }
 
-func (app *App) HandleListFiMetadata(w http.ResponseWriter, r *http.Request) error {
-	appCtx := AppContext{Context: r.Context(), App: app}
+func (h *FiObjectHandler) NewError(ctx context.Context, err error) *openapi.ErrorRespStatusCode {
+	slog.ErrorContext(ctx, "error handling request", "err", err)
 
-	values := r.URL.Query()
-	profileIDs := strings.Split(values.Get("profileIDs"), ",")
-	cursors := strings.Split(values.Get("cursors"), ",")
-	bucket := app.InputCodeToBucket(values.Get("subject"))
+	return &openapi.ErrorRespStatusCode{
+		StatusCode: http.StatusInternalServerError,
+		Response: openapi.ErrorResp{
+			ErrorCode: openapi.ErrorCodeFATALERROR,
+			ErrorDesc: "internal server error",
+		},
+	}
+}
 
-	if len(profileIDs) != len(cursors) {
-		return ProfileIDsCursorLengthError{ProfileIDsLength: len(profileIDs), CursorsLength: len(cursors)}
+var _ openapi.Handler = (*FiObjectHandler)(nil)
+
+func (h *FiObjectHandler) GetFiMetadata(ctx context.Context, params openapi.GetFiMetadataParams) (openapi.GetFiMetadataRes, error) {
+	appCtx := AppContext{Context: ctx, App: h.App}
+
+	profileIDsInput := strings.Split(params.ProfileIDs, ",")
+	cursorsInput := strings.Split(params.Cursors, ",")
+	bucketInput := BucketFromSubject(h.S3Buckets, params.Subject.Value)
+
+	if len(profileIDsInput) != len(cursorsInput) {
+		return &openapi.ErrorResp{
+			ErrorCode: openapi.ErrorCodePROFILEIDCURSORLENGTH,
+			ErrorDesc: "profileIDs and cursors must be the same length",
+		}, nil
 	}
 	var pairs []ProfileIDCursorPair
-	for i, profileID := range profileIDs {
-		pairs = append(pairs, ProfileIDCursorPair{ProfileID: profileID, Cursor: cursors[i]})
+	for i, profileID := range profileIDsInput {
+		pairs = append(pairs, ProfileIDCursorPair{ProfileID: profileID, Cursor: cursorsInput[i]})
 	}
 
-	result, err := ListFiMetadataByProfileIDs(appCtx, bucket, pairs)
+	fiMetadataResults, err := ListFiMetadataByProfileIDs(appCtx, bucketInput, pairs)
 	if err != nil {
-		return fmt.Errorf("list objects by profile IDs: %w", err)
+		return nil, fmt.Errorf("list objects by profile IDs: %w", err)
 	}
-	writeJSON(w, result)
-	return nil
+
+	opsFiMetadata := make([]openapi.OpsFiMetadata, 0)
+	for _, metadata := range fiMetadataResults.OpsFiMetadata {
+		opsFiMetadata = append(opsFiMetadata, openapi.OpsFiMetadata(metadata))
+	}
+	cursors := fiMetadataResults.Cursors
+
+	return &openapi.ListFiMetadataResponse{
+		OpsFiMetadata: opsFiMetadata,
+		Cursors:       cursors,
+	}, nil
 }
 
-func (app *App) HandleGetFiObject(w http.ResponseWriter, r *http.Request) error {
-	appCtx := AppContext{Context: r.Context(), App: app}
+func (h *FiObjectHandler) GetFiObject(ctx context.Context, params openapi.GetFiObjectParams) (openapi.GetFiObjectRes, error) {
+	appCtx := AppContext{Context: ctx, App: h.App}
 
-	values := r.URL.Query()
-	key := values.Get("key")
-	bucket := app.InputCodeToBucket(values.Get("subject"))
+	keyInput := params.Key
+	bucketInput := BucketFromSubject(h.S3Buckets, params.Subject.Value)
 
-	opsFiObject, err := GetFiObject(appCtx, bucket, key)
-	if err != nil {
-		return fmt.Errorf("get fi message object: %w", err)
+	opsFiObject, err := GetFiObject(appCtx, bucketInput, keyInput)
+	if errors.Is(err, ErrKeyNotFound) {
+		return &openapi.ErrorResp{
+			ErrorCode: openapi.ErrorCodeKEYNOTFOUND,
+			ErrorDesc: err.Error(),
+		}, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("retrieve fi object: %w", err)
 	}
-	slog.InfoContext(appCtx, "retrieved fi message object", "key", key)
+	slog.InfoContext(appCtx, "retrieved fi message object", "key", keyInput, "bucket", bucketInput)
 
-	writeJSON(w, opsFiObject)
-	return nil
+	return &openapi.GetFiObjectOK{
+		ProfileId:   opsFiObject.ProfileId,
+		Timestamp:   opsFiObject.Timestamp,
+		OriginTopic: opsFiObject.OriginTopic,
+		Data:        opsFiObject.Data,
+	}, nil
 }

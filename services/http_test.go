@@ -15,9 +15,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 	"yodleeops/infra"
+	openapi "yodleeops/openapi/sources"
 	"yodleeops/testutil"
 )
 
@@ -65,7 +67,7 @@ func TestHandleTailLogSSE(t *testing.T) {
 	defer cancel()
 
 	// when
-	query := fmt.Sprintf("%s/taillog?profileIDs=profile1,profile2,profile3&topics=%s,%s", BaseURL+testServer.URL, HoldingsInput, TransactionsInput)
+	query := fmt.Sprintf("%s/taillog?profileIDs=profile1,profile2,profile3&topics=%s,%s", testServer.URL+BaseURL, HoldingsInput, TransactionsInput)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, query, nil)
 	require.NoError(t, err)
 
@@ -102,7 +104,7 @@ func setupS3ApiTest(t *testing.T) *App {
 	return app
 }
 
-var errorRespCmpOpts = []cmp.Option{cmpopts.IgnoreFields(ErrorResp{}, "ErrorDesc")}
+var errorRespCmpOpts = []cmp.Option{cmpopts.IgnoreFields(openapi.ErrorResp{}, "ErrorDesc")}
 
 func TestHandleListFiMessages(t *testing.T) {
 	// given
@@ -113,8 +115,8 @@ func TestHandleListFiMessages(t *testing.T) {
 		profileIDs     string
 		cursors        string
 		subject        string
-		wantOpsGeneric ListFiMetadataResult
-		wantErrorResp  ErrorResp
+		wantOpsGeneric openapi.ListFiMetadataResponse
+		wantErrorResp  openapi.ErrorResp
 		wantStatusCode int
 	}{
 		{
@@ -122,7 +124,7 @@ func TestHandleListFiMessages(t *testing.T) {
 			profileIDs: "p1,p2",
 			cursors:    ",", // no cursors.
 			subject:    AccountsInput,
-			wantOpsGeneric: ListFiMetadataResult{OpsFiMetadata: []OpsFiMetadata{
+			wantOpsGeneric: openapi.ListFiMetadataResponse{OpsFiMetadata: []openapi.OpsFiMetadata{
 				{
 					Key:               "p2/1/20/200/2025-06-14",
 					ProfileID:         "p2",
@@ -147,8 +149,8 @@ func TestHandleListFiMessages(t *testing.T) {
 			profileIDs: "p1,p2",
 			cursors:    "cursor1",
 			subject:    AccountsInput,
-			wantErrorResp: ErrorResp{
-				ErrorCode: ErrHttpProfileIDsCursorLength.Error(),
+			wantErrorResp: openapi.ErrorResp{
+				ErrorCode: openapi.ErrorCodePROFILEIDCURSORLENGTH,
 			},
 			wantStatusCode: http.StatusBadRequest,
 		},
@@ -156,7 +158,13 @@ func TestHandleListFiMessages(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			// when
 			r := httptest.NewRequest(http.MethodGet,
-				fmt.Sprintf("%s/fimetadata?profileIDs=%s&cursors=%s&subject=%s", BaseURL, test.profileIDs, test.cursors, test.subject), nil)
+				fmt.Sprintf("%s/fimetadata?profileIDs=%s&cursors=%s&subject=%s",
+					BaseURL,
+					url.QueryEscape(test.profileIDs),
+					url.QueryEscape(test.cursors),
+					url.QueryEscape(test.subject),
+				),
+				nil)
 			w := httptest.NewRecorder()
 
 			hander := MakeRoot(app, "")
@@ -166,7 +174,8 @@ func TestHandleListFiMessages(t *testing.T) {
 			assert.Equal(t, test.wantStatusCode, w.Code)
 			if test.wantStatusCode == http.StatusOK {
 				AssertRespBody(t, test.wantOpsGeneric, w,
-					cmpopts.IgnoreFields(OpsFiMetadata{}, "LastModified"), cmpopts.IgnoreFields(ListFiMetadataResult{}, "Cursors"))
+					cmpopts.IgnoreFields(openapi.OpsFiMetadata{}, "LastModified"),
+					cmpopts.IgnoreFields(openapi.ListFiMetadataResponse{}, "Cursors"))
 			} else {
 				AssertRespBody(t, test.wantErrorResp, w, errorRespCmpOpts...)
 			}
@@ -174,7 +183,7 @@ func TestHandleListFiMessages(t *testing.T) {
 	}
 }
 
-func TestHandleGetFiMessage(t *testing.T) {
+func TestHandleGetFiObject(t *testing.T) {
 	// given
 	awsClient := testutil.SetupAwsITest(t)
 	app := &App{AwsClient: awsClient}
@@ -193,21 +202,19 @@ func TestHandleGetFiMessage(t *testing.T) {
 		name           string
 		key            string
 		subject        string
-		wantOpsGeneric OpsFiGeneric
-		wantErrorResp  ErrorResp
+		wantOpsGeneric openapi.GetFiObjectOK
+		wantErrorResp  openapi.ErrorResp
 		wantStatusCode int
 	}{
 		{
 			name:    "valid key",
 			key:     inputKey,
 			subject: TransactionsInput,
-			wantOpsGeneric: OpsFiGeneric{
-				OpsFiMessage: OpsFiMessage{
-					ProfileId:   "p1",
-					Timestamp:   time.Date(2025, 6, 12, 0, 15, 00, 0, time.UTC),
-					OriginTopic: infra.TxnResponseTopic,
-				},
-				Data: json.RawMessage("null"),
+			wantOpsGeneric: openapi.GetFiObjectOK{
+				ProfileId:   "p1",
+				Timestamp:   time.Date(2025, 6, 12, 0, 15, 00, 0, time.UTC),
+				OriginTopic: infra.TxnResponseTopic,
+				Data:        openapi.GetFiObjectOKData{},
 			},
 			wantStatusCode: http.StatusOK,
 		},
@@ -215,14 +222,19 @@ func TestHandleGetFiMessage(t *testing.T) {
 			name:           "invalid key",
 			key:            "p1/invalid-key",
 			subject:        TransactionsInput,
-			wantErrorResp:  ErrorResp{ErrorCode: ErrHttpKeyNotFound.Error()},
+			wantErrorResp:  openapi.ErrorResp{ErrorCode: openapi.ErrorCodeKEYNOTFOUND},
 			wantStatusCode: http.StatusNotFound,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			// when
 			r := httptest.NewRequest(http.MethodGet,
-				fmt.Sprintf("%s/fiobject?key=%s&subject=%s", BaseURL, test.key, test.subject), nil)
+				fmt.Sprintf("%s/fiobject?key=%s&subject=%s",
+					BaseURL,
+					url.QueryEscape(test.key),
+					url.QueryEscape(test.subject),
+				),
+				nil)
 			w := httptest.NewRecorder()
 
 			hander := MakeRoot(app, "")
@@ -252,7 +264,7 @@ func AssertRespBody[V any](t *testing.T, wantBody V, w *httptest.ResponseRecorde
 
 	var actualBody V
 	if err = json.Unmarshal(b, &actualBody); err != nil {
-		t.Error(err.Error())
+		t.Errorf("failed to unmarshal response body=%s: %s", string(b), err.Error())
 	}
 	str := cmp.Diff(wantBody, actualBody, opts...)
 	if str != "" {
