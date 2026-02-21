@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"github.com/segmentio/kafka-go"
 	"log/slog"
-	"yodleeops/infra"
+	"yodleeops/internal/infra"
 )
 
 func ProduceJsonMessage(ctx AppContext, topic infra.Topic, key string, fiMessage any) {

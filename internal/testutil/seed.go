@@ -3,7 +3,7 @@ package testutil
 import (
 	"bytes"
 	"testing"
-	"yodleeops/infra"
+	"yodleeops/internal/infra"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"

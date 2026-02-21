@@ -2,7 +2,7 @@ package svc
 
 import (
 	"time"
-	"yodleeops/infra"
+	"yodleeops/internal/infra"
 	"yodleeops/internal/yodlee"
 )
 

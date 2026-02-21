@@ -2,7 +2,7 @@ package svc
 
 import (
 	"context"
-	"yodleeops/infra"
+	"yodleeops/internal/infra"
 )
 
 type App struct {

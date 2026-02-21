@@ -38,7 +38,7 @@ paths:
           schema:
             type: string
           example: "p1,p2"
-        - name: cursors
+        - name: cursor
           in: query
           description: Cursors to paginate by (comma-seperated string). Remember to url encode it, ListObjectsV2 cursors contain unsafe URL characters.
           required: true
@@ -196,20 +196,18 @@ components:
       type: object
       required:
         - opsFiMetadata
-        - cursors
+        - cursor
       properties:
         opsFiMetadata:
           type: array
           items:
             $ref: "#/components/schemas/OpsFiMetadata"
-        cursors:
-          type: object
-          description: Map of cursors for pagination from profileID to cursor. Set to "null" all elements for profileID are exhausted.
+        cursor:
+          type: string
+          description: Comma seperated cursor that can be passed back into the list fi metadata call.
           additionalProperties:
             type: string
-          example:
-            p1: "cDEvMS8xMDAvMjAyNS0wNi0xMw=="
-            p2: "cDEvMS8xMDAvMjAyNS0wNi0xMw=="
+          example: "cDEvMS8xMDAvMjAyNS0wNi0xMw==,cDEvMS8xMDAvMjAyNS0wNi0xMw=="
 
     ErrorCode:
       type: string

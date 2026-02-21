@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"log/slog"
 	"time"
-	"yodleeops/infra"
+	"yodleeops/internal/infra"
 	"yodleeops/internal/yodlee"
 )
 

@@ -6,10 +6,10 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 	"testing"
-	"yodleeops/infra"
-	"yodleeops/infra/stubs"
+	"yodleeops/internal/infra"
+	"yodleeops/internal/infra/stubs"
+	"yodleeops/internal/testutil"
 	"yodleeops/internal/yodlee"
-	"yodleeops/testutil"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/stretchr/testify/require"
@@ -549,11 +549,9 @@ func TestIngest_PutFailure(t *testing.T) {
 
 	setupTest := func(failKey string) *App {
 		app := setupIngestionTest(t)
-
 		infrastub.MakeBadS3Client(&app.AwsClient, infrastub.BadS3ClientCfg{
 			FailPutKey: failKey,
 		})
-
 		return app
 	}
 
@@ -780,7 +778,9 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 			FailListPrefix: map[infra.Bucket]string{
 				app.TxnBucket: "p1/1/100", // fail to list txn by prefix
 			},
-			FailDeleteKeys: []string{"p1/1/100/1000/2025-06-12"}, // fail to delete a holding
+			FailDeleteKeys: map[string]bool{
+				"p1/1/100/1000/2025-06-12": true, // fail to delete a holding
+			},
 		})
 
 		result := IngestCnctRefreshes(appCtx, "p1", []yodlee.DataExtractsProviderAccount{
@@ -805,7 +805,9 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 			FailListPrefix: map[infra.Bucket]string{
 				app.TxnBucket: "p1/1/100", // fail to list txn by prefix
 			},
-			FailDeleteKeys: []string{"p1/1/10/100/2025-06-12"}, // fail to delete an acct
+			FailDeleteKeys: map[string]bool{
+				"p1/1/10/100/2025-06-12": true, // fail to delete an acct
+			},
 		})
 
 		result := IngestAcctsRefreshes(appCtx, "p1", []yodlee.DataExtractsAccount{

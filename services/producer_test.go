@@ -3,7 +3,7 @@ package svc
 import (
 	"errors"
 	"testing"
-	"yodleeops/infra"
+	"yodleeops/internal/infra"
 
 	"github.com/stretchr/testify/assert"
 )

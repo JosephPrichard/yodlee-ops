@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"testing"
-	"yodleeops/infra"
-	infrastub "yodleeops/infra/stubs"
+	"yodleeops/internal/infra"
+	infrastub "yodleeops/internal/infra/stubs"
+	"yodleeops/internal/jsonutil"
+	"yodleeops/internal/testutil"
 	"yodleeops/internal/yodlee"
-	"yodleeops/testutil"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -51,21 +52,21 @@ func stubbedFiMessages(producerStub *infrastub.Producer) []any {
 		var result any
 		switch kafkaMsg.Topic {
 		case infra.CnctResponseTopic:
-			result = unmarshalJsonMono[yodlee.ProviderAccountResponse](kafkaMsg.Value)
+			result = jsonutil.Unmarshal[yodlee.ProviderAccountResponse](kafkaMsg.Value)
 		case infra.AcctResponseTopic:
-			result = unmarshalJsonMono[yodlee.AccountResponse](kafkaMsg.Value)
+			result = jsonutil.Unmarshal[yodlee.AccountResponse](kafkaMsg.Value)
 		case infra.HoldResponseTopic:
-			result = unmarshalJsonMono[yodlee.HoldingResponse](kafkaMsg.Value)
+			result = jsonutil.Unmarshal[yodlee.HoldingResponse](kafkaMsg.Value)
 		case infra.TxnResponseTopic:
-			result = unmarshalJsonMono[yodlee.TransactionResponse](kafkaMsg.Value)
+			result = jsonutil.Unmarshal[yodlee.TransactionResponse](kafkaMsg.Value)
 		case infra.CnctRefreshTopic:
-			result = unmarshalJsonMono[[]yodlee.DataExtractsProviderAccount](kafkaMsg.Value)
+			result = jsonutil.Unmarshal[[]yodlee.DataExtractsProviderAccount](kafkaMsg.Value)
 		case infra.AcctRefreshTopic:
-			result = unmarshalJsonMono[[]yodlee.DataExtractsAccount](kafkaMsg.Value)
+			result = jsonutil.Unmarshal[[]yodlee.DataExtractsAccount](kafkaMsg.Value)
 		case infra.HoldRefreshTopic:
-			result = unmarshalJsonMono[[]yodlee.DataExtractsHolding](kafkaMsg.Value)
+			result = jsonutil.Unmarshal[[]yodlee.DataExtractsHolding](kafkaMsg.Value)
 		case infra.TxnRefreshTopic:
-			result = unmarshalJsonMono[[]yodlee.DataExtractsTransaction](kafkaMsg.Value)
+			result = jsonutil.Unmarshal[[]yodlee.DataExtractsTransaction](kafkaMsg.Value)
 		case infra.DeleteRecoveryTopic:
 			result = fmt.Errorf("did not expect message on delete recovery topic: %s", kafkaMsg.Value)
 		case infra.BroadcastTopic:
@@ -81,21 +82,21 @@ func stubbedFiMessages(producerStub *infrastub.Producer) []any {
 			switch brd.OriginTopic {
 			case infra.CnctResponseTopic:
 				fmt.Printf("unmarshaling broadcast message: %+v", string(brd.FiMessages))
-				result = unmarshalJsonMono[[]OpsProviderAccount](brd.FiMessages)
+				result = jsonutil.Unmarshal[[]OpsProviderAccount](brd.FiMessages)
 			case infra.AcctResponseTopic:
-				result = unmarshalJsonMono[[]OpsAccount](brd.FiMessages)
+				result = jsonutil.Unmarshal[[]OpsAccount](brd.FiMessages)
 			case infra.HoldResponseTopic:
-				result = unmarshalJsonMono[[]OpsHolding](brd.FiMessages)
+				result = jsonutil.Unmarshal[[]OpsHolding](brd.FiMessages)
 			case infra.TxnResponseTopic:
-				result = unmarshalJsonMono[[]OpsTransaction](brd.FiMessages)
+				result = jsonutil.Unmarshal[[]OpsTransaction](brd.FiMessages)
 			case infra.CnctRefreshTopic:
-				result = unmarshalJsonMono[[]OpsProviderAccountRefresh](brd.FiMessages)
+				result = jsonutil.Unmarshal[[]OpsProviderAccountRefresh](brd.FiMessages)
 			case infra.AcctRefreshTopic:
-				result = unmarshalJsonMono[[]OpsAccountRefresh](brd.FiMessages)
+				result = jsonutil.Unmarshal[[]OpsAccountRefresh](brd.FiMessages)
 			case infra.HoldRefreshTopic:
-				result = unmarshalJsonMono[[]OpsHoldingRefresh](brd.FiMessages)
+				result = jsonutil.Unmarshal[[]OpsHoldingRefresh](brd.FiMessages)
 			case infra.TxnRefreshTopic:
-				result = unmarshalJsonMono[[]OpsTransactionRefresh](brd.FiMessages)
+				result = jsonutil.Unmarshal[[]OpsTransactionRefresh](brd.FiMessages)
 			default:
 				result = fmt.Sprintf("unexpected broadcast origin topic: %s", kafkaMsg.Topic)
 			}

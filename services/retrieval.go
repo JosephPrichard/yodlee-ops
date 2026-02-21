@@ -10,8 +10,10 @@ import (
 	"golang.org/x/sync/errgroup"
 	"log/slog"
 	"slices"
+	"strings"
 	"sync"
-	"yodleeops/infra"
+	"yodleeops/internal/infra"
+	"yodleeops/internal/jsonutil"
 )
 
 type OpsFiGeneric struct {
@@ -19,37 +21,73 @@ type OpsFiGeneric struct {
 	Data map[string]json.RawMessage `json:"data"` // ensures that `data` is a JSON object.
 }
 
-type ProfileIDCursorPair struct {
-	ProfileID string
-	Cursor    string
+type ListFiMetadataQuery struct {
+	ProfileID         string
+	ContinuationToken string
+}
+
+func FlattenNestedOpsFiMetadata(nestedOpsFiMetadata [][]OpsFiMetadata) []OpsFiMetadata {
+	opsFiMetadata := make([]OpsFiMetadata, 0)
+	for _, nested := range nestedOpsFiMetadata {
+		opsFiMetadata = append(opsFiMetadata, nested...)
+	}
+	slices.SortFunc(opsFiMetadata, func(left, right OpsFiMetadata) int {
+		return right.LastUpdated.Compare(left.LastUpdated)
+	})
+	return opsFiMetadata
+}
+
+const NilContinuationToken = ""
+
+func MakeReturnCursor(profileIDContinuationTokenMap map[string]string, queries []ListFiMetadataQuery) string {
+	cursorArray := make([]string, 0, len(queries))
+	for _, pair := range queries {
+		continuationToken := profileIDContinuationTokenMap[pair.ProfileID]
+		cursorArray = append(cursorArray, continuationToken)
+	}
+	isAllContinuationTokenNil := true
+	for _, continuationToken := range cursorArray {
+		if continuationToken != NilContinuationToken {
+			isAllContinuationTokenNil = false
+		}
+	}
+	if isAllContinuationTokenNil {
+		return "" // no more continuation tokens means = return empty cursor
+	}
+	return strings.Join(cursorArray, ",")
+}
+
+func MakeFirstCursor(profileIDCount int) []string {
+	var cursorsInput []string
+	for range profileIDCount {
+		cursorsInput = append(cursorsInput, "")
+	}
+	return cursorsInput
 }
 
 type ListFiMetadataResult struct {
-	OpsFiMetadata []OpsFiMetadata   `json:"opsFiMetadata"`
-	Cursors       map[string]string `json:"cursors"`
+	OpsFiMetadata []OpsFiMetadata `json:"opsFiMetadata"`
+	Cursor        string          `json:"cursor"`
 }
 
-func ListFiMetadataByProfileIDs(appCtx AppContext, bucket infra.Bucket, pairs []ProfileIDCursorPair) (results ListFiMetadataResult, err error) {
-	nestedOpsFiMetadata := make([][]OpsFiMetadata, len(pairs))
+func ListFiMetadataByProfileIDs(appCtx AppContext, bucket infra.Bucket, queries []ListFiMetadataQuery) (results ListFiMetadataResult, err error) {
+	nestedOpsFiMetadata := make([][]OpsFiMetadata, len(queries))
 
 	var cursorsLock sync.Mutex
-	cursors := make(map[string]string, len(pairs))
+	cursors := make(map[string]string, len(queries))
 
 	eg, egCtx := errgroup.WithContext(appCtx)
 	appEgCtx := AppContext{Context: egCtx, App: appCtx.App}
-	for i, pair := range pairs {
+	for i, pair := range queries {
 		eg.Go(func() error {
-			opsFiMetadata, nextCursor, err := ListFiMetadataByProfileID(appEgCtx, bucket, pair.ProfileID, pair.Cursor)
+			opsFiMetadata, nextCursor, err := ListFiMetadataByProfileID(appEgCtx, bucket, pair.ProfileID, pair.ContinuationToken)
 			if err != nil {
 				return fmt.Errorf("list metadata job index=%d: %w", i, err)
 			}
-
 			nestedOpsFiMetadata[i] = opsFiMetadata
 
 			cursorsLock.Lock()
-			if nextCursor != "" {
-				cursors[pair.ProfileID] = nextCursor
-			}
+			cursors[pair.ProfileID] = nextCursor
 			cursorsLock.Unlock()
 
 			return nil
@@ -59,17 +97,12 @@ func ListFiMetadataByProfileIDs(appCtx AppContext, bucket infra.Bucket, pairs []
 		return results, err
 	}
 
-	opsFiMetadata := make([]OpsFiMetadata, 0)
-	for _, nested := range nestedOpsFiMetadata {
-		opsFiMetadata = append(opsFiMetadata, nested...)
-	}
-	slices.SortFunc(opsFiMetadata, func(left, right OpsFiMetadata) int {
-		return right.LastUpdated.Compare(left.LastUpdated)
-	})
+	opsFiMetadata := FlattenNestedOpsFiMetadata(nestedOpsFiMetadata)
+	cursor := MakeReturnCursor(cursors, queries)
 
-	slog.InfoContext(appCtx, "retrieved metadata records", "bucket", bucket, "pairs", pairs, "opsFiMetadata", opsFiMetadata)
+	slog.InfoContext(appCtx, "retrieved metadata records", "bucket", bucket, "queries", queries, "opsFiMetadata", opsFiMetadata, "cursor", cursor)
 
-	return ListFiMetadataResult{OpsFiMetadata: opsFiMetadata, Cursors: cursors}, nil
+	return ListFiMetadataResult{OpsFiMetadata: opsFiMetadata, Cursor: cursor}, nil
 }
 
 func ListFiMetadataByProfileID(ctx AppContext, bucket infra.Bucket, profileID string, cursor string) ([]OpsFiMetadata, string, error) {
@@ -86,7 +119,7 @@ func ListFiMetadataByProfileID(ctx AppContext, bucket infra.Bucket, profileID st
 		MaxKeys:           ctx.AwsClient.PageLength,
 	})
 	if err != nil {
-		return nil, "", fmt.Errorf("list objects by profileID=%s, cursor=%s and bucket=%s: %w", profileID, cursor, bucket, err)
+		return nil, NilContinuationToken, fmt.Errorf("list objects by profileID=%s, cursor=%s and bucket=%s: %w", profileID, cursor, bucket, err)
 	}
 
 	opsFiMetadata := make([]OpsFiMetadata, 0)
@@ -106,7 +139,7 @@ func ListFiMetadataByProfileID(ctx AppContext, bucket infra.Bucket, profileID st
 	}
 
 	hasMore := output.IsTruncated != nil && *output.IsTruncated
-	nextCursor := ""
+	nextCursor := NilContinuationToken
 	if hasMore && output.NextContinuationToken != nil {
 		nextCursor = *output.NextContinuationToken
 	}
@@ -118,8 +151,6 @@ func ListFiMetadataByProfileID(ctx AppContext, bucket infra.Bucket, profileID st
 var ErrKeyNotFound = errors.New("key not found")
 
 func GetFiObject(ctx AppContext, bucket infra.Bucket, key string) (OpsFiGeneric, error) {
-	var fiObject OpsFiGeneric
-
 	object, err := ctx.S3Client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(string(bucket)),
 		Key:    aws.String(key),
@@ -127,19 +158,18 @@ func GetFiObject(ctx AppContext, bucket infra.Bucket, key string) (OpsFiGeneric,
 	if err != nil {
 		var nsk *types.NoSuchKey
 		if errors.As(err, &nsk) {
-			return fiObject, ErrKeyNotFound
+			return OpsFiGeneric{}, ErrKeyNotFound
 		} else {
-			return fiObject, fmt.Errorf("get object %s/%s: %w", bucket, key, err)
+			return OpsFiGeneric{}, fmt.Errorf("get object %s/%s: %w", bucket, key, err)
 		}
 	}
 	defer object.Body.Close()
 
 	slog.InfoContext(ctx, "retrieved object", "bucket", bucket, "key", key)
 
-	// todo: add gzip decompression
-
-	if err := json.NewDecoder(object.Body).Decode(&fiObject); err != nil {
-		return fiObject, fmt.Errorf("parse fi object: %w", err)
+	var fiObject OpsFiGeneric
+	if err := jsonutil.DecodeGzipJSON(object.Body, &fiObject); err != nil {
+		return OpsFiGeneric{}, fmt.Errorf("decode gzip json: %w", err)
 	}
 	return fiObject, nil
 }

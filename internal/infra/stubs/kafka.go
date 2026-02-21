@@ -3,7 +3,7 @@ package infrastub
 import (
 	"context"
 	"github.com/segmentio/kafka-go"
-	"yodleeops/infra"
+	"yodleeops/internal/infra"
 )
 
 type KafkaMessage struct {

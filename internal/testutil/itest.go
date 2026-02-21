@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 	"time"
-	"yodleeops/infra"
+	"yodleeops/internal/infra"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -55,7 +55,6 @@ func SetupAwsITest(t *testing.T) infra.AwsClient {
 	host, _ := localstackCont.Host(ctx)
 	port, _ := localstackCont.MappedPort(ctx, LocalStackContPort)
 	awsEndpoint := fmt.Sprintf("http://%s:%s", host, port.Port())
-	t.Logf("aws endpoint: %s", awsEndpoint)
 
 	cfg := infra.Config{
 		AwsDefaultRegion: "us-east-1",

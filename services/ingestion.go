@@ -5,7 +5,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
-	"yodleeops/infra"
+	"yodleeops/internal/infra"
+	"yodleeops/internal/jsonutil"
 	"yodleeops/internal/yodlee"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -307,14 +308,14 @@ func PutObjects[Input any](ctx AppContext, bucket infra.Bucket, inputObjects []P
 	var wg sync.WaitGroup
 
 	for i, object := range inputObjects {
-		body, ok := SerializeYodleeData(object.Input)
+		body, ok := jsonutil.EncodeGzipJSON(ctx, object.Input)
 		if !ok {
 			continue
 		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			// todo: add gzip compression
+
 			_, err := ctx.S3Client.PutObject(ctx, &s3.PutObjectInput{
 				Bucket: aws.String(string(bucket)),
 				Key:    aws.String(object.Key),
@@ -645,8 +646,6 @@ type DeleteResult struct {
 	Err    error
 }
 
-// DeleteObjects is a helper to delete all keys from a Bucket and log
-// if a deletion call fails, we should log and continue execution, but we rely on another refresh to come in and actually delete these records
 func DeleteObjects(ctx AppContext, bucket infra.Bucket, keys []string) DeleteResult {
 	objectIDs := make([]s3types.ObjectIdentifier, 0, len(keys))
 	for _, key := range keys {

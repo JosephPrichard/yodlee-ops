@@ -15,10 +15,14 @@ const LogsPageWrapper: React.FC = () => {
     return <LogsPage profileIDs={profileIDs} subjects={subjects} />;
 };
 
+const ProfileTreeWrapper: React.FC = () => {
+    return <div>Profile Tree</div>;
+};
+
 const HomePage: React.FC = () => {
     const navigate = useNavigate();
 
-    const goToProfileTree = () => {};
+    const goToProfileTree = () => navigate("/profiletree");
     const goToLogs = () => navigate("/logs");
 
     return (
@@ -42,6 +46,7 @@ export const App: React.FC = () => {
             <Routes>
                 <Route path="/" element={<HomePage />} />
                 <Route path="/logs" element={<LogsPageWrapper />} />
+                <Route path="/profiletree" element={<ProfileTreeWrapper />} />
             </Routes>
         </Router>
     );

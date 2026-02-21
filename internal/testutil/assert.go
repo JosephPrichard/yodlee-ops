@@ -1,17 +1,19 @@
 package testutil
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"io"
-	"testing"
-	"yodleeops/infra"
-
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/testing/protocmp"
+	"io"
+	"net/http/httptest"
+	"testing"
+	"yodleeops/internal/infra"
+	"yodleeops/internal/jsonutil"
 )
 
 func Equal[T any](t *testing.T, expected, actual T, opts ...cmp.Option) {
@@ -49,14 +51,8 @@ func AssertObjects[JSON any](t *testing.T, awsClient *infra.AwsClient, objects [
 			t.Logf("got object %s/%s (%d bytes)", object.Bucket, object.Key, len(bodyBytes))
 
 			var s3Value JSON
-			//gzipReader, err := gzip.NewReader(bytes.NewReader(bodyBytes))
-			//require.NoError(t, err)
-			//defer gzipReader.Close()
-			//
-			//decompressed, err := io.ReadAll(gzipReader)
-			//require.NoError(t, err)
-			//require.NoError(t, json.Unmarshal(decompressed, &s3Value))
-			require.NoError(t, json.Unmarshal(bodyBytes, &s3Value))
+			require.NoError(t, jsonutil.DecodeGzipJSON(bytes.NewReader(bodyBytes), &s3Value))
+			//require.NoError(t, json.Unmarshal(bodyBytes, &s3Value))
 
 			Equal(t, object.Value, s3Value, opts...)
 		}()
@@ -87,4 +83,32 @@ func GetAllKeys(t *testing.T, awsClient infra.AwsClient) []WantKey {
 	}
 
 	return keys
+}
+
+func AssertRespBody[V any](t *testing.T, wantBody V, w *httptest.ResponseRecorder, opts ...cmp.Option) {
+	t.Helper()
+
+	actualBody := GetRespBody[V](t, w)
+	str := cmp.Diff(wantBody, actualBody, opts...)
+	if str != "" {
+		t.Error(str)
+	}
+}
+
+func GetRespBody[V any](t *testing.T, w *httptest.ResponseRecorder) V {
+	t.Helper()
+
+	resp := w.Result()
+	defer resp.Body.Close()
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	var actualBody V
+	if err = json.Unmarshal(b, &actualBody); err != nil {
+		t.Errorf("failed to unmarshal response body: %s: %s", string(b), err.Error())
+	}
+	return actualBody
 }

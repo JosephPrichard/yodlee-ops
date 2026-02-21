@@ -13,16 +13,16 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
-	"yodleeops/infra"
-	infrastub "yodleeops/infra/stubs"
+	"yodleeops/internal/infra"
+	infrastub "yodleeops/internal/infra/stubs"
+	"yodleeops/internal/jsonutil"
+	"yodleeops/internal/testutil"
 	openapi "yodleeops/openapi/sources"
-	"yodleeops/testutil"
 )
 
 func scanEvents(resp *http.Response, wantEvents int) []string {
@@ -98,6 +98,10 @@ func TestStreamFiObjectLogs(t *testing.T) {
 }
 
 var errorRespCmpOpts = []cmp.Option{cmpopts.IgnoreFields(openapi.ErrorResp{}, "ErrorDesc")}
+var opsGenericsCmpOpts = []cmp.Option{
+	cmpopts.IgnoreFields(openapi.OpsFiMetadata{}, "LastModified"),
+	cmpopts.IgnoreFields(openapi.ListFiMetadataResponse{}, "Cursor"),
+}
 
 func TestHandleListFiMessages(t *testing.T) {
 	// given
@@ -117,7 +121,7 @@ func TestHandleListFiMessages(t *testing.T) {
 		app            *App
 		name           string
 		profileIDs     string
-		cursors        string
+		cursor         string
 		subject        string
 		wantOpsGeneric openapi.ListFiMetadataResponse
 		wantErrorResp  openapi.ErrorResp
@@ -125,9 +129,9 @@ func TestHandleListFiMessages(t *testing.T) {
 	}{
 		{
 			app:        goodApp,
-			name:       "selecting without cursors",
+			name:       "selecting without cursor",
 			profileIDs: "p1,p2",
-			cursors:    ",", // no cursors.
+			cursor:     "",
 			subject:    string(openapi.FiSubjectAccounts),
 			wantOpsGeneric: openapi.ListFiMetadataResponse{OpsFiMetadata: []openapi.OpsFiMetadata{
 				{
@@ -151,9 +155,9 @@ func TestHandleListFiMessages(t *testing.T) {
 		},
 		{
 			app:        goodApp,
-			name:       "profileIDs length != cursors length",
+			name:       "profileIDs length != cursor length",
 			profileIDs: "p1,p2",
-			cursors:    "cursor1",
+			cursor:     "cursor1",
 			subject:    string(openapi.FiSubjectAccounts),
 			wantErrorResp: openapi.ErrorResp{
 				ErrorCode: openapi.ErrorCodePROFILEIDCURSORLENGTH,
@@ -164,7 +168,7 @@ func TestHandleListFiMessages(t *testing.T) {
 			app:        badApp,
 			name:       "failed to list fi metadata",
 			profileIDs: "p1,p2",
-			cursors:    ",",
+			cursor:     "",
 			subject:    string(openapi.FiSubjectAccounts),
 			wantErrorResp: openapi.ErrorResp{
 				ErrorCode: openapi.ErrorCodeFATALERROR,
@@ -175,10 +179,10 @@ func TestHandleListFiMessages(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			// when
 			r := httptest.NewRequest(http.MethodGet,
-				fmt.Sprintf("%s/fimetadata?profileIDs=%s&cursors=%s&subject=%s",
+				fmt.Sprintf("%s/fimetadata?profileIDs=%s&cursor=%s&subject=%s",
 					ApiUrl,
 					url.QueryEscape(test.profileIDs),
-					url.QueryEscape(test.cursors),
+					url.QueryEscape(test.cursor),
 					url.QueryEscape(test.subject),
 				),
 				nil)
@@ -190,20 +194,113 @@ func TestHandleListFiMessages(t *testing.T) {
 			// then
 			assert.Equal(t, test.wantStatusCode, w.Code)
 			if test.wantStatusCode == http.StatusOK {
-				AssertRespBody(t, test.wantOpsGeneric, w,
-					cmpopts.IgnoreFields(openapi.OpsFiMetadata{}, "LastModified"),
-					cmpopts.IgnoreFields(openapi.ListFiMetadataResponse{}, "Cursors"))
+				testutil.AssertRespBody(t, test.wantOpsGeneric, w, opsGenericsCmpOpts...)
 			} else {
-				AssertRespBody(t, test.wantErrorResp, w, errorRespCmpOpts...)
+				testutil.AssertRespBody(t, test.wantErrorResp, w, errorRespCmpOpts...)
 			}
 		})
 	}
 }
 
+func TestHandleListFiMessages_Pagination(t *testing.T) {
+	// given
+	awsClient := testutil.SetupAwsITest(t)
+
+	app := &App{AwsClient: awsClient}
+	app.AwsClient.PageLength = aws.Int32(1) // testing ListObjectsV2 pagination.
+
+	testutil.SeedS3Buckets(t, awsClient)
+
+	MaxPages := 10 // hard cap to prevent infinite loops for logic errors.
+	cursor := ""
+
+	var statuses []int
+	var responses []openapi.ListFiMetadataResponse
+
+	// when
+	for range MaxPages {
+		r := httptest.NewRequest(http.MethodGet,
+			fmt.Sprintf("%s/fimetadata?profileIDs=p1,p2&cursor=%s&subject=accounts",
+				ApiUrl,
+				url.QueryEscape(cursor),
+			),
+			nil)
+		w := httptest.NewRecorder()
+
+		hander := MakeRoot(app, "")
+		hander.ServeHTTP(w, r)
+
+		listFiMetadataResponse := testutil.GetRespBody[openapi.ListFiMetadataResponse](t, w)
+
+		statuses = append(statuses, w.Code)
+		responses = append(responses, listFiMetadataResponse)
+
+		cursor = listFiMetadataResponse.Cursor
+		if cursor == "" {
+			// endpoint returns an empty string when there are no more pages to read.
+			break
+		}
+	}
+
+	// then
+
+	// assert: only 2 pages, and each page has the data we expect.
+	wantOpsGenerics := []openapi.ListFiMetadataResponse{
+		{OpsFiMetadata: []openapi.OpsFiMetadata{
+			{
+				Key:               "p2/1/20/200/2025-06-14",
+				ProfileID:         "p2",
+				ProviderAccountID: "1",
+				PartyIDTypeCd:     "20",
+				AccountID:         "200",
+				LastUpdated:       time.Date(2025, 6, 14, 0, 0, 0, 0, time.UTC),
+			},
+			{
+				Key:               "p1/1/10/100/2025-06-12",
+				ProfileID:         "p1",
+				ProviderAccountID: "1",
+				PartyIDTypeCd:     "10",
+				AccountID:         "100",
+				LastUpdated:       time.Date(2025, 6, 12, 0, 0, 0, 0, time.UTC),
+			},
+		}},
+		{OpsFiMetadata: []openapi.OpsFiMetadata{
+			{
+				Key:               "p2/1/30/400/2025-06-15",
+				ProfileID:         "p2",
+				ProviderAccountID: "1",
+				PartyIDTypeCd:     "30",
+				AccountID:         "400",
+				LastUpdated:       time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC),
+			},
+			{
+				Key:               "p1/1/10/100/2025-06-13",
+				ProfileID:         "p1",
+				ProviderAccountID: "1",
+				PartyIDTypeCd:     "10",
+				AccountID:         "100",
+				LastUpdated:       time.Date(2025, 6, 13, 0, 0, 0, 0, time.UTC),
+			},
+		}},
+	}
+
+	assert.Equal(t, []int{http.StatusOK, http.StatusOK}, statuses)
+	testutil.Equal(t, wantOpsGenerics, responses, opsGenericsCmpOpts...)
+}
+
 func TestHandleGetFiObject(t *testing.T) {
 	// given
 	testKey := "p1/1/100/3000/2025-06-12T00:14:37Z"
-	testBody := fmt.Sprintf(`{"profileId":"p1","timestamp":"2025-06-12T00:15:00Z","originTopic":"%s", "data": {"key": "value"}}`, infra.TxnResponseTopic)
+	testBody := OpsFiGeneric{
+		OpsFiMessage: OpsFiMessage{
+			ProfileId:   "p1",
+			Timestamp:   time.Date(2025, 6, 12, 0, 15, 00, 0, time.UTC),
+			OriginTopic: infra.TxnResponseTopic,
+		},
+		Data: map[string]json.RawMessage{
+			"key": json.RawMessage(`"value"`),
+		},
+	}
 
 	awsClient := testutil.SetupAwsITest(t)
 
@@ -216,7 +313,7 @@ func TestHandleGetFiObject(t *testing.T) {
 	_, err := awsClient.S3Client.PutObject(t.Context(), &s3.PutObjectInput{
 		Bucket: aws.String(string(awsClient.S3Buckets.TxnBucket)),
 		Key:    aws.String(testKey),
-		Body:   bytes.NewReader([]byte(testBody)),
+		Body:   bytes.NewReader(jsonutil.MustEncodeJson(t, testBody)),
 	})
 	require.NoError(t, err)
 
@@ -276,31 +373,10 @@ func TestHandleGetFiObject(t *testing.T) {
 			// then
 			assert.Equal(t, test.wantStatusCode, w.Code)
 			if test.wantStatusCode == http.StatusOK {
-				AssertRespBody(t, test.wantOpsGeneric, w)
+				testutil.AssertRespBody(t, test.wantOpsGeneric, w)
 			} else {
-				AssertRespBody(t, test.wantErrorResp, w, errorRespCmpOpts...)
+				testutil.AssertRespBody(t, test.wantErrorResp, w, errorRespCmpOpts...)
 			}
 		})
-	}
-}
-
-func AssertRespBody[V any](t *testing.T, wantBody V, w *httptest.ResponseRecorder, opts ...cmp.Option) {
-	t.Helper()
-
-	resp := w.Result()
-	defer resp.Body.Close()
-
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Error(err.Error())
-	}
-
-	var actualBody V
-	if err = json.Unmarshal(b, &actualBody); err != nil {
-		t.Errorf("failed to unmarshal response body: %s: %s", string(b), err.Error())
-	}
-	str := cmp.Diff(wantBody, actualBody, opts...)
-	if str != "" {
-		t.Error(str)
 	}
 }

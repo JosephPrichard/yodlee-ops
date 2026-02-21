@@ -9,7 +9,8 @@ import (
 	"os"
 	"os/signal"
 	"time"
-	"yodleeops/infra"
+	"yodleeops/cmd"
+	"yodleeops/internal/infra"
 	svc "yodleeops/services"
 )
 
@@ -19,7 +20,7 @@ func main() {
 		log.Fatalf("failed to load .env file: %v", err)
 	}
 
-	infra.InitLoggers(nil)
+	cmd.InitLoggers(nil)
 	config := infra.MakeConfig()
 	config.IsLocal = true
 
