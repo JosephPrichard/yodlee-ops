@@ -219,7 +219,7 @@ func main() {
 	for range ticker.C {
 		topicKind := rand.Intn(8)
 
-		var topic string
+		var topic infra.Topic
 		var value any
 
 		n := rand.Intn(10)
@@ -261,7 +261,7 @@ func main() {
 			continue
 		}
 
-		if err := kafkaClient.Producer.WriteMessages(ctx, kafka.Message{Topic: topic, Key: makePartyId(), Value: v}); err != nil {
+		if err := kafkaClient.Producer.WriteMessages(ctx, kafka.Message{Topic: string(topic), Key: makePartyId(), Value: v}); err != nil {
 			slog.Error("failed to produce message", "err", err)
 		}
 	}
