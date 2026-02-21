@@ -7,16 +7,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"github.com/go-faster/jx"
 	"golang.org/x/sync/errgroup"
 	"log/slog"
 	"slices"
 	"sync"
+	"yodleeops/infra"
 )
 
 type OpsFiGeneric struct {
 	OpsFiMessage
-	Data map[string]jx.Raw `json:"data"`
+	Data map[string]json.RawMessage `json:"data"` // ensures that `data` is a JSON object.
 }
 
 type ProfileIDCursorPair struct {
@@ -29,7 +29,7 @@ type ListFiMetadataResult struct {
 	Cursors       map[string]string `json:"cursors"`
 }
 
-func ListFiMetadataByProfileIDs(appCtx AppContext, bucket string, pairs []ProfileIDCursorPair) (results ListFiMetadataResult, err error) {
+func ListFiMetadataByProfileIDs(appCtx AppContext, bucket infra.Bucket, pairs []ProfileIDCursorPair) (results ListFiMetadataResult, err error) {
 	nestedOpsFiMetadata := make([][]OpsFiMetadata, len(pairs))
 
 	var cursorsLock sync.Mutex
@@ -72,13 +72,15 @@ func ListFiMetadataByProfileIDs(appCtx AppContext, bucket string, pairs []Profil
 	return ListFiMetadataResult{OpsFiMetadata: opsFiMetadata, Cursors: cursors}, nil
 }
 
-func ListFiMetadataByProfileID(ctx AppContext, bucket string, profileID string, cursor string) ([]OpsFiMetadata, string, error) {
+func ListFiMetadataByProfileID(ctx AppContext, bucket infra.Bucket, profileID string, cursor string) ([]OpsFiMetadata, string, error) {
 	var continuationToken *string
 	if cursor != "" {
 		continuationToken = aws.String(cursor)
 	}
+	slog.InfoContext(ctx, "listing metadata records", "bucket", bucket, "profileID", profileID, "continuationToken", continuationToken)
+
 	output, err := ctx.S3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-		Bucket:            aws.String(bucket),
+		Bucket:            aws.String(string(bucket)),
 		Prefix:            aws.String(profileID),
 		ContinuationToken: continuationToken,
 		MaxKeys:           ctx.AwsClient.PageLength,
@@ -115,17 +117,19 @@ func ListFiMetadataByProfileID(ctx AppContext, bucket string, profileID string, 
 
 var ErrKeyNotFound = errors.New("key not found")
 
-func GetFiObject(ctx AppContext, bucket string, key string) (OpsFiGeneric, error) {
+func GetFiObject(ctx AppContext, bucket infra.Bucket, key string) (OpsFiGeneric, error) {
+	var fiObject OpsFiGeneric
+
 	object, err := ctx.S3Client.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(bucket),
+		Bucket: aws.String(string(bucket)),
 		Key:    aws.String(key),
 	})
 	if err != nil {
 		var nsk *types.NoSuchKey
 		if errors.As(err, &nsk) {
-			return OpsFiGeneric{}, ErrKeyNotFound
+			return fiObject, ErrKeyNotFound
 		} else {
-			return OpsFiGeneric{}, fmt.Errorf("get object %s/%s: %w", bucket, key, err)
+			return fiObject, fmt.Errorf("get object %s/%s: %w", bucket, key, err)
 		}
 	}
 	defer object.Body.Close()
@@ -134,9 +138,8 @@ func GetFiObject(ctx AppContext, bucket string, key string) (OpsFiGeneric, error
 
 	// todo: add gzip decompression
 
-	var fiMessage OpsFiGeneric
-	if err := json.NewDecoder(object.Body).Decode(&fiMessage); err != nil {
-		return OpsFiGeneric{}, fmt.Errorf("parse object: %w", err)
+	if err := json.NewDecoder(object.Body).Decode(&fiObject); err != nil {
+		return fiObject, fmt.Errorf("parse fi object: %w", err)
 	}
-	return fiMessage, nil
+	return fiObject, nil
 }

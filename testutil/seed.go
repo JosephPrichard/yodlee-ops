@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func SeedS3Buckets(t *testing.T, awsClient *infra.AwsClient) {
+func SeedS3Buckets(t *testing.T, awsClient infra.AwsClient) {
 	// seed the bucket with data to test deletions AND to ensure that inserts handle existing keys properly
 	// "body" can be anything because insertion does not look at this information
 	for _, record := range []struct {
-		Bucket string
+		Bucket infra.Bucket
 		Key    string
 	}{
 		{Bucket: awsClient.CnctBucket, Key: "p1/1/10/2025-06-12"},
@@ -41,7 +41,7 @@ func SeedS3Buckets(t *testing.T, awsClient *infra.AwsClient) {
 		{Bucket: awsClient.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 	} {
 		_, err := awsClient.S3Client.PutObject(t.Context(), &s3.PutObjectInput{
-			Bucket: aws.String(record.Bucket),
+			Bucket: aws.String(string(record.Bucket)),
 			Key:    aws.String(record.Key),
 			Body:   bytes.NewReader([]byte("test")),
 		})

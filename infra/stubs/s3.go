@@ -17,15 +17,13 @@ type BadS3Client struct {
 type BadS3ClientCfg struct {
 	FailPutKey     string
 	FailGetKey     string
-	FailListPrefix map[string]string
+	FailListPrefix map[infra.Bucket]string
 	FailDeleteKeys []string
 }
 
-func MakeBadS3Client(goodS3Client infra.S3Client, cfg BadS3ClientCfg) *BadS3Client {
-	return &BadS3Client{
-		GoodS3Client:   goodS3Client,
-		BadS3ClientCfg: cfg,
-	}
+func MakeBadS3Client(awsClient *infra.AwsClient, cfg BadS3ClientCfg) {
+	goodS3Client := awsClient.S3Client
+	awsClient.S3Client = &BadS3Client{GoodS3Client: goodS3Client, BadS3ClientCfg: cfg}
 }
 
 func (s *BadS3Client) PutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
@@ -43,7 +41,7 @@ func (s *BadS3Client) GetObject(ctx context.Context, params *s3.GetObjectInput, 
 }
 
 func (s *BadS3Client) ListObjectsV2(ctx context.Context, params *s3.ListObjectsV2Input, optFns ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
-	prefixFailList := s.FailListPrefix[*params.Bucket]
+	prefixFailList := s.FailListPrefix[infra.Bucket(*params.Bucket)]
 	if prefixFailList == *params.Prefix {
 		return nil, fmt.Errorf("stub: failed to list objects: %s", *params.Prefix)
 	}

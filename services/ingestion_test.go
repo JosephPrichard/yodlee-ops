@@ -70,7 +70,7 @@ func TestIngestCnctResponses(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, app.AwsClient, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &app.AwsClient, wantObjects, fiMessageOpts...)
 }
 
 func TestIngestAcctResponses(t *testing.T) {
@@ -118,7 +118,7 @@ func TestIngestAcctResponses(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, app.AwsClient, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &app.AwsClient, wantObjects, fiMessageOpts...)
 }
 
 func TestIngestHoldResponses(t *testing.T) {
@@ -166,7 +166,7 @@ func TestIngestHoldResponses(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, app.AwsClient, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &app.AwsClient, wantObjects, fiMessageOpts...)
 }
 
 func TestIngestTxnResponses(t *testing.T) {
@@ -214,7 +214,7 @@ func TestIngestTxnResponses(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, app.AwsClient, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &app.AwsClient, wantObjects, fiMessageOpts...)
 }
 
 func TestIngestCnctRefreshes(t *testing.T) {
@@ -250,7 +250,7 @@ func TestIngestCnctRefreshes(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, app.AwsClient, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &app.AwsClient, wantObjects, fiMessageOpts...)
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
@@ -317,7 +317,7 @@ func TestIngestAcctRefreshes(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, app.AwsClient, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &app.AwsClient, wantObjects, fiMessageOpts...)
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
@@ -384,7 +384,7 @@ func TestIngestTxnRefreshes(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, app.AwsClient, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &app.AwsClient, wantObjects, fiMessageOpts...)
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
@@ -452,7 +452,7 @@ func TestIngestHoldRefreshes(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, app.AwsClient, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &app.AwsClient, wantObjects, fiMessageOpts...)
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
@@ -550,7 +550,7 @@ func TestIngest_PutFailure(t *testing.T) {
 	setupTest := func(failKey string) *App {
 		app := setupIngestionTest(t)
 
-		app.AwsClient.S3Client = infrastub.MakeBadS3Client(app.AwsClient.S3Client, infrastub.BadS3ClientCfg{
+		infrastub.MakeBadS3Client(&app.AwsClient, infrastub.BadS3ClientCfg{
 			FailPutKey: failKey,
 		})
 
@@ -776,8 +776,8 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 		app := setupIngestionTest(t)
 		appCtx := AppContext{Context: ctx, App: app}
 
-		app.AwsClient.S3Client = infrastub.MakeBadS3Client(app.AwsClient.S3Client, infrastub.BadS3ClientCfg{
-			FailListPrefix: map[string]string{
+		infrastub.MakeBadS3Client(&app.AwsClient, infrastub.BadS3ClientCfg{
+			FailListPrefix: map[infra.Bucket]string{
 				app.TxnBucket: "p1/1/100", // fail to list txn by prefix
 			},
 			FailDeleteKeys: []string{"p1/1/100/1000/2025-06-12"}, // fail to delete a holding
@@ -801,8 +801,8 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 		app := setupIngestionTest(t)
 		appCtx := AppContext{Context: ctx, App: app}
 
-		app.AwsClient.S3Client = infrastub.MakeBadS3Client(app.AwsClient.S3Client, infrastub.BadS3ClientCfg{
-			FailListPrefix: map[string]string{
+		infrastub.MakeBadS3Client(&app.AwsClient, infrastub.BadS3ClientCfg{
+			FailListPrefix: map[infra.Bucket]string{
 				app.TxnBucket: "p1/1/100", // fail to list txn by prefix
 			},
 			FailDeleteKeys: []string{"p1/1/10/100/2025-06-12"}, // fail to delete an acct

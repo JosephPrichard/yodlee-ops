@@ -15,21 +15,24 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
+type Topic string
+type Bucket string
+
 const (
-	CnctRefreshTopic    = "cnct-refreshes"
-	AcctRefreshTopic    = "acct-refreshes"
-	HoldRefreshTopic    = "hold-refreshes"
-	TxnRefreshTopic     = "txn-refreshes"
-	CnctResponseTopic   = "cnct-responses"
-	AcctResponseTopic   = "acct-responses"
-	HoldResponseTopic   = "hold-responses"
-	TxnResponseTopic    = "txn-responses"
-	DeleteRecoveryTopic = "delete-recovery"
-	BroadcastTopic      = "broadcast"
-	CnctBucket          = "yodlee-cncts"
-	AcctBucket          = "yodlee-accts"
-	HoldBucket          = "yodlee-holds"
-	TxnBucket           = "yodlee-txns"
+	CnctRefreshTopic    Topic  = "cnct-refreshes"
+	AcctRefreshTopic    Topic  = "acct-refreshes"
+	HoldRefreshTopic    Topic  = "hold-refreshes"
+	TxnRefreshTopic     Topic  = "txn-refreshes"
+	CnctResponseTopic   Topic  = "cnct-responses"
+	AcctResponseTopic   Topic  = "acct-responses"
+	HoldResponseTopic   Topic  = "hold-responses"
+	TxnResponseTopic    Topic  = "txn-responses"
+	DeleteRecoveryTopic Topic  = "delete-recovery"
+	BroadcastTopic      Topic  = "broadcast"
+	CnctBucket          Bucket = "yodlee-cncts"
+	AcctBucket          Bucket = "yodlee-accts"
+	HoldBucket          Bucket = "yodlee-holds"
+	TxnBucket           Bucket = "yodlee-txns"
 )
 
 type Config struct {
@@ -59,8 +62,8 @@ func MakeConfig() Config {
 }
 
 type Clients struct {
-	*KafkaClient
-	*AwsClient
+	KafkaClient
+	AwsClient
 }
 
 type KafkaClient struct {
@@ -92,13 +95,13 @@ type Consumer interface {
 	CommitMessages(context.Context, ...kafka.Message) error
 }
 
-func MakeKafkaData(brokers []string) *KafkaClient {
-	return &KafkaClient{
+func MakeKafkaData(brokers []string) KafkaClient {
+	return KafkaClient{
 		KafkaBrokers: brokers,
 	}
 }
 
-func MakeKafkaProducers(config Config) *KafkaClient {
+func MakeKafkaProducers(config Config) KafkaClient {
 	producers := &kafka.Writer{
 		Addr: kafka.TCP(config.KafkaBrokers...),
 	}
@@ -107,26 +110,26 @@ func MakeKafkaProducers(config Config) *KafkaClient {
 	return client
 }
 
-func MakeKafkaConsumerProducer(config Config) *KafkaClient {
+func MakeKafkaConsumerProducer(config Config) KafkaClient {
 	producers := &kafka.Writer{
 		Addr: kafka.TCP(config.KafkaBrokers...),
 	}
 	log.Printf("created kafka producer with config: %+v", producers)
 
-	compute := func(topic string) *kafka.Reader {
+	compute := func(topic Topic) *kafka.Reader {
 		cfg := kafka.ReaderConfig{
 			GroupID: "compute-consumer-group-id",
 			Brokers: config.KafkaBrokers,
-			Topic:   topic,
+			Topic:   string(topic),
 		}
 		log.Printf("creating kafka compute consumer with config: %+v", cfg)
 		return kafka.NewReader(cfg)
 	}
 
-	broadcast := func(topic string) *kafka.Reader {
+	broadcast := func(topic Topic) *kafka.Reader {
 		cfg := kafka.ReaderConfig{
 			Brokers: config.KafkaBrokers,
-			Topic:   topic,
+			Topic:   string(topic),
 		}
 		log.Printf("created kafka broadcast consumer with config: %+v", cfg)
 		return kafka.NewReader(cfg)
@@ -173,10 +176,10 @@ func (k *KafkaClient) Close() error {
 }
 
 type S3Buckets struct {
-	CnctBucket string
-	AcctBucket string
-	HoldBucket string
-	TxnBucket  string
+	CnctBucket Bucket
+	AcctBucket Bucket
+	HoldBucket Bucket
+	TxnBucket  Bucket
 }
 
 type AwsClient struct {
@@ -192,7 +195,7 @@ type S3Client interface {
 	DeleteObjects(ctx context.Context, params *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
 }
 
-func MakeAwsClient(cfg Config) *AwsClient {
+func MakeAwsClient(cfg Config) AwsClient {
 	opts := []func(*config.LoadOptions) error{
 		config.WithRegion(cfg.AwsDefaultRegion),
 	}
@@ -205,7 +208,7 @@ func MakeAwsClient(cfg Config) *AwsClient {
 		log.Fatalf("failed to load AWS config: %v", err)
 	}
 
-	return &AwsClient{
+	return AwsClient{
 		S3Client: s3.NewFromConfig(awsCfg, func(o *s3.Options) {
 			if cfg.AwsEndpoint != "" {
 				o.BaseEndpoint = aws.String(cfg.AwsEndpoint)

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/go-faster/jx"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
@@ -19,6 +20,7 @@ import (
 	"testing"
 	"time"
 	"yodleeops/infra"
+	infrastub "yodleeops/infra/stubs"
 	openapi "yodleeops/openapi/sources"
 	"yodleeops/testutil"
 )
@@ -54,7 +56,7 @@ func scanEvents(resp *http.Response, wantEvents int) []string {
 	return events
 }
 
-func TestHandleTailLogSSE(t *testing.T) {
+func TestStreamFiObjectLogs(t *testing.T) {
 	app := &App{
 		FiMessageBroadcaster: &FiMessageBroadcaster{},
 	}
@@ -67,7 +69,8 @@ func TestHandleTailLogSSE(t *testing.T) {
 	defer cancel()
 
 	// when
-	query := fmt.Sprintf("%s/taillog?profileIDs=profile1,profile2,profile3&topics=%s,%s", testServer.URL+BaseURL, HoldingsInput, TransactionsInput)
+	query := fmt.Sprintf("%s/events/taillog?profileIDs=profile1,profile2,profile3&subjects=%s,%s",
+		testServer.URL+ApiUrl, openapi.FiSubjectHoldings, openapi.FiSubjectTransactions)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, query, nil)
 	require.NoError(t, err)
 
@@ -94,23 +97,24 @@ func TestHandleTailLogSSE(t *testing.T) {
 	assert.Equal(t, wantEvents, scanEvents(resp, len(wantEvents)))
 }
 
-func setupS3ApiTest(t *testing.T) *App {
-	awsClient := testutil.SetupAwsITest(t)
-
-	app := &App{AwsClient: awsClient}
-	app.AwsClient.PageLength = aws.Int32(1) // testing ListObjectsV2 pagination.
-
-	testutil.SeedS3Buckets(t, app.AwsClient)
-	return app
-}
-
 var errorRespCmpOpts = []cmp.Option{cmpopts.IgnoreFields(openapi.ErrorResp{}, "ErrorDesc")}
 
 func TestHandleListFiMessages(t *testing.T) {
 	// given
-	app := setupS3ApiTest(t)
+	awsClient := testutil.SetupAwsITest(t)
+
+	goodApp := &App{AwsClient: awsClient}
+	goodApp.AwsClient.PageLength = aws.Int32(1) // testing ListObjectsV2 pagination.
+
+	badApp := &App{AwsClient: awsClient}
+	infrastub.MakeBadS3Client(&badApp.AwsClient, infrastub.BadS3ClientCfg{
+		FailListPrefix: map[infra.Bucket]string{awsClient.AcctBucket: "p1"},
+	})
+
+	testutil.SeedS3Buckets(t, awsClient)
 
 	for _, test := range []struct {
+		app            *App
 		name           string
 		profileIDs     string
 		cursors        string
@@ -120,10 +124,11 @@ func TestHandleListFiMessages(t *testing.T) {
 		wantStatusCode int
 	}{
 		{
+			app:        goodApp,
 			name:       "selecting without cursors",
 			profileIDs: "p1,p2",
 			cursors:    ",", // no cursors.
-			subject:    AccountsInput,
+			subject:    string(openapi.FiSubjectAccounts),
 			wantOpsGeneric: openapi.ListFiMetadataResponse{OpsFiMetadata: []openapi.OpsFiMetadata{
 				{
 					Key:               "p2/1/20/200/2025-06-14",
@@ -145,21 +150,33 @@ func TestHandleListFiMessages(t *testing.T) {
 			wantStatusCode: http.StatusOK,
 		},
 		{
+			app:        goodApp,
 			name:       "profileIDs length != cursors length",
 			profileIDs: "p1,p2",
 			cursors:    "cursor1",
-			subject:    AccountsInput,
+			subject:    string(openapi.FiSubjectAccounts),
 			wantErrorResp: openapi.ErrorResp{
 				ErrorCode: openapi.ErrorCodePROFILEIDCURSORLENGTH,
 			},
 			wantStatusCode: http.StatusBadRequest,
+		},
+		{
+			app:        badApp,
+			name:       "failed to list fi metadata",
+			profileIDs: "p1,p2",
+			cursors:    ",",
+			subject:    string(openapi.FiSubjectAccounts),
+			wantErrorResp: openapi.ErrorResp{
+				ErrorCode: openapi.ErrorCodeFATALERROR,
+			},
+			wantStatusCode: http.StatusInternalServerError,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			// when
 			r := httptest.NewRequest(http.MethodGet,
 				fmt.Sprintf("%s/fimetadata?profileIDs=%s&cursors=%s&subject=%s",
-					BaseURL,
+					ApiUrl,
 					url.QueryEscape(test.profileIDs),
 					url.QueryEscape(test.cursors),
 					url.QueryEscape(test.subject),
@@ -167,7 +184,7 @@ func TestHandleListFiMessages(t *testing.T) {
 				nil)
 			w := httptest.NewRecorder()
 
-			hander := MakeRoot(app, "")
+			hander := MakeRoot(test.app, "")
 			hander.ServeHTTP(w, r)
 
 			// then
@@ -185,59 +202,75 @@ func TestHandleListFiMessages(t *testing.T) {
 
 func TestHandleGetFiObject(t *testing.T) {
 	// given
+	testKey := "p1/1/100/3000/2025-06-12T00:14:37Z"
+	testBody := fmt.Sprintf(`{"profileId":"p1","timestamp":"2025-06-12T00:15:00Z","originTopic":"%s", "data": {"key": "value"}}`, infra.TxnResponseTopic)
+
 	awsClient := testutil.SetupAwsITest(t)
-	app := &App{AwsClient: awsClient}
 
-	inputKey := "p1/1/100/3000/2025-06-12T00:14:37Z"
-	inputBody := fmt.Sprintf(`{"profileId":"p1","timestamp":"2025-06-12T00:15:00Z","originTopic":"%s"}`, infra.TxnResponseTopic)
+	goodApp := &App{AwsClient: awsClient}
+	badApp := &App{AwsClient: awsClient}
+	infrastub.MakeBadS3Client(&badApp.AwsClient, infrastub.BadS3ClientCfg{
+		FailGetKey: testKey,
+	})
 
-	_, err := app.S3Client.PutObject(t.Context(), &s3.PutObjectInput{
-		Bucket: aws.String(app.AwsClient.TxnBucket),
-		Key:    aws.String(inputKey),
-		Body:   bytes.NewReader([]byte(inputBody)),
+	_, err := awsClient.S3Client.PutObject(t.Context(), &s3.PutObjectInput{
+		Bucket: aws.String(string(awsClient.S3Buckets.TxnBucket)),
+		Key:    aws.String(testKey),
+		Body:   bytes.NewReader([]byte(testBody)),
 	})
 	require.NoError(t, err)
 
 	for _, test := range []struct {
+		app            *App
 		name           string
 		key            string
 		subject        string
-		wantOpsGeneric openapi.GetFiObjectOK
+		wantOpsGeneric openapi.FiObject
 		wantErrorResp  openapi.ErrorResp
 		wantStatusCode int
 	}{
 		{
+			app:     goodApp,
 			name:    "valid key",
-			key:     inputKey,
-			subject: TransactionsInput,
-			wantOpsGeneric: openapi.GetFiObjectOK{
+			key:     testKey,
+			subject: string(openapi.FiSubjectTransactions),
+			wantOpsGeneric: openapi.FiObject{
 				ProfileId:   "p1",
 				Timestamp:   time.Date(2025, 6, 12, 0, 15, 00, 0, time.UTC),
-				OriginTopic: infra.TxnResponseTopic,
-				Data:        openapi.GetFiObjectOKData{},
+				OriginTopic: string(infra.TxnResponseTopic),
+				Data:        map[string]jx.Raw{"key": jx.Raw("\"value\"")},
 			},
 			wantStatusCode: http.StatusOK,
 		},
 		{
+			app:            goodApp,
 			name:           "invalid key",
 			key:            "p1/invalid-key",
-			subject:        TransactionsInput,
+			subject:        string(openapi.FiSubjectTransactions),
 			wantErrorResp:  openapi.ErrorResp{ErrorCode: openapi.ErrorCodeKEYNOTFOUND},
 			wantStatusCode: http.StatusNotFound,
+		},
+		{
+			app:            badApp,
+			name:           "failed to get fi object",
+			key:            testKey,
+			subject:        string(openapi.FiSubjectTransactions),
+			wantErrorResp:  openapi.ErrorResp{ErrorCode: openapi.ErrorCodeFATALERROR},
+			wantStatusCode: http.StatusInternalServerError,
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			// when
 			r := httptest.NewRequest(http.MethodGet,
 				fmt.Sprintf("%s/fiobject?key=%s&subject=%s",
-					BaseURL,
+					ApiUrl,
 					url.QueryEscape(test.key),
 					url.QueryEscape(test.subject),
 				),
 				nil)
 			w := httptest.NewRecorder()
 
-			hander := MakeRoot(app, "")
+			hander := MakeRoot(test.app, "")
 			hander.ServeHTTP(w, r)
 
 			// then
@@ -264,7 +297,7 @@ func AssertRespBody[V any](t *testing.T, wantBody V, w *httptest.ResponseRecorde
 
 	var actualBody V
 	if err = json.Unmarshal(b, &actualBody); err != nil {
-		t.Errorf("failed to unmarshal response body=%s: %s", string(b), err.Error())
+		t.Errorf("failed to unmarshal response body: %s: %s", string(b), err.Error())
 	}
 	str := cmp.Diff(wantBody, actualBody, opts...)
 	if str != "" {

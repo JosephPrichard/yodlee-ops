@@ -132,7 +132,7 @@ type OpsFiMetadata struct {
 
 type ParseOpsFiMetadataError struct {
 	Key              string
-	Bucket           string
+	Bucket           infra.Bucket
 	WantTokenCount   int
 	ActualTokenCount int
 }
@@ -154,7 +154,7 @@ func TimeParseLax(dateString string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("parse time with any known layout: %s", dateString)
 }
 
-func (o *OpsFiMetadata) ParseOpsFiMetadata(buckets infra.S3Buckets, bucket string, key string) error {
+func (o *OpsFiMetadata) ParseOpsFiMetadata(buckets infra.S3Buckets, bucket infra.Bucket, key string) error {
 	tokens := strings.Split(key, "/")
 
 	switch bucket {

@@ -2,6 +2,7 @@ package svc
 
 import (
 	"time"
+	"yodleeops/infra"
 	"yodleeops/internal/yodlee"
 )
 
@@ -18,9 +19,9 @@ type YodleeInput interface {
 // Ops data types are wrappers for yodlee data types that add some additional context to the data type.
 
 type OpsFiMessage struct {
-	ProfileId   string    `json:"profileId"`
-	Timestamp   time.Time `json:"timestamp"`
-	OriginTopic string    `json:"originTopic"`
+	ProfileId   string      `json:"profileId"`
+	Timestamp   time.Time   `json:"timestamp"`
+	OriginTopic infra.Topic `json:"originTopic"`
 }
 
 type OpsProviderAccountRefresh struct {
@@ -93,8 +94,8 @@ const (
 )
 
 type DeleteRetry struct {
-	Kind   string   `json:"kind"` // either 'list' or 'delete'
-	Bucket string   `json:"Bucket"`
-	Prefix string   `json:"prefix"`
-	Keys   []string `json:"keys"`
+	Kind   string       `json:"kind"` // either 'list' or 'delete'
+	Bucket infra.Bucket `json:"bucket"`
+	Prefix string       `json:"prefix"`
+	Keys   []string     `json:"keys"`
 }

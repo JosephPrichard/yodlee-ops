@@ -71,15 +71,13 @@ func ConsumeFiMessages[Message any](appCtx AppContext, reader infra.Consumer, on
 
 type BroadcastInput[Wrap YodleeWrapper[Inner], Inner any] struct {
 	// content of the fi messages, data extracts, response, etc.
-	FiMessages []Wrap `json:"messages"`
-	// the topic that a broadcast to be sent *originally* comes from
-	// if we receive an input on `CnctRefreshTopic` and then need to broadcast the data after success upload, this value will be `CnctRefreshTopic`
-	OriginTopic string `json:"origintopic"`
+	FiMessages  []Wrap      `json:"messages"`
+	OriginTopic infra.Topic `json:"originTopic"`
 }
 
 func HandleAfterPublish[Wrap YodleeWrapper[Inner], Inner any](
 	ctx AppContext,
-	topic string,
+	topic infra.Topic,
 	key string,
 	putResults []PutResult[Wrap],
 	mapInputs func([]Inner) any,
@@ -206,14 +204,15 @@ type BroadcastOutput struct {
 }
 
 func HandleBroadcastMessage(ctx AppContext, _ string, broadcast BroadcastOutput) {
-	for _, msg := range broadcast.FiMessages {
-		var partial OpsFiMessage
-		if err := json.Unmarshal(msg, &partial); err != nil {
-			slog.ErrorContext(ctx, "failed to unmarshal broadcast message partial", "err", err)
+	for _, binaryMsg := range broadcast.FiMessages {
+		var opsFiMessage OpsFiMessage
+		if err := json.Unmarshal(binaryMsg, &opsFiMessage); err != nil {
+			slog.ErrorContext(ctx, "failed to unmarshal broadcast message opsFiMessage", "err", err)
 			continue
 		}
-		strMsg := string(msg)
-		slog.InfoContext(ctx, "broadcasting message", "topic", broadcast.OriginTopic, "message", strMsg)
-		ctx.FiMessageBroadcaster.Broadcast(partial.ProfileId, broadcast.OriginTopic, strMsg)
+
+		strMsg := string(binaryMsg)
+		slog.InfoContext(ctx, "broadcasting message", "topic", opsFiMessage.OriginTopic, "message", strMsg)
+		ctx.FiMessageBroadcaster.Broadcast(opsFiMessage.ProfileId, opsFiMessage.OriginTopic, strMsg)
 	}
 }

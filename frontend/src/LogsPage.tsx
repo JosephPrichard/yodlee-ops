@@ -13,14 +13,14 @@ type Log = {
 
 type LogsPageProps = {
     profileIDs: string;
-    topics: string;
+    subjects: string;
 };
 
 type LogMsgProps = {
     log: Log;
     isSelected: boolean;
     setSelectedLog: (log: Log | null) => void;
-}
+};
 
 function toPascalCase(str: string): string {
     return str
@@ -57,7 +57,7 @@ const LogMsg: React.FC<LogMsgProps> = ({ log, isSelected, setSelectedLog }) => {
 
 let LOG_KEY = 0;
 
-export const LogsPage: React.FC<LogsPageProps> = ({ profileIDs, topics }) => {
+export const LogsPage: React.FC<LogsPageProps> = ({ profileIDs, subjects }) => {
     const navigate = useNavigate();
 
     const [logs, setLogs] = useState<List<Log>>(List());
@@ -67,8 +67,8 @@ export const LogsPage: React.FC<LogsPageProps> = ({ profileIDs, topics }) => {
         setLogs(List());
         setSelectedLog(null);
 
-        const tailLogQuery = `?profileIDs=${profileIDs}&topics=${topics}`;
-        const evtSource = new EventSource(`${API_URL}/taillog${tailLogQuery}`);
+        const tailLogQuery = `?profileIDs=${profileIDs}&subjects=${subjects}`;
+        const evtSource = new EventSource(`${API_URL}/events/taillog${tailLogQuery}`);
 
         const handleLog = (event: MessageEvent) => {
             try {
@@ -86,7 +86,7 @@ export const LogsPage: React.FC<LogsPageProps> = ({ profileIDs, topics }) => {
             evtSource.removeEventListener("log", handleLog);
             evtSource.close();
         };
-    }, [profileIDs, topics]);
+    }, [profileIDs, subjects]);
 
     return (
         <React.Fragment>
@@ -101,8 +101,8 @@ export const LogsPage: React.FC<LogsPageProps> = ({ profileIDs, topics }) => {
                             e.preventDefault();
                             const formData = new FormData(e.currentTarget);
                             const newProfileIDs = formData.get("profileIDs")?.toString();
-                            const newTopics = formData.get("topics")?.toString();
-                            navigate("/logs?profileIDs=" + newProfileIDs + "&topics=" + newTopics, { replace: true });
+                            const newTopics = formData.get("subjects")?.toString();
+                            navigate("/logs?profileIDs=" + newProfileIDs + "&subjects=" + newTopics, { replace: true });
                         }}
                     >
                         <div className="form-element">
@@ -122,18 +122,18 @@ export const LogsPage: React.FC<LogsPageProps> = ({ profileIDs, topics }) => {
 
                         <div className="form-element">
                             <label>
-                                <span className="label-text">Topics</span>
+                                <span className="label-text">Subjects</span>
                             </label>
                             <div className="input-anchor">
                                 <input
                                     className="text-input"
                                     type="text"
-                                    name="topics"
-                                    defaultValue={topics}
+                                    name="subjects"
+                                    defaultValue={subjects}
                                 />
                             </div>
                             <div className="label-tooltip">
-                                *Enter topics (connections, accounts, transactions, holdings) to
+                                *Enter subjects (connections, accounts, transactions, holdings) to
                                 subscribe to, separated by commas
                             </div>
                         </div>

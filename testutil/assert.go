@@ -22,7 +22,7 @@ func Equal[T any](t *testing.T, expected, actual T, opts ...cmp.Option) {
 }
 
 type WantObject[JSON any] struct {
-	Bucket string
+	Bucket infra.Bucket
 	Key    string
 	Value  JSON
 }
@@ -35,7 +35,7 @@ func AssertObjects[JSON any](t *testing.T, awsClient *infra.AwsClient, objects [
 	for _, object := range objects {
 		func() {
 			resp, err := awsClient.S3Client.GetObject(context.Background(), &s3.GetObjectInput{
-				Bucket: aws.String(object.Bucket),
+				Bucket: aws.String(string(object.Bucket)),
 				Key:    aws.String(object.Key),
 			})
 			if err != nil {
@@ -64,15 +64,15 @@ func AssertObjects[JSON any](t *testing.T, awsClient *infra.AwsClient, objects [
 }
 
 type WantKey struct {
-	Bucket string
+	Bucket infra.Bucket
 	Key    string
 }
 
-func GetAllKeys(t *testing.T, awsClient *infra.AwsClient) []WantKey {
+func GetAllKeys(t *testing.T, awsClient infra.AwsClient) []WantKey {
 	var keys []WantKey
 
-	for _, bucket := range []string{awsClient.CnctBucket, awsClient.AcctBucket, awsClient.HoldBucket, awsClient.TxnBucket} {
-		paginator := s3.NewListObjectsV2Paginator(awsClient.S3Client, &s3.ListObjectsV2Input{Bucket: aws.String(bucket)})
+	for _, bucket := range []infra.Bucket{awsClient.CnctBucket, awsClient.AcctBucket, awsClient.HoldBucket, awsClient.TxnBucket} {
+		paginator := s3.NewListObjectsV2Paginator(awsClient.S3Client, &s3.ListObjectsV2Input{Bucket: aws.String(string(bucket))})
 
 		for paginator.HasMorePages() {
 			page, err := paginator.NextPage(context.Background())

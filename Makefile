@@ -1,22 +1,20 @@
-all: protos
+all: go-generate swagger-ui build-ui
 
-protos:
-	cd pb && \
-	protoc \
-		--go_opt=paths=source_relative \
-		--go_out=. \
-		--proto_path . \
-		./messages.proto
+build-ui:
+	cd frontend && npm run build
 
-templ:
-	templ generate
+go-generate:
+	cd openapi && go generate
+
+swagger-ui:
+	docker run --rm -v ./openapi:/openapi redocly/cli build-docs /openapi/yodlee-ops.yaml -o /openapi/static/index.html
 
 install:
 	go install github.com/ogen-go/ogen/cmd/ogen@latest
-	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-	go install github.com/a-h/templ/cmd/templ@latest
 
 clean:
-	rm ./pb/messageapp.pb.go
+	rm -rf ./frontend/dist
+	rm -rf ./openapi/sources
+	rm -rf ./openapi/static
 
 .PHONY: all clean

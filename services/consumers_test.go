@@ -70,7 +70,7 @@ func stubbedFiMessages(producerStub *infrastub.Producer) []any {
 			result = fmt.Errorf("did not expect message on delete recovery topic: %s", kafkaMsg.Value)
 		case infra.BroadcastTopic:
 			type broadcastOutput struct {
-				OriginTopic string          `json:"origintopic"`
+				OriginTopic infra.Topic     `json:"origintopic"`
 				FiMessages  json.RawMessage `json:"messages"`
 			}
 			var brd broadcastOutput
@@ -114,7 +114,7 @@ func TestFiMessageConsumers(t *testing.T) {
 	appCtx := AppContext{Context: t.Context(), App: app}
 
 	producerStub := &infrastub.Producer{}
-	app.KafkaClient = &infra.KafkaClient{Producer: producerStub}
+	app.KafkaClient = infra.KafkaClient{Producer: producerStub}
 
 	providerAccountRefresh := yodlee.DataExtractsProviderAccount{
 		Id:          99,
@@ -269,7 +269,7 @@ func TestFiMessageConsumers_S3Errors(t *testing.T) {
 	appCtx := AppContext{Context: t.Context(), App: app}
 
 	producerStub := &infrastub.Producer{}
-	app.KafkaClient = &infra.KafkaClient{Producer: producerStub}
+	app.KafkaClient = infra.KafkaClient{Producer: producerStub}
 
 	key := "p1" // all messages for same profileId.
 
@@ -385,7 +385,7 @@ func TestFiMessageConsumers_S3Errors(t *testing.T) {
 		},
 	} {
 		if test.failPutKey != "" {
-			app.AwsClient.S3Client = infrastub.MakeBadS3Client(app.AwsClient.S3Client, infrastub.BadS3ClientCfg{
+			infrastub.MakeBadS3Client(&app.AwsClient, infrastub.BadS3ClientCfg{
 				FailPutKey: test.failPutKey,
 			})
 		}

@@ -301,7 +301,7 @@ func (o PutInput[T]) String() string {
 }
 
 // PutObjects uploads objects to a given Bucket async and returns any failed uploads when the task is joined
-func PutObjects[Input any](ctx AppContext, bucket string, inputObjects []PutInput[Input]) func() []PutResult[Input] {
+func PutObjects[Input any](ctx AppContext, bucket infra.Bucket, inputObjects []PutInput[Input]) func() []PutResult[Input] {
 	results := make([]PutResult[Input], len(inputObjects))
 
 	var wg sync.WaitGroup
@@ -316,7 +316,7 @@ func PutObjects[Input any](ctx AppContext, bucket string, inputObjects []PutInpu
 			defer wg.Done()
 			// todo: add gzip compression
 			_, err := ctx.S3Client.PutObject(ctx, &s3.PutObjectInput{
-				Bucket: aws.String(bucket),
+				Bucket: aws.String(string(bucket)),
 				Key:    aws.String(object.Key),
 				Body:   bytes.NewReader(body),
 			})
@@ -435,7 +435,7 @@ func (ds *DeleteSupervisor) AddResult(deleteResult DeleteResult) {
 	ds.lock.Unlock()
 }
 
-func (ds *DeleteSupervisor) DeleteList(bucket string, listIDsChan chan ListResult) {
+func (ds *DeleteSupervisor) DeleteList(bucket infra.Bucket, listIDsChan chan ListResult) {
 	ds.Go(func() {
 		for listResult := range listIDsChan {
 			slog.InfoContext(ds.context, "deleting listed ids", "Bucket", bucket, "listResult", listResult)
@@ -458,7 +458,7 @@ type DeleteChunk struct {
 	Keys   []s3types.ObjectIdentifier
 }
 
-func (ds *DeleteSupervisor) deleteIDs(bucket string, keys []string) {
+func (ds *DeleteSupervisor) deleteIDs(bucket infra.Bucket, keys []string) {
 	ds.Go(func() {
 		deleteResult := DeleteObjects(ds.context, bucket, keys)
 		ds.AddResult(deleteResult)
@@ -507,7 +507,7 @@ func DeleteCncts(ctx AppContext, keys []CnctKey) []DeleteResult {
 	acctsPrefixTable := listAccts.Wait()
 
 	for acctPrefix := range acctsPrefixTable {
-		for _, bucket := range []string{
+		for _, bucket := range []infra.Bucket{
 			ctx.HoldBucket,
 			ctx.TxnBucket,
 		} {
@@ -541,7 +541,7 @@ func DeleteAccts(ctx AppContext, keys []AcctKey) []DeleteResult {
 	deletes := makeDeleteSupervisor(ctx)
 
 	for acctMemPrefix := range acctMembPrefixes {
-		for _, bucket := range []string{
+		for _, bucket := range []infra.Bucket{
 			ctx.HoldBucket,
 			ctx.TxnBucket,
 		} {
@@ -556,12 +556,12 @@ func DeleteAccts(ctx AppContext, keys []AcctKey) []DeleteResult {
 }
 
 type Prefix struct {
-	Bucket string
+	Bucket infra.Bucket
 	Value  string
 }
 
 func (p Prefix) String() string {
-	return p.Bucket + ":" + p.Value
+	return string(p.Bucket) + ":" + p.Value
 }
 
 // DeletePrefixes generically deletes pairs of prefixes in one shot.
@@ -582,7 +582,7 @@ func DeletePrefixes(ctx AppContext, prefixes map[Prefix]bool) []DeleteResult {
 }
 
 type ListResult struct {
-	Bucket string
+	Bucket infra.Bucket
 	Prefix string
 	Keys   []string
 	Err    error
@@ -590,7 +590,7 @@ type ListResult struct {
 
 // ListObjectsByPrefix lists all object keys for a certain prefix in a Bucket and streams each page of data through a channel as they come.
 // aws s3 API does not support multiple buckets/prefixes per call, so each Bucket prefix needs its own api call.
-func ListObjectsByPrefix(ctx AppContext, bucket string, prefix string) chan ListResult {
+func ListObjectsByPrefix(ctx AppContext, bucket infra.Bucket, prefix string) chan ListResult {
 	resultsChan := make(chan ListResult)
 
 	// paginate through all objects under the given prefix for a Bucket and send each page to the channel. closes when all pages have been walked
@@ -598,7 +598,7 @@ func ListObjectsByPrefix(ctx AppContext, bucket string, prefix string) chan List
 		defer close(resultsChan)
 
 		paginator := s3.NewListObjectsV2Paginator(ctx.S3Client, &s3.ListObjectsV2Input{
-			Bucket:  aws.String(bucket),
+			Bucket:  aws.String(string(bucket)),
 			Prefix:  aws.String(prefix),
 			MaxKeys: ctx.PageLength,
 		})
@@ -639,7 +639,7 @@ func ListObjectsByPrefix(ctx AppContext, bucket string, prefix string) chan List
 }
 
 type DeleteResult struct {
-	Bucket string
+	Bucket infra.Bucket
 	Prefix string
 	Keys   []string
 	Err    error
@@ -647,14 +647,14 @@ type DeleteResult struct {
 
 // DeleteObjects is a helper to delete all keys from a Bucket and log
 // if a deletion call fails, we should log and continue execution, but we rely on another refresh to come in and actually delete these records
-func DeleteObjects(ctx AppContext, bucket string, keys []string) DeleteResult {
+func DeleteObjects(ctx AppContext, bucket infra.Bucket, keys []string) DeleteResult {
 	objectIDs := make([]s3types.ObjectIdentifier, 0, len(keys))
 	for _, key := range keys {
 		objectIDs = append(objectIDs, s3types.ObjectIdentifier{Key: aws.String(key)})
 	}
 
 	_, err := ctx.S3Client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
-		Bucket: aws.String(bucket),
+		Bucket: aws.String(string(bucket)),
 		Delete: &s3types.Delete{Objects: objectIDs},
 	})
 	if err != nil {

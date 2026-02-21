@@ -6,25 +6,20 @@ const LogsPageWrapper: React.FC = () => {
     const [searchParams] = useSearchParams();
 
     const profileIDs = searchParams.get("profileIDs")?.toString() ?? "";
-    let topics = searchParams.get("topics")?.toString() ?? "";
+    let subjects = searchParams.get("subjects")?.toString() ?? "";
 
-    if (topics === "") {
-        topics = "connections,accounts,transactions,holdings";
+    if (subjects === "") {
+        subjects = "connections,accounts,transactions,holdings";
     }
 
-    return <LogsPage profileIDs={profileIDs} topics={topics} />;
+    return <LogsPage profileIDs={profileIDs} subjects={subjects} />;
 };
 
 const HomePage: React.FC = () => {
     const navigate = useNavigate();
 
-    const goToProfileTree = () => {
-
-    }
-
-    const goToLogs = () => {
-        navigate("/logs");
-    };
+    const goToProfileTree = () => {};
+    const goToLogs = () => navigate("/logs");
 
     return (
         <div style={{ display: "flex", justifyContent: "center", alignItems: "center", height: "100vh", flexDirection: "column" }}>

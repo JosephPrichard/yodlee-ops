@@ -28,8 +28,10 @@ go.work.sum
 .env
 
 frontend/dist
-
+openapi/static
 openapi/sources
+
+*.ps1
 
 # Editor/IDE
 # .idea/

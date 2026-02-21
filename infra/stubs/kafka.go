@@ -3,10 +3,11 @@ package infrastub
 import (
 	"context"
 	"github.com/segmentio/kafka-go"
+	"yodleeops/infra"
 )
 
 type KafkaMessage struct {
-	Topic string
+	Topic infra.Topic
 	Key   string
 	Value []byte
 }
@@ -17,7 +18,7 @@ type Producer struct {
 
 func (p *Producer) WriteMessages(_ context.Context, msgs ...kafka.Message) error {
 	for _, m := range msgs {
-		p.Messages = append(p.Messages, KafkaMessage{Topic: m.Topic, Key: string(m.Key), Value: m.Value})
+		p.Messages = append(p.Messages, KafkaMessage{Topic: infra.Topic(m.Topic), Key: string(m.Key), Value: m.Value})
 	}
 	return nil
 }

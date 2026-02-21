@@ -3,6 +3,7 @@ package svc
 import (
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"yodleeops/infra"
 )
 
 func TestFiMessageBroadcaster(t *testing.T) {
@@ -10,15 +11,15 @@ func TestFiMessageBroadcaster(t *testing.T) {
 
 	ch1 := b.Subscribe(SubscriberFilter{
 		ProfileIDs: []string{"profile1"},
-		Topics:     []string{"topic1"},
+		Topics:     []infra.Topic{"topic1"},
 	})
 	ch2 := b.Subscribe(SubscriberFilter{
 		ProfileIDs: []string{"profile2"},
-		Topics:     []string{"topic2"},
+		Topics:     []infra.Topic{"topic2"},
 	})
 	ch3 := b.Subscribe(SubscriberFilter{
 		ProfileIDs: []string{"profile1"},
-		Topics:     []string{"topic1", "topic2"},
+		Topics:     []infra.Topic{"topic1", "topic2"},
 	})
 	ch4 := b.Subscribe(SubscriberFilter{
 		ProfileIDs: []string{"profile1"},

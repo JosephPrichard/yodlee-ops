@@ -1,4 +1,4 @@
-export const API_URL = "http://localhost:8080";
+export const API_URL = "http://localhost:8080/yodlee-ops/api/v1";
 
 export const JSON_VIEW_THEME = {
     // Background layers (top)

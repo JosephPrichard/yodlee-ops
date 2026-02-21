@@ -8,6 +8,23 @@ servers:
   - url: /yodlee-ops/api/v1
 
 paths:
+  # note: most code generators don't work with server-sent events, this is documentation only.
+  /taillog:
+    get:
+      summary: Stream tail logs.
+      description: Stream logs for real-time ingestion events via Server-Sent Events.
+      operationId: streamLogs
+      responses:
+        '200':
+          description: Successful SSE stream
+          content:
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/FiObject"
+
+        '500':
+          description: Server error
+
   /fimetadata:
     get:
       summary: Get FI metadata
@@ -48,7 +65,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResp"
-        default:
+        "500":
           description: Internal Server Error
           content:
             application/json:
@@ -81,37 +98,14 @@ paths:
           content:
             application/json:
               schema:
-                required:
-                  - profileId
-                  - timestamp
-                  - originTopic
-                  - data
-                type: object
-                properties:
-                  profileId:
-                    type: string
-                    example: "p1"
-                  timestamp:
-                    type: string
-                    format: date-time
-                    example: "2026-02-19T04:33:11Z"
-                  originTopic:
-                    type: string
-                    example: "acctResponseTopic"
-                  data:
-                    type: object
-                    description: Arbitrary JSON payload
-                    additionalProperties: true
-                    example:
-                      accountId: "100"
-                      balance: 5000
+                $ref: "#/components/schemas/FiObject"
         "404":
           description: Not Found
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResp"
-        default:
+        "500":
           description: Internal Server Error
           content:
             application/json:
@@ -120,6 +114,31 @@ paths:
 
 components:
   schemas:
+    FiObject:
+      required:
+        - profileId
+        - timestamp
+        - originTopic
+        - data
+      type: object
+      properties:
+        profileId:
+          type: string
+          example: "p1"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2026-02-19T04:33:11Z"
+        originTopic:
+          type: string
+          example: "acctResponseTopic"
+        data:
+          type: "object"
+          description: Arbitrary JSON payload
+          additionalProperties: true
+          example:
+            accountId: "100"
+            balance: 5000
 
     FiSubject:
       type: string

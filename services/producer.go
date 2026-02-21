@@ -8,7 +8,7 @@ import (
 	"yodleeops/infra"
 )
 
-func ProduceJsonMessage(ctx AppContext, topic string, key string, fiMessage any) {
+func ProduceJsonMessage(ctx AppContext, topic infra.Topic, key string, fiMessage any) {
 	inputBytes, err := json.Marshal(fiMessage)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to republish json messages", "err", err)
@@ -18,7 +18,7 @@ func ProduceJsonMessage(ctx AppContext, topic string, key string, fiMessage any)
 
 	if err := ctx.Producer.WriteMessages(ctx, kafka.Message{
 		Key:   []byte(key),
-		Topic: topic,
+		Topic: string(topic),
 		Value: inputBytes,
 	}); err != nil {
 		slog.ErrorContext(ctx, "failed to json messages", "err", err)
@@ -27,7 +27,7 @@ func ProduceJsonMessage(ctx AppContext, topic string, key string, fiMessage any)
 
 type DeleteErrorMsg struct {
 	Key   string
-	Topic string
+	Topic infra.Topic
 	Value any
 }
 
@@ -77,7 +77,7 @@ func ProduceDeleteErrors(ctx AppContext, profileId string, deleteErrs []DeleteRe
 		}
 		msgs = append(msgs, kafka.Message{
 			Key:   []byte(msg.Key),
-			Topic: msg.Topic,
+			Topic: string(msg.Topic),
 			Value: msgBytes,
 		})
 	}

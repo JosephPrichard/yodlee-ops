@@ -26,7 +26,7 @@ var setupAppMu sync.Mutex
 
 var localstackCont testcontainers.Container
 
-func SetupAwsITest(t *testing.T) *infra.AwsClient {
+func SetupAwsITest(t *testing.T) infra.AwsClient {
 	// global lock for the entire initialization phase.
 	// this prevents multiple containers for the same infra from being spawned
 	setupAppMu.Lock()
@@ -75,7 +75,7 @@ func SetupAwsITest(t *testing.T) *infra.AwsClient {
 	return client
 }
 
-func createBuckets(ctx context.Context, t *testing.T, cfg infra.Config, client *infra.AwsClient) {
+func createBuckets(ctx context.Context, t *testing.T, cfg infra.Config, client infra.AwsClient) {
 	awsCfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(cfg.AwsDefaultRegion),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("testing", "testing", "")),
@@ -87,18 +87,18 @@ func createBuckets(ctx context.Context, t *testing.T, cfg infra.Config, client *
 		o.BaseEndpoint = aws.String(cfg.AwsEndpoint)
 		o.UsePathStyle = true
 	})
-	for _, bucket := range []string{
+	for _, bucket := range []infra.Bucket{
 		client.CnctBucket,
 		client.AcctBucket,
 		client.HoldBucket,
 		client.TxnBucket,
 	} {
-		if _, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String(bucket)}); err != nil {
+		if _, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String(string(bucket))}); err != nil {
 			t.Fatalf("failed to create bucket %s: %s", bucket, err)
 		}
 	}
 }
 
-func unique(str string) string {
-	return str + "-" + uuid.NewString()
+func unique(bucket infra.Bucket) infra.Bucket {
+	return infra.Bucket(string(bucket) + "-" + uuid.NewString())
 }
