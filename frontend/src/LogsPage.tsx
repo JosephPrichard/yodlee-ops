@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, {useEffect, useState} from "react";
 import {API_URL, JSON_VIEW_THEME} from "./globals.ts";
-import { List } from "immutable";
+import {List} from "immutable";
 import {useNavigate} from "react-router-dom";
 import ReactJsonView from '@microlink/react-json-view'
 
@@ -29,7 +29,7 @@ function toPascalCase(str: string): string {
         .join('');
 }
 
-const LogMsg: React.FC<LogMsgProps> = ({ log, isSelected, setSelectedLog }) => {
+const LogMsg: React.FC<LogMsgProps> = ({log, isSelected, setSelectedLog}) => {
     const onClick = () => setSelectedLog(log);
 
     const [show, setShow] = useState(false);
@@ -57,7 +57,7 @@ const LogMsg: React.FC<LogMsgProps> = ({ log, isSelected, setSelectedLog }) => {
 
 let LOG_KEY = 0;
 
-export const LogsPage: React.FC<LogsPageProps> = ({ profileIDs, subjects }) => {
+export const LogsPage: React.FC<LogsPageProps> = ({profileIDs, subjects}) => {
     const navigate = useNavigate();
 
     const [logs, setLogs] = useState<List<Log>>(List());
@@ -92,8 +92,8 @@ export const LogsPage: React.FC<LogsPageProps> = ({ profileIDs, subjects }) => {
         <React.Fragment>
             <div className="banner"></div>
 
-            <div className="container">
-                <div className="form-container">
+            <div className="logstream-container">
+                <div className="form-logs-container">
                     <form
                         method="GET"
                         action=""
@@ -102,7 +102,7 @@ export const LogsPage: React.FC<LogsPageProps> = ({ profileIDs, subjects }) => {
                             const formData = new FormData(e.currentTarget);
                             const newProfileIDs = formData.get("profileIDs")?.toString();
                             const newTopics = formData.get("subjects")?.toString();
-                            navigate("/logs?profileIDs=" + newProfileIDs + "&subjects=" + newTopics, { replace: true });
+                            navigate("/logs?profileIDs=" + newProfileIDs + "&subjects=" + newTopics, {replace: true});
                         }}
                     >
                         <div className="form-element">

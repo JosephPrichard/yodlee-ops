@@ -184,7 +184,7 @@ func (h *FiObjectHandler) GetFiMetadata(ctx context.Context, params openapi.GetF
 	} else {
 		arrayCursor = strings.Split(params.Cursor, ",")
 	}
-	bucket := BucketFromSubject(h.S3Buckets, params.Subject.Value)
+	bucket := BucketFromSubject(h.S3Buckets, params.Subject)
 
 	if len(profileIDs) != len(arrayCursor) {
 		return &openapi.GetFiMetadataBadRequest{
@@ -222,7 +222,7 @@ func (h *FiObjectHandler) GetFiObject(ctx context.Context, params openapi.GetFiO
 	}
 
 	keyInput := params.Key
-	bucketInput := BucketFromSubject(h.S3Buckets, params.Subject.Value)
+	bucketInput := BucketFromSubject(h.S3Buckets, params.Subject)
 
 	opsFiObject, err := GetFiObject(appCtx, bucketInput, keyInput)
 	if errors.Is(err, ErrKeyNotFound) {

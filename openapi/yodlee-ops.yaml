@@ -48,7 +48,7 @@ paths:
         - name: subject
           in: query
           description: Subject filter value.
-          required: false
+          required: true
           schema:
             $ref: "#/components/schemas/FiSubject"
           example: "accounts"
@@ -88,7 +88,7 @@ paths:
         - name: subject
           in: query
           description: Subject filter value.
-          required: false
+          required: true
           schema:
             $ref: "#/components/schemas/FiSubject"
           example: "accounts"
