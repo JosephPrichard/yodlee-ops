@@ -32,6 +32,8 @@ frontend/src/api
 openapi/static
 openapi/sources
 
+frontend/public/mockServiceWorker.js
+
 *.ps1
 
 # Editor/IDE

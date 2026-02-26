@@ -25,6 +25,8 @@ import (
 	openapi "yodleeops/openapi/sources"
 )
 
+const TestAuthorizationToken = "Bearer <TOKEN>"
+
 func scanEvents(resp *http.Response, wantEvents int) []string {
 	var events []string
 	if wantEvents == 0 {
@@ -69,12 +71,13 @@ func TestStreamFiObjectLogs(t *testing.T) {
 	defer cancel()
 
 	// when
-	query := fmt.Sprintf("%s/events/taillog?profileIDs=profile1,profile2,profile3&subjects=%s,%s",
+	query := fmt.Sprintf("%s/events/taillog?prefix=profile1,profile2,profile3&subjects=%s,%s",
 		testServer.URL+ApiUrl, openapi.FiSubjectHoldings, openapi.FiSubjectTransactions)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, query, nil)
+	r, err := http.NewRequestWithContext(ctx, http.MethodGet, query, nil)
 	require.NoError(t, err)
+	r.Header.Set("Authorization", TestAuthorizationToken)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(r)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -110,8 +113,13 @@ func TestHandleListFiMessages(t *testing.T) {
 	goodApp := &App{AwsClient: awsClient}
 	goodApp.AwsClient.PageLength = aws.Int32(1) // testing ListObjectsV2 pagination.
 
-	badApp := &App{AwsClient: awsClient}
-	infrastub.MakeBadS3Client(&badApp.AwsClient, infrastub.BadS3ClientCfg{
+	badAppPrefix := &App{AwsClient: awsClient}
+	infrastub.MakeBadS3Client(&badAppPrefix.AwsClient, infrastub.BadS3ClientCfg{
+		FailListPrefix: map[infra.Bucket]string{awsClient.AcctBucket: "p1/1/10"},
+	})
+
+	badAppProfiles := &App{AwsClient: awsClient}
+	infrastub.MakeBadS3Client(&badAppProfiles.AwsClient, infrastub.BadS3ClientCfg{
 		FailListPrefix: map[infra.Bucket]string{awsClient.AcctBucket: "p1"},
 	})
 
@@ -120,21 +128,45 @@ func TestHandleListFiMessages(t *testing.T) {
 	for _, test := range []struct {
 		app            *App
 		name           string
-		profileIDs     string
-		cursor         string
-		subject        string
+		url            string
 		wantOpsGeneric openapi.ListFiMetadataResponse
 		wantErrorResp  openapi.ErrorResp
 		wantStatusCode int
 	}{
 		{
-			app:        goodApp,
-			name:       "selecting without cursor",
-			profileIDs: "p1,p2",
-			cursor:     "",
-			subject:    string(openapi.FiSubjectAccounts),
+			app:  goodApp,
+			name: "selecting without cursor",
+			url:  fmt.Sprintf("prefix?prefix=%s&subject=%s", url.QueryEscape("p1/1/10"), string(openapi.FiSubjectAccounts)),
 			wantOpsGeneric: openapi.ListFiMetadataResponse{OpsFiMetadata: []openapi.OpsFiMetadata{
 				{
+					Subject:           "accounts",
+					Key:               "p1/1/10/100/2025-06-12",
+					LastModified:      time.Date(2026, 2, 26, 4, 7, 44, 0, time.UTC),
+					ProfileID:         "p1",
+					ProviderAccountID: "1",
+					PartyIDTypeCd:     "10",
+					AccountID:         "100",
+					LastUpdated:       time.Date(2025, 6, 12, 0, 0, 0, 0, time.UTC),
+				},
+			}},
+			wantStatusCode: http.StatusOK,
+		},
+		{
+			app:  badAppPrefix,
+			name: "failed to list fi metadata by prefix",
+			url:  fmt.Sprintf("prefix?prefix=%s&subject=%s", url.QueryEscape("p1/1/10"), string(openapi.FiSubjectAccounts)),
+			wantErrorResp: openapi.ErrorResp{
+				ErrorCode: openapi.ErrorCodeFATALERROR,
+			},
+			wantStatusCode: http.StatusInternalServerError,
+		},
+		{
+			app:  goodApp,
+			name: "selecting without cursor",
+			url:  fmt.Sprintf("profiles?profileIDs=%s&subject=%s&cursor=", url.QueryEscape("p1,p2"), string(openapi.FiSubjectAccounts)),
+			wantOpsGeneric: openapi.ListFiMetadataResponse{OpsFiMetadata: []openapi.OpsFiMetadata{
+				{
+					Subject:           openapi.FiSubjectAccounts,
 					Key:               "p2/1/20/200/2025-06-14",
 					ProfileID:         "p2",
 					ProviderAccountID: "1",
@@ -143,6 +175,7 @@ func TestHandleListFiMessages(t *testing.T) {
 					LastUpdated:       time.Date(2025, 6, 14, 0, 0, 0, 0, time.UTC),
 				},
 				{
+					Subject:           openapi.FiSubjectAccounts,
 					Key:               "p1/1/10/100/2025-06-12",
 					ProfileID:         "p1",
 					ProviderAccountID: "1",
@@ -154,22 +187,18 @@ func TestHandleListFiMessages(t *testing.T) {
 			wantStatusCode: http.StatusOK,
 		},
 		{
-			app:        goodApp,
-			name:       "profileIDs length != cursor length",
-			profileIDs: "p1,p2",
-			cursor:     "cursor1",
-			subject:    string(openapi.FiSubjectAccounts),
+			app:  goodApp,
+			name: "prefix length != cursor length",
+			url:  fmt.Sprintf("profiles?profileIDs=%s&subject=%s&cursor=cursor1", url.QueryEscape("p1,p2"), string(openapi.FiSubjectAccounts)),
 			wantErrorResp: openapi.ErrorResp{
 				ErrorCode: openapi.ErrorCodePROFILEIDCURSORLENGTH,
 			},
 			wantStatusCode: http.StatusBadRequest,
 		},
 		{
-			app:        badApp,
-			name:       "failed to list fi metadata",
-			profileIDs: "p1,p2",
-			cursor:     "",
-			subject:    string(openapi.FiSubjectAccounts),
+			app:  badAppProfiles,
+			name: "failed to list fi metadata by profile",
+			url:  fmt.Sprintf("profiles?profileIDs=%s&subject=%s&cursor=", url.QueryEscape("p1,p2"), string(openapi.FiSubjectAccounts)),
 			wantErrorResp: openapi.ErrorResp{
 				ErrorCode: openapi.ErrorCodeFATALERROR,
 			},
@@ -178,14 +207,9 @@ func TestHandleListFiMessages(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			// when
-			r := httptest.NewRequest(http.MethodGet,
-				fmt.Sprintf("%s/fimetadata?profileIDs=%s&cursor=%s&subject=%s",
-					ApiUrl,
-					url.QueryEscape(test.profileIDs),
-					url.QueryEscape(test.cursor),
-					url.QueryEscape(test.subject),
-				),
-				nil)
+			endpoint := fmt.Sprintf("%s/fimetadata/%s", ApiUrl, test.url)
+			r := httptest.NewRequest(http.MethodGet, endpoint, nil)
+			r.Header.Set("Authorization", TestAuthorizationToken)
 			w := httptest.NewRecorder()
 
 			hander := MakeRoot(test.app, "")
@@ -220,11 +244,12 @@ func TestHandleListFiMessages_Pagination(t *testing.T) {
 	// when
 	for range MaxPages {
 		r := httptest.NewRequest(http.MethodGet,
-			fmt.Sprintf("%s/fimetadata?profileIDs=p1,p2&cursor=%s&subject=accounts",
+			fmt.Sprintf("%s/fimetadata/profiles?profileIDs=p1,p2&cursor=%s&subject=accounts",
 				ApiUrl,
 				url.QueryEscape(cursor),
 			),
 			nil)
+		r.Header.Set("Authorization", TestAuthorizationToken)
 		w := httptest.NewRecorder()
 
 		hander := MakeRoot(app, "")
@@ -248,6 +273,7 @@ func TestHandleListFiMessages_Pagination(t *testing.T) {
 	wantOpsGenerics := []openapi.ListFiMetadataResponse{
 		{OpsFiMetadata: []openapi.OpsFiMetadata{
 			{
+				Subject:           openapi.FiSubjectAccounts,
 				Key:               "p2/1/20/200/2025-06-14",
 				ProfileID:         "p2",
 				ProviderAccountID: "1",
@@ -256,6 +282,7 @@ func TestHandleListFiMessages_Pagination(t *testing.T) {
 				LastUpdated:       time.Date(2025, 6, 14, 0, 0, 0, 0, time.UTC),
 			},
 			{
+				Subject:           openapi.FiSubjectAccounts,
 				Key:               "p1/1/10/100/2025-06-12",
 				ProfileID:         "p1",
 				ProviderAccountID: "1",
@@ -266,6 +293,7 @@ func TestHandleListFiMessages_Pagination(t *testing.T) {
 		}},
 		{OpsFiMetadata: []openapi.OpsFiMetadata{
 			{
+				Subject:           openapi.FiSubjectAccounts,
 				Key:               "p2/1/30/400/2025-06-15",
 				ProfileID:         "p2",
 				ProviderAccountID: "1",
@@ -274,6 +302,7 @@ func TestHandleListFiMessages_Pagination(t *testing.T) {
 				LastUpdated:       time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC),
 			},
 			{
+				Subject:           openapi.FiSubjectAccounts,
 				Key:               "p1/1/10/100/2025-06-13",
 				ProfileID:         "p1",
 				ProviderAccountID: "1",
@@ -365,6 +394,7 @@ func TestHandleGetFiObject(t *testing.T) {
 					url.QueryEscape(test.subject),
 				),
 				nil)
+			r.Header.Set("Authorization", TestAuthorizationToken)
 			w := httptest.NewRecorder()
 
 			hander := MakeRoot(test.app, "")

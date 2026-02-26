@@ -77,10 +77,9 @@ func ListFiMetadataByProfileIDs(appCtx AppContext, bucket infra.Bucket, queries 
 	cursors := make(map[string]string, len(queries))
 
 	eg, egCtx := errgroup.WithContext(appCtx)
-	appEgCtx := AppContext{Context: egCtx, App: appCtx.App}
 	for i, pair := range queries {
 		eg.Go(func() error {
-			opsFiMetadata, nextCursor, err := ListFiMetadataByProfileID(appEgCtx, bucket, pair.ProfileID, pair.ContinuationToken)
+			opsFiMetadata, nextCursor, err := ListFiMetadataByPrefix(AppContext{Context: egCtx, App: appCtx.App}, bucket, pair.ProfileID, pair.ContinuationToken)
 			if err != nil {
 				return fmt.Errorf("list metadata job index=%d: %w", i, err)
 			}
@@ -105,21 +104,21 @@ func ListFiMetadataByProfileIDs(appCtx AppContext, bucket infra.Bucket, queries 
 	return ListFiMetadataResult{OpsFiMetadata: opsFiMetadata, Cursor: cursor}, nil
 }
 
-func ListFiMetadataByProfileID(ctx AppContext, bucket infra.Bucket, profileID string, cursor string) ([]OpsFiMetadata, string, error) {
+func ListFiMetadataByPrefix(ctx AppContext, bucket infra.Bucket, prefix string, cursor string) ([]OpsFiMetadata, string, error) {
 	var continuationToken *string
 	if cursor != "" {
 		continuationToken = aws.String(cursor)
 	}
-	slog.InfoContext(ctx, "listing metadata records", "bucket", bucket, "profileID", profileID, "continuationToken", continuationToken)
+	slog.InfoContext(ctx, "listing metadata records", "bucket", bucket, "prefix", prefix, "continuationToken", continuationToken)
 
 	output, err := ctx.S3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 		Bucket:            aws.String(string(bucket)),
-		Prefix:            aws.String(profileID),
+		Prefix:            aws.String(prefix),
 		ContinuationToken: continuationToken,
 		MaxKeys:           ctx.AwsClient.PageLength,
 	})
 	if err != nil {
-		return nil, NilContinuationToken, fmt.Errorf("list objects by profileID=%s, cursor=%s and bucket=%s: %w", profileID, cursor, bucket, err)
+		return nil, NilContinuationToken, fmt.Errorf("list objects by prefix=%s, cursor=%s and bucket=%s: %w", prefix, cursor, bucket, err)
 	}
 
 	opsFiMetadata := make([]OpsFiMetadata, 0)
@@ -144,13 +143,13 @@ func ListFiMetadataByProfileID(ctx AppContext, bucket infra.Bucket, profileID st
 		nextCursor = *output.NextContinuationToken
 	}
 
-	slog.InfoContext(ctx, "retrieved metadata records", "bucket", bucket, "profileID", profileID, "opsFiMetadata", opsFiMetadata, "nextCursor", nextCursor)
+	slog.InfoContext(ctx, "retrieved metadata records", "bucket", bucket, "prefix", prefix, "opsFiMetadata", opsFiMetadata, "nextCursor", nextCursor)
 	return opsFiMetadata, nextCursor, nil
 }
 
 var ErrKeyNotFound = errors.New("key not found")
 
-func GetFiObject(ctx AppContext, bucket infra.Bucket, key string) (OpsFiGeneric, error) {
+func GetFiObject(ctx AppContext, bucket infra.Bucket, key string) (fiObject OpsFiGeneric, err error) {
 	object, err := ctx.S3Client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(string(bucket)),
 		Key:    aws.String(key),
@@ -158,18 +157,17 @@ func GetFiObject(ctx AppContext, bucket infra.Bucket, key string) (OpsFiGeneric,
 	if err != nil {
 		var nsk *types.NoSuchKey
 		if errors.As(err, &nsk) {
-			return OpsFiGeneric{}, ErrKeyNotFound
+			return fiObject, ErrKeyNotFound
 		} else {
-			return OpsFiGeneric{}, fmt.Errorf("get object %s/%s: %w", bucket, key, err)
+			return fiObject, fmt.Errorf("get object %s/%s: %w", bucket, key, err)
 		}
 	}
 	defer object.Body.Close()
 
 	slog.InfoContext(ctx, "retrieved object", "bucket", bucket, "key", key)
 
-	var fiObject OpsFiGeneric
 	if err := jsonutil.DecodeGzipJSON(object.Body, &fiObject); err != nil {
-		return OpsFiGeneric{}, fmt.Errorf("decode gzip json: %w", err)
+		return fiObject, fmt.Errorf("decode gzip json: %w", err)
 	}
 	return fiObject, nil
 }

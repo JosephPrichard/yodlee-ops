@@ -1,7 +1,4 @@
-all: go-generate swagger-ui build-ui
-
-build-ui:
-	cd frontend && npm run build
+all: go-generate swagger-ui
 
 go-generate:
 	cd openapi && go generate
@@ -13,7 +10,6 @@ install:
 	go install github.com/ogen-go/ogen/cmd/ogen@latest
 
 clean:
-	rm -rf ./frontend/dist
 	rm -rf ./openapi/sources
 	rm -rf ./openapi/static
 

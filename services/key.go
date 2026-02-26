@@ -125,8 +125,7 @@ type OpsFiMetadata struct {
 	ProviderAccountID string
 	PartyIDTypeCd     string
 	AccountID         string
-	HoldingID         string
-	TransactionID     string
+	ElementID         string
 	LastUpdated       time.Time
 }
 
@@ -175,7 +174,7 @@ func (o *OpsFiMetadata) ParseOpsFiMetadata(buckets infra.S3Buckets, bucket infra
 		o.ProviderAccountID = tokens[1]
 		o.PartyIDTypeCd = tokens[2]
 		o.AccountID = tokens[3]
-	case buckets.HoldBucket:
+	case buckets.HoldBucket, buckets.TxnBucket:
 		wantTokenCount := 5
 		if len(tokens) != wantTokenCount {
 			return ParseOpsFiMetadataError{Key: key, Bucket: bucket, WantTokenCount: wantTokenCount, ActualTokenCount: len(tokens)}
@@ -183,16 +182,7 @@ func (o *OpsFiMetadata) ParseOpsFiMetadata(buckets infra.S3Buckets, bucket infra
 		o.ProfileID = tokens[0]
 		o.PartyIDTypeCd = tokens[1]
 		o.AccountID = tokens[2]
-		o.HoldingID = tokens[3]
-	case buckets.TxnBucket:
-		wantTokenCount := 5
-		if len(tokens) != wantTokenCount {
-			return ParseOpsFiMetadataError{Key: key, Bucket: bucket, WantTokenCount: wantTokenCount, ActualTokenCount: len(tokens)}
-		}
-		o.ProfileID = tokens[0]
-		o.PartyIDTypeCd = tokens[1]
-		o.AccountID = tokens[2]
-		o.TransactionID = tokens[3]
+		o.ElementID = tokens[3]
 	default:
 		return fmt.Errorf("invalid bucket %s", bucket)
 	}

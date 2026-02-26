@@ -366,39 +366,36 @@ func (s *Supervisor) Go(cb func()) {
 	}()
 }
 
-type ListAcctsSupervisor struct {
+type ListAcctsTable struct {
 	Supervisor
 	table map[string]bool
 	lock  sync.Mutex
 }
 
-func makeListAcctsSupervisor(ctx AppContext) ListAcctsSupervisor {
-	return ListAcctsSupervisor{
+func makeListAcctsSupervisor(ctx AppContext) ListAcctsTable {
+	return ListAcctsTable{
 		Supervisor: Supervisor{context: ctx},
 		table:      make(map[string]bool),
 	}
 }
 
-func (ls *ListAcctsSupervisor) InterceptListedPrefixes(listIDsChan chan ListResult) chan ListResult {
+func (ls *ListAcctsTable) InterceptListedPrefixes(listIDsChan chan ListResult) chan ListResult {
 	pipeIDsChan := make(chan ListResult)
 	ls.Go(func() {
 		defer close(pipeIDsChan) // nothing more to pipe once there is nothing more to receive.
 
 		for listResult := range listIDsChan {
-			if listResult.Err == nil {
-				// intercept and store listed keys.
-				for _, acctObjectID := range listResult.Keys {
-					acctKey, err := ParseAcctKey(acctObjectID)
-					if err != nil {
-						slog.ErrorContext(ls.context, "failed to parse acct Key from s3 object Key", "acctKeyStr", acctObjectID, "err", err)
-						continue
-					}
-					acctPrefixStr := AcctMemberPrefix{ProfileId: acctKey.ProfileId, AcctID: acctKey.AcctID}.String()
-
-					ls.lock.Lock()
-					ls.table[acctPrefixStr] = true
-					ls.lock.Unlock()
+			for _, acctObjectID := range listResult.Keys {
+				acctKey, err := ParseAcctKey(acctObjectID)
+				if err != nil {
+					slog.ErrorContext(ls.context, "failed to parse acct Key from s3 object Key", "acctKeyStr", acctObjectID, "err", err)
+					continue
 				}
+				acctPrefixStr := AcctMemberPrefix{ProfileId: acctKey.ProfileId, AcctID: acctKey.AcctID}.String()
+
+				ls.lock.Lock()
+				ls.table[acctPrefixStr] = true
+				ls.lock.Unlock()
 			}
 			// always pipeline regardless of the list acct is an error or not. (we handle errors later)
 			pipeIDsChan <- listResult
@@ -407,7 +404,7 @@ func (ls *ListAcctsSupervisor) InterceptListedPrefixes(listIDsChan chan ListResu
 	return pipeIDsChan
 }
 
-func (ls *ListAcctsSupervisor) Wait() map[string]bool {
+func (ls *ListAcctsTable) Wait() map[string]bool {
 	ls.wg.Wait()
 	slog.InfoContext(ls.context, "finished list accts supervisor", "acctPrefixTable", ls.table)
 	return ls.table

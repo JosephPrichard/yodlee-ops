@@ -11,6 +11,8 @@ paths:
   # note: most code generators don't work with server-sent events, this is documentation only.
   /taillog:
     get:
+      security:
+        - bearerAuth: [ ]
       summary: Stream tail logs.
       description: Stream logs for real-time ingestion events via Server-Sent Events.
       operationId: streamLogs
@@ -25,11 +27,62 @@ paths:
         '500':
           description: Server error
 
-  /fimetadata:
+  /fimetadata/prefix:
     get:
+      security:
+        - bearerAuth: [ ]
       summary: Get FI metadata
       description: Returns a list of FI metadata records filtered by query parameters.
-      operationId: getFiMetadata
+      operationId: getFiMetadataByPrefix
+      parameters:
+        - name: prefix
+          in: query
+          description: Prefix to perform search with.
+          required: true
+          schema:
+            type: string
+          example: "p1/Y/243512"
+        - name: cursor
+          in: query
+          description: Cursor to paginate by. Remember to url encode it, ListObjectsV2 cursors contain unsafe URL characters.
+          required: false
+          schema:
+            type: string
+          example: "cDEvMS8xMDAvMjAyNS0wNi0xMw=="
+        - name: subject
+          in: query
+          description: Subject filter value.
+          required: true
+          schema:
+            $ref: "#/components/schemas/FiSubject"
+          example: "accounts"
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListFiMetadataResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResp"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResp"
+
+  /fimetadata/profiles:
+    get:
+      security:
+        - bearerAuth: [ ]
+      summary: Get FI metadata
+      description: Returns a list of FI metadata records filtered by query parameters.
+      operationId: getFiMetadataByProfiles
       parameters:
         - name: profileIDs
           in: query
@@ -74,6 +127,8 @@ paths:
 
   /fiobject:
     get:
+      security:
+        - bearerAuth: [ ]
       summary: Get FI object
       description: Returns the FI object data for the given key and subject.
       operationId: getFiObject
@@ -113,6 +168,11 @@ paths:
                 $ref: "#/components/schemas/ErrorResp"
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   schemas:
     FiObject:
       required:
@@ -152,16 +212,18 @@ components:
     OpsFiMetadata:
       type: object
       required:
+        - subject
         - key
         - lastModified
         - profileID
         - providerAccountID
         - partyIDTypeCd
         - accountID
-        - holdingID
-        - transactionID
+        - elementID
         - lastUpdated
       properties:
+        subject:
+          $ref: "#/components/schemas/FiSubject"
         key:
           type: string
           example: "p1/1/10/100/2025-06-12"
@@ -181,10 +243,7 @@ components:
         accountID:
           type: string
           example: "100"
-        holdingID:
-          type: string
-          example: "1000"
-        transactionID:
+        elementID:
           type: string
           example: "1000"
         lastUpdated:

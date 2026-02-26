@@ -57,9 +57,15 @@ func (b *FiMessageBroadcaster) Subscribe(filter SubscriberFilter) chan string {
 	var profileIDS []uint64
 
 	for _, topic := range filter.Topics {
+		if topic == "" {
+			continue
+		}
 		topics = append(topics, hash(string(topic)))
 	}
 	for _, profileID := range filter.ProfileIDs {
+		if profileID == "" {
+			continue
+		}
 		profileIDS = append(profileIDS, hash(profileID))
 	}
 

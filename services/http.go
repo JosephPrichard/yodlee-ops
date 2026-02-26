@@ -9,8 +9,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 	"yodleeops/internal/infra"
@@ -44,7 +42,7 @@ func RootMiddleware(allowedOrigins string, next http.Handler) http.Handler {
 func MakeRoot(app *App, allowOrigins string) http.Handler {
 	mux := http.NewServeMux()
 
-	oGenServer, err := openapi.NewServer(&FiObjectHandler{App: app})
+	oGenServer, err := openapi.NewServer(&FiOpsAPIHandler{App: app}, &FiOpsSecurityHandler{App: app})
 	if err != nil {
 		panic(fmt.Sprintf("failed to make root: %v", err))
 	}
@@ -58,20 +56,20 @@ func MakeRoot(app *App, allowOrigins string) http.Handler {
 	// dedicated swagger-ui page: served from the openapi static directory.
 	mux.Handle("/swagger-ui", http.StripPrefix("/swagger-ui", http.FileServer(http.Dir("./openapi/static"))))
 
-	// react ui page: served from the frontend dist directory.
-	fs := http.FileServer(http.Dir(FrontendDistDir))
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		info, err := os.Stat(filepath.Join(FrontendDistDir, r.URL.Path))
-		fileExists := err == nil && !info.IsDir()
-		if fileExists {
-			fs.ServeHTTP(w, r)
-		} else {
-			// allows defaulting to index page if the file requested does not exist.
-			http.ServeFile(w, r, filepath.Join(FrontendDistDir, "index.html"))
-		}
-	})
-
 	return mux
+}
+
+func (app *App) AuthorizeToken(ctx context.Context, token string) (context.Context, error) {
+	// todo: implement token validation here. in this implementation, Authorization allows all users.
+	return ctx, nil
+}
+
+type FiOpsSecurityHandler struct {
+	*App
+}
+
+func (h *FiOpsSecurityHandler) HandleBearerAuth(ctx context.Context, _ openapi.OperationName, t openapi.BearerAuth) (context.Context, error) {
+	return h.AuthorizeToken(ctx, t.Token)
 }
 
 func FFormatEvent(w io.Writer, topic string, msg string) {
@@ -79,18 +77,16 @@ func FFormatEvent(w io.Writer, topic string, msg string) {
 }
 
 func (app *App) StreamFiObjectLogs(w http.ResponseWriter, r *http.Request) {
-	filterQuery := func(elements []string) []string {
-		for i, element := range elements {
-			if element == "" {
-				elements = append(elements[:i], elements[i+1:]...)
-			}
-		}
-		return elements
+	authorization := r.Header.Get("Authorization")
+	ctx, err := app.AuthorizeToken(r.Context(), authorization)
+	if err != nil {
+		http.Error(w, "access denied", http.StatusUnauthorized)
+		return
 	}
 
 	values := r.URL.Query()
-	profileIDs := filterQuery(strings.Split(values.Get("profileIDs"), ","))
-	subjects := filterQuery(strings.Split(values.Get("subjects"), ","))
+	profileIDs := strings.Split(values.Get("prefix"), ",")
+	subjects := strings.Split(values.Get("subjects"), ",")
 
 	var topics []infra.Topic
 	for _, subject := range subjects {
@@ -110,11 +106,11 @@ func (app *App) StreamFiObjectLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 
-	slog.InfoContext(r.Context(), "begin log tail streaming", "subjects", subjects, "topics", topics, "profileIDs", profileIDs)
+	slog.InfoContext(ctx, "begin log tail streaming", "subjects", subjects, "topics", topics, "prefix", profileIDs)
 
 	f, ok := w.(http.Flusher)
 	if !ok {
-		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		http.Error(w, "streaming unsupported", http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -125,7 +121,7 @@ func (app *App) StreamFiObjectLogs(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		defer app.FiMessageBroadcaster.Unsubscribe(subChan)
-		<-r.Context().Done()
+		<-ctx.Done()
 	}()
 
 	ticker := time.NewTicker(15 * time.Second)
@@ -160,36 +156,76 @@ func BucketFromSubject(buckets infra.S3Buckets, subject openapi.FiSubject) infra
 	return bucket
 }
 
-type FiObjectHandler struct {
+func mapOpsFiMetadata(opsFiMetadata []OpsFiMetadata, subject openapi.FiSubject) []openapi.OpsFiMetadata {
+	opsFiMetadataResp := make([]openapi.OpsFiMetadata, 0)
+	for _, metadata := range opsFiMetadata {
+		opsFiMetadataResp = append(opsFiMetadataResp, openapi.OpsFiMetadata{
+			Subject:           subject,
+			Key:               metadata.Key,
+			LastModified:      metadata.LastModified,
+			ProfileID:         metadata.ProfileID,
+			ProviderAccountID: metadata.ProviderAccountID,
+			PartyIDTypeCd:     metadata.PartyIDTypeCd,
+			AccountID:         metadata.AccountID,
+			ElementID:         metadata.ElementID,
+			LastUpdated:       metadata.LastUpdated,
+		})
+	}
+	return opsFiMetadataResp
+}
+
+type FiOpsAPIHandler struct {
 	*App
 }
 
-var _ openapi.Handler = (*FiObjectHandler)(nil)
+var _ openapi.Handler = (*FiOpsAPIHandler)(nil)
 
 const InternalServerErrorMessage = "internal server error"
 
-func (h *FiObjectHandler) GetFiMetadata(ctx context.Context, params openapi.GetFiMetadataParams) (openapi.GetFiMetadataRes, error) {
+func (h *FiOpsAPIHandler) GetFiMetadataByPrefix(ctx context.Context, params openapi.GetFiMetadataByPrefixParams) (openapi.GetFiMetadataByPrefixRes, error) {
 	appCtx := AppContext{Context: ctx, App: h.App}
 
-	internalServerError := func(err error) *openapi.GetFiMetadataInternalServerError {
-		slog.ErrorContext(ctx, "failed to list fi metadata", "err", err)
-		return &openapi.GetFiMetadataInternalServerError{ErrorCode: openapi.ErrorCodeFATALERROR, ErrorDesc: InternalServerErrorMessage}
+	internalServerError := func(err error) *openapi.GetFiMetadataByPrefixInternalServerError {
+		slog.ErrorContext(ctx, "failed to list fi metadata by prefix", "err", err, "params", params)
+		return &openapi.GetFiMetadataByPrefixInternalServerError{ErrorCode: openapi.ErrorCodeFATALERROR, ErrorDesc: InternalServerErrorMessage}
+	}
+
+	bucket := BucketFromSubject(h.S3Buckets, params.Subject)
+
+	opsFiMetadata, nextCursor, err := ListFiMetadataByPrefix(appCtx, bucket, params.Prefix, params.Cursor.Value)
+	if err != nil {
+		return internalServerError(err), nil
+	}
+
+	return &openapi.ListFiMetadataResponse{
+		OpsFiMetadata: mapOpsFiMetadata(opsFiMetadata, params.Subject),
+		Cursor:        nextCursor,
+	}, nil
+}
+
+func (h *FiOpsAPIHandler) GetFiMetadataByProfiles(ctx context.Context, params openapi.GetFiMetadataByProfilesParams) (openapi.GetFiMetadataByProfilesRes, error) {
+	appCtx := AppContext{Context: ctx, App: h.App}
+
+	internalServerError := func(err error) *openapi.GetFiMetadataByProfilesInternalServerError {
+		slog.ErrorContext(ctx, "failed to list fi metadata by profiles", "err", err, "params", params)
+		return &openapi.GetFiMetadataByProfilesInternalServerError{ErrorCode: openapi.ErrorCodeFATALERROR, ErrorDesc: InternalServerErrorMessage}
 	}
 
 	profileIDs := strings.Split(params.ProfileIDs, ",")
+	bucket := BucketFromSubject(h.S3Buckets, params.Subject)
+
 	var arrayCursor []string
 	if params.Cursor == "" {
-		// default: the first cursor is a non-ContinuationToken for each profileID
+		// default: the first cursor is an empty ContinuationToken for each profileID
 		arrayCursor = MakeFirstCursor(len(profileIDs))
 	} else {
 		arrayCursor = strings.Split(params.Cursor, ",")
 	}
-	bucket := BucketFromSubject(h.S3Buckets, params.Subject)
 
 	if len(profileIDs) != len(arrayCursor) {
-		return &openapi.GetFiMetadataBadRequest{
+		return &openapi.GetFiMetadataByProfilesBadRequest{
 			ErrorCode: openapi.ErrorCodePROFILEIDCURSORLENGTH,
-			ErrorDesc: "profileIDs and cursor must be the same length",
+			ErrorDesc: "prefix and cursor must be the same length",
 		}, nil
 	}
 	var pairs []ListFiMetadataQuery
@@ -202,18 +238,13 @@ func (h *FiObjectHandler) GetFiMetadata(ctx context.Context, params openapi.GetF
 		return internalServerError(err), nil
 	}
 
-	opsFiMetadata := make([]openapi.OpsFiMetadata, 0)
-	for _, metadata := range fiMetadataResults.OpsFiMetadata {
-		opsFiMetadata = append(opsFiMetadata, openapi.OpsFiMetadata(metadata))
-	}
-
 	return &openapi.ListFiMetadataResponse{
-		OpsFiMetadata: opsFiMetadata,
+		OpsFiMetadata: mapOpsFiMetadata(fiMetadataResults.OpsFiMetadata, params.Subject),
 		Cursor:        fiMetadataResults.Cursor,
 	}, nil
 }
 
-func (h *FiObjectHandler) GetFiObject(ctx context.Context, params openapi.GetFiObjectParams) (openapi.GetFiObjectRes, error) {
+func (h *FiOpsAPIHandler) GetFiObject(ctx context.Context, params openapi.GetFiObjectParams) (openapi.GetFiObjectRes, error) {
 	appCtx := AppContext{Context: ctx, App: h.App}
 
 	internalServerError := func(err error) *openapi.GetFiObjectInternalServerError {
