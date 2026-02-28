@@ -3,15 +3,15 @@ package svc
 import (
 	"github.com/stretchr/testify/assert"
 	"testing"
-	"yodleeops/internal/infra"
+	"yodleeops/infra"
 )
 
 func TestParseOpsFiMetadata(t *testing.T) {
-	buckets := infra.S3Buckets{
-		CnctBucket: infra.CnctBucket,
-		AcctBucket: infra.AcctBucket,
-		HoldBucket: infra.HoldBucket,
-		TxnBucket:  infra.TxnBucket,
+	buckets := infra.Buckets{
+		Connections:  infra.CnctBucket,
+		Accounts:     infra.AcctBucket,
+		Holdings:     infra.HoldBucket,
+		Transactions: infra.TxnBucket,
 	}
 	for _, test := range []struct {
 		name        string
@@ -21,31 +21,31 @@ func TestParseOpsFiMetadata(t *testing.T) {
 		validateFn  func(t *testing.T, o *OpsFiMetadata)
 	}{
 		{
-			name:   "CnctBucket valid",
+			name:   "Connections key valid",
 			bucket: infra.CnctBucket,
 			key:    "profile1/provider1/party1/2024-01-01T00:00:00Z",
-			validateFn: func(t *testing.T, o *OpsFiMetadata) {
-				assert.Equal(t, "profile1", o.ProfileID)
-				assert.Equal(t, "provider1", o.ProviderAccountID)
-				assert.Equal(t, "party1", o.PartyIDTypeCd)
-				assert.NotZero(t, o.LastUpdated)
+			validateFn: func(t *testing.T, metadata *OpsFiMetadata) {
+				assert.Equal(t, "profile1", metadata.ProfileID)
+				assert.Equal(t, "provider1", metadata.ProviderAccountID)
+				assert.Equal(t, "party1", metadata.PartyIDTypeCd)
+				assert.NotZero(t, metadata.LastUpdated)
 			},
 		},
 		{
-			name:        "CnctBucket invalid token count",
-			bucket:      buckets.CnctBucket,
+			name:        "Connections invalid token count",
+			bucket:      buckets.Connections,
 			key:         "too/few",
 			expectError: true,
 		},
 		{
-			name:   "AcctBucket valid",
-			bucket: buckets.AcctBucket,
+			name:   "Accounts key valid",
+			bucket: buckets.Accounts,
 			key:    "profile1/provider1/party1/account1/2024-01-01T00:00:00Z",
-			validateFn: func(t *testing.T, o *OpsFiMetadata) {
-				assert.Equal(t, "profile1", o.ProfileID)
-				assert.Equal(t, "provider1", o.ProviderAccountID)
-				assert.Equal(t, "party1", o.PartyIDTypeCd)
-				assert.Equal(t, "account1", o.AccountID)
+			validateFn: func(t *testing.T, metadata *OpsFiMetadata) {
+				assert.Equal(t, "profile1", metadata.ProfileID)
+				assert.Equal(t, "provider1", metadata.ProviderAccountID)
+				assert.Equal(t, "party1", metadata.PartyIDTypeCd)
+				assert.Equal(t, "account1", metadata.AccountID)
 			},
 		},
 		{
@@ -56,26 +56,24 @@ func TestParseOpsFiMetadata(t *testing.T) {
 		},
 		{
 			name:        "Invalid timestamp",
-			bucket:      buckets.CnctBucket,
+			bucket:      buckets.Connections,
 			key:         "profile/provider/party/bad-timestamp",
 			expectError: true,
 		},
 		{
-			name:   "HoldBucket valid",
-			bucket: buckets.HoldBucket,
+			name:   "Holdings key valid",
+			bucket: buckets.Holdings,
 			key:    "profile1/party1/account1/element1/2024-01-01T00:00:00Z",
-			validateFn: func(t *testing.T, o *OpsFiMetadata) {
-				assert.Equal(t, "profile1", o.ProfileID)
-				assert.Equal(t, "party1", o.PartyIDTypeCd)
-				assert.Equal(t, "account1", o.AccountID)
-				assert.Equal(t, "element1", o.ElementID)
+			validateFn: func(t *testing.T, metadata *OpsFiMetadata) {
+				assert.Equal(t, "profile1", metadata.ProfileID)
+				assert.Equal(t, "party1", metadata.PartyIDTypeCd)
+				assert.Equal(t, "account1", metadata.AccountID)
+				assert.Equal(t, "element1", metadata.ElementID)
 			},
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-
 			meta := &OpsFiMetadata{}
-
 			err := meta.ParseOpsFiMetadata(buckets, test.bucket, test.key)
 
 			if test.expectError {

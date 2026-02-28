@@ -18,11 +18,10 @@ import (
 	"net/url"
 	"testing"
 	"time"
-	"yodleeops/internal/infra"
-	infrastub "yodleeops/internal/infra/stubs"
-	"yodleeops/internal/jsonutil"
-	"yodleeops/internal/testutil"
+	"yodleeops/infra"
+	"yodleeops/infra/fakes"
 	openapi "yodleeops/openapi/sources"
+	"yodleeops/testutil"
 )
 
 const TestAuthorizationToken = "Bearer <TOKEN>"
@@ -110,17 +109,15 @@ func TestHandleListFiMessages(t *testing.T) {
 	// given
 	awsClient := testutil.SetupAwsITest(t)
 
-	goodApp := &App{AwsClient: awsClient}
-	goodApp.AwsClient.PageLength = aws.Int32(1) // testing ListObjectsV2 pagination.
+	goodApp := &App{AWS: awsClient}
+	goodApp.AWS.PaginationLen = aws.Int32(1) // testing ListObjectsV2 pagination.
 
-	badAppPrefix := &App{AwsClient: awsClient}
-	infrastub.MakeBadS3Client(&badAppPrefix.AwsClient, infrastub.BadS3ClientCfg{
-		FailListPrefix: map[infra.Bucket]string{awsClient.AcctBucket: "p1/1/10"},
-	})
-
-	badAppProfiles := &App{AwsClient: awsClient}
-	infrastub.MakeBadS3Client(&badAppProfiles.AwsClient, infrastub.BadS3ClientCfg{
-		FailListPrefix: map[infra.Bucket]string{awsClient.AcctBucket: "p1"},
+	badApp := &App{AWS: awsClient}
+	fakes.MakeBadS3Client(&badApp.AWS, fakes.BadS3Config{
+		FailListPrefix: map[infra.Bucket]string{
+			awsClient.Buckets.Accounts:    "p1/1/10",
+			awsClient.Buckets.Connections: "p1",
+		},
 	})
 
 	testutil.SeedS3Buckets(t, awsClient)
@@ -152,7 +149,7 @@ func TestHandleListFiMessages(t *testing.T) {
 			wantStatusCode: http.StatusOK,
 		},
 		{
-			app:  badAppPrefix,
+			app:  badApp,
 			name: "failed to list fi metadata by prefix",
 			url:  fmt.Sprintf("prefix?prefix=%s&subject=%s", url.QueryEscape("p1/1/10"), string(openapi.FiSubjectAccounts)),
 			wantErrorResp: openapi.ErrorResp{
@@ -196,9 +193,9 @@ func TestHandleListFiMessages(t *testing.T) {
 			wantStatusCode: http.StatusBadRequest,
 		},
 		{
-			app:  badAppProfiles,
+			app:  badApp,
 			name: "failed to list fi metadata by profile",
-			url:  fmt.Sprintf("profiles?profileIDs=%s&subject=%s&cursor=", url.QueryEscape("p1,p2"), string(openapi.FiSubjectAccounts)),
+			url:  fmt.Sprintf("profiles?profileIDs=%s&subject=%s&cursor=", url.QueryEscape("p1,p2"), string(openapi.FiSubjectConnections)),
 			wantErrorResp: openapi.ErrorResp{
 				ErrorCode: openapi.ErrorCodeFATALERROR,
 			},
@@ -230,8 +227,8 @@ func TestHandleListFiMessages_Pagination(t *testing.T) {
 	// given
 	awsClient := testutil.SetupAwsITest(t)
 
-	app := &App{AwsClient: awsClient}
-	app.AwsClient.PageLength = aws.Int32(1) // testing ListObjectsV2 pagination.
+	app := &App{AWS: awsClient}
+	app.AWS.PaginationLen = aws.Int32(1) // testing ListObjectsV2 pagination.
 
 	testutil.SeedS3Buckets(t, awsClient)
 
@@ -333,16 +330,16 @@ func TestHandleGetFiObject(t *testing.T) {
 
 	awsClient := testutil.SetupAwsITest(t)
 
-	goodApp := &App{AwsClient: awsClient}
-	badApp := &App{AwsClient: awsClient}
-	infrastub.MakeBadS3Client(&badApp.AwsClient, infrastub.BadS3ClientCfg{
+	goodApp := &App{AWS: awsClient}
+	badApp := &App{AWS: awsClient}
+	fakes.MakeBadS3Client(&badApp.AWS, fakes.BadS3Config{
 		FailGetKey: testKey,
 	})
 
-	_, err := awsClient.S3Client.PutObject(t.Context(), &s3.PutObjectInput{
-		Bucket: aws.String(string(awsClient.S3Buckets.TxnBucket)),
+	_, err := awsClient.S3.PutObject(t.Context(), &s3.PutObjectInput{
+		Bucket: aws.String(string(awsClient.Buckets.Transactions)),
 		Key:    aws.String(testKey),
-		Body:   bytes.NewReader(jsonutil.MustEncodeJson(t, testBody)),
+		Body:   bytes.NewReader(MustEncodeJson(t, testBody)),
 	})
 	require.NoError(t, err)
 

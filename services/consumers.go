@@ -8,8 +8,8 @@ import (
 	"github.com/google/uuid"
 	"log/slog"
 	"time"
-	"yodleeops/internal/infra"
-	"yodleeops/internal/yodlee"
+	"yodleeops/infra"
+	"yodleeops/yodlee"
 )
 
 type ConsumersConfig struct {
@@ -22,7 +22,7 @@ func StartConsumers(ctx context.Context, app *App, concurrency int) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	appCtx := AppContext{App: app, Context: ctx}
+	appCtx := Context{App: app, Context: ctx}
 	if concurrency <= 0 {
 		concurrency = 1
 	}
@@ -42,7 +42,7 @@ func StartConsumers(ctx context.Context, app *App, concurrency int) {
 	slog.Info("started consumers", "config", appCtx)
 }
 
-func ConsumeFiMessages[Message any](appCtx AppContext, reader infra.Consumer, onMessage func(AppContext, string, Message)) {
+func ConsumeFiMessages[Message any](appCtx Context, reader infra.Consumer, onMessage func(Context, string, Message)) {
 	count := 0
 	readCfg := reader.Config()
 	for {
@@ -76,7 +76,7 @@ type BroadcastInput[Wrap YodleeWrapper[Inner], Inner any] struct {
 }
 
 func HandleAfterPublish[Wrap YodleeWrapper[Inner], Inner any](
-	ctx AppContext,
+	ctx Context,
 	topic infra.Topic,
 	key string,
 	putResults []PutResult[Wrap],
@@ -111,7 +111,7 @@ func HandleAfterPublish[Wrap YodleeWrapper[Inner], Inner any](
 	}
 }
 
-func HandleCnctRefreshMessage(ctx AppContext, key string, cncts []yodlee.DataExtractsProviderAccount) {
+func HandleCnctRefreshMessage(ctx Context, key string, cncts []yodlee.DataExtractsProviderAccount) {
 	slog.InfoContext(ctx, "handling cnct refresh messages", "cncts", cncts)
 
 	result := IngestCnctRefreshes(ctx, key, cncts)
@@ -121,7 +121,7 @@ func HandleCnctRefreshMessage(ctx AppContext, key string, cncts []yodlee.DataExt
 	ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
-func HandleAcctRefreshMessage(ctx AppContext, key string, accts []yodlee.DataExtractsAccount) {
+func HandleAcctRefreshMessage(ctx Context, key string, accts []yodlee.DataExtractsAccount) {
 	slog.InfoContext(ctx, "handling acct refresh messages", "accts", accts)
 
 	result := IngestAcctsRefreshes(ctx, key, accts)
@@ -131,7 +131,7 @@ func HandleAcctRefreshMessage(ctx AppContext, key string, accts []yodlee.DataExt
 	ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
-func HandleTxnRefreshMessage(ctx AppContext, key string, txns []yodlee.DataExtractsTransaction) {
+func HandleTxnRefreshMessage(ctx Context, key string, txns []yodlee.DataExtractsTransaction) {
 	slog.InfoContext(ctx, "handling txn refresh messages", "txns", txns)
 
 	result := IngestTxnRefreshes(ctx, key, txns)
@@ -141,7 +141,7 @@ func HandleTxnRefreshMessage(ctx AppContext, key string, txns []yodlee.DataExtra
 	ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
-func HandleHoldRefreshMessage(ctx AppContext, key string, holds []yodlee.DataExtractsHolding) {
+func HandleHoldRefreshMessage(ctx Context, key string, holds []yodlee.DataExtractsHolding) {
 	slog.InfoContext(ctx, "handling hold refresh messages", "holds", holds)
 
 	result := IngestHoldRefreshes(ctx, key, holds)
@@ -151,7 +151,7 @@ func HandleHoldRefreshMessage(ctx AppContext, key string, holds []yodlee.DataExt
 	ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
-func HandleCnctResponseMessage(ctx AppContext, key string, cncts yodlee.ProviderAccountResponse) {
+func HandleCnctResponseMessage(ctx Context, key string, cncts yodlee.ProviderAccountResponse) {
 	slog.InfoContext(ctx, "handling cnct response messages", "cncts", cncts)
 
 	putResults := IngestCnctResponses(ctx, key, cncts)
@@ -161,7 +161,7 @@ func HandleCnctResponseMessage(ctx AppContext, key string, cncts yodlee.Provider
 	})
 }
 
-func HandleAcctResponseMessage(ctx AppContext, key string, accts yodlee.AccountResponse) {
+func HandleAcctResponseMessage(ctx Context, key string, accts yodlee.AccountResponse) {
 	slog.InfoContext(ctx, "handling acct response messages", "accts", accts)
 
 	putResults := IngestAcctResponses(ctx, key, accts)
@@ -171,7 +171,7 @@ func HandleAcctResponseMessage(ctx AppContext, key string, accts yodlee.AccountR
 	})
 }
 
-func HandleTxnResponseMessage(ctx AppContext, key string, txns yodlee.TransactionResponse) {
+func HandleTxnResponseMessage(ctx Context, key string, txns yodlee.TransactionResponse) {
 	slog.InfoContext(ctx, "handling txn response messages", "txns", txns)
 
 	putResults := IngestTxnResponses(ctx, key, txns)
@@ -181,7 +181,7 @@ func HandleTxnResponseMessage(ctx AppContext, key string, txns yodlee.Transactio
 	})
 }
 
-func HandleHoldResponseMessage(ctx AppContext, key string, holds yodlee.HoldingResponse) {
+func HandleHoldResponseMessage(ctx Context, key string, holds yodlee.HoldingResponse) {
 	slog.InfoContext(ctx, "handling hold response messages", "holds", holds)
 
 	putResults := IngestHoldResponses(ctx, key, holds)
@@ -191,7 +191,7 @@ func HandleHoldResponseMessage(ctx AppContext, key string, holds yodlee.HoldingR
 	})
 }
 
-func HandleDeleteRecoveryMessage(ctx AppContext, key string, deleteRetries []DeleteRetry) {
+func HandleDeleteRecoveryMessage(ctx Context, key string, deleteRetries []DeleteRetry) {
 	slog.InfoContext(ctx, "handling delete recovery messages", "deleteRetries", deleteRetries)
 
 	deleteErrors := IngestDeleteRetries(ctx, deleteRetries)
@@ -203,7 +203,7 @@ type BroadcastOutput struct {
 	FiMessages  []json.RawMessage `json:"messages"`
 }
 
-func HandleBroadcastMessage(ctx AppContext, _ string, broadcast BroadcastOutput) {
+func HandleBroadcastMessage(ctx Context, _ string, broadcast BroadcastOutput) {
 	for _, binaryMsg := range broadcast.FiMessages {
 		var opsFiMessage OpsFiMessage
 		if err := json.Unmarshal(binaryMsg, &opsFiMessage); err != nil {

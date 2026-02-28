@@ -1,4 +1,4 @@
-package jsonutil
+package svc
 
 import (
 	"bytes"
@@ -10,15 +10,6 @@ import (
 	"log/slog"
 	"testing"
 )
-
-func Unmarshal[JSON any](value []byte) any {
-	var v JSON
-	err := json.Unmarshal(value, &v)
-	if err != nil {
-		return err.Error()
-	}
-	return v
-}
 
 func EncodeGzipJSON(ctx context.Context, v any) ([]byte, bool) {
 	var encoded bytes.Buffer
@@ -46,7 +37,6 @@ func DecodeGzipJSON[JSON any](r io.Reader, decoded *JSON) error {
 		return fmt.Errorf("make gzip reader: %w", err)
 	}
 	defer gzipReader.Close()
-
 	if err := json.NewDecoder(gzipReader).Decode(decoded); err != nil {
 		return fmt.Errorf("decode gzip json: %w", err)
 	}

@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"sync"
 	"time"
-	"yodleeops/internal/infra"
-	"yodleeops/internal/jsonutil"
-	"yodleeops/internal/yodlee"
+	"yodleeops/infra"
+
+	"yodleeops/yodlee"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -25,7 +25,7 @@ type PutAcctResult = PutResult[OpsAccount]
 type PutHoldResult = PutResult[OpsHolding]
 type PutTxnResult = PutResult[OpsTransaction]
 
-func IngestCnctResponses(ctx AppContext, profileId string, response yodlee.ProviderAccountResponse) []PutCnctResult {
+func IngestCnctResponses(ctx Context, profileId string, response yodlee.ProviderAccountResponse) []PutCnctResult {
 	start := time.Now()
 
 	var putList []PutInput[OpsProviderAccount]
@@ -43,13 +43,13 @@ func IngestCnctResponses(ctx AppContext, profileId string, response yodlee.Provi
 		putList = append(putList, PutInput[OpsProviderAccount]{Key: key.String(), Input: cnct})
 	}
 
-	joinPuts := PutObjects(ctx, ctx.CnctBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.Buckets.Connections, putList)
 
 	slog.InfoContext(ctx, "finished ingest cnct responses", "elapsed", time.Since(start))
 	return joinPuts()
 }
 
-func IngestAcctResponses(ctx AppContext, profileId string, response yodlee.AccountResponse) []PutAcctResult {
+func IngestAcctResponses(ctx Context, profileId string, response yodlee.AccountResponse) []PutAcctResult {
 	start := time.Now()
 
 	var putList []PutInput[OpsAccount]
@@ -68,13 +68,13 @@ func IngestAcctResponses(ctx AppContext, profileId string, response yodlee.Accou
 		putList = append(putList, PutInput[OpsAccount]{Key: key.String(), Input: acct})
 	}
 
-	joinPuts := PutObjects(ctx, ctx.AcctBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.Buckets.Accounts, putList)
 
 	slog.InfoContext(ctx, "finished ingest acct responses", "elapsed", time.Since(start))
 	return joinPuts()
 }
 
-func IngestHoldResponses(ctx AppContext, profileId string, response yodlee.HoldingResponse) []PutHoldResult {
+func IngestHoldResponses(ctx Context, profileId string, response yodlee.HoldingResponse) []PutHoldResult {
 	start := time.Now()
 
 	var putList []PutInput[OpsHolding]
@@ -93,13 +93,13 @@ func IngestHoldResponses(ctx AppContext, profileId string, response yodlee.Holdi
 		putList = append(putList, PutInput[OpsHolding]{Key: key.String(), Input: hold})
 	}
 
-	joinPuts := PutObjects(ctx, ctx.HoldBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.Buckets.Holdings, putList)
 
 	slog.InfoContext(ctx, "finished ingest hold responses", "elapsed", time.Since(start))
 	return joinPuts()
 }
 
-func IngestTxnResponses(ctx AppContext, profileId string, response yodlee.TransactionResponse) []PutTxnResult {
+func IngestTxnResponses(ctx Context, profileId string, response yodlee.TransactionResponse) []PutTxnResult {
 	start := time.Now()
 
 	var putList []PutInput[OpsTransaction]
@@ -118,7 +118,7 @@ func IngestTxnResponses(ctx AppContext, profileId string, response yodlee.Transa
 		putList = append(putList, PutInput[OpsTransaction]{Key: key.String(), Input: txn})
 	}
 
-	joinPuts := PutObjects(ctx, ctx.TxnBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.Buckets.Transactions, putList)
 
 	slog.InfoContext(ctx, "finished ingest txn responses", "elapsed", time.Since(start))
 	return joinPuts()
@@ -134,7 +134,7 @@ type AcctRefreshResult = RefreshResult[OpsAccountRefresh]
 type HoldRefreshResult = RefreshResult[OpsHoldingRefresh]
 type TxnRefreshResult = RefreshResult[OpsTransactionRefresh]
 
-func IngestCnctRefreshes(ctx AppContext, profileId string, cncts []yodlee.DataExtractsProviderAccount) CnctRefreshResult {
+func IngestCnctRefreshes(ctx Context, profileId string, cncts []yodlee.DataExtractsProviderAccount) CnctRefreshResult {
 	start := time.Now()
 
 	var putList []PutInput[OpsProviderAccountRefresh]
@@ -158,7 +158,7 @@ func IngestCnctRefreshes(ctx AppContext, profileId string, cncts []yodlee.DataEx
 		}
 	}
 
-	joinPuts := PutObjects(ctx, ctx.CnctBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.Buckets.Connections, putList)
 	deleteErrs := DeleteCncts(ctx, removeCnctKeys)
 
 	slog.InfoContext(ctx, "finished ingest cnct refreshes", "elapsed", time.Since(start))
@@ -166,7 +166,7 @@ func IngestCnctRefreshes(ctx AppContext, profileId string, cncts []yodlee.DataEx
 	return CnctRefreshResult{PutResults: joinPuts(), DeleteErrors: deleteErrs}
 }
 
-func IngestAcctsRefreshes(ctx AppContext, profileId string, accts []yodlee.DataExtractsAccount) AcctRefreshResult {
+func IngestAcctsRefreshes(ctx Context, profileId string, accts []yodlee.DataExtractsAccount) AcctRefreshResult {
 	start := time.Now()
 
 	var putList []PutInput[OpsAccountRefresh]
@@ -191,7 +191,7 @@ func IngestAcctsRefreshes(ctx AppContext, profileId string, accts []yodlee.DataE
 		}
 	}
 
-	joinPuts := PutObjects(ctx, ctx.AcctBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.Buckets.Accounts, putList)
 	deleteErrs := DeleteAccts(ctx, removeAcctKeys)
 
 	slog.InfoContext(ctx, "finished ingest accts refreshes", "elapsed", time.Since(start))
@@ -199,7 +199,7 @@ func IngestAcctsRefreshes(ctx AppContext, profileId string, accts []yodlee.DataE
 	return AcctRefreshResult{PutResults: joinPuts(), DeleteErrors: deleteErrs}
 }
 
-func IngestHoldRefreshes(ctx AppContext, profileId string, holds []yodlee.DataExtractsHolding) HoldRefreshResult {
+func IngestHoldRefreshes(ctx Context, profileId string, holds []yodlee.DataExtractsHolding) HoldRefreshResult {
 	start := time.Now()
 
 	var putList []PutInput[OpsHoldingRefresh]
@@ -218,14 +218,14 @@ func IngestHoldRefreshes(ctx AppContext, profileId string, holds []yodlee.DataEx
 		putList = append(putList, PutInput[OpsHoldingRefresh]{Key: key.String(), Input: hold})
 	}
 
-	joinPuts := PutObjects(ctx, ctx.HoldBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.Buckets.Holdings, putList)
 
 	slog.InfoContext(ctx, "finished ingest hold refreshes", "elapsed", time.Since(start))
 
 	return HoldRefreshResult{PutResults: joinPuts()}
 }
 
-func IngestTxnRefreshes(ctx AppContext, profileId string, txns []yodlee.DataExtractsTransaction) TxnRefreshResult {
+func IngestTxnRefreshes(ctx Context, profileId string, txns []yodlee.DataExtractsTransaction) TxnRefreshResult {
 	start := time.Now()
 
 	var putList []PutInput[OpsTransactionRefresh]
@@ -239,7 +239,7 @@ func IngestTxnRefreshes(ctx AppContext, profileId string, txns []yodlee.DataExtr
 				AcctID:    txn.AccountId,
 				ChildID:   txn.Id,
 			}
-			txnPrefixes[Prefix{Value: prefix.String(), Bucket: ctx.TxnBucket}] = true
+			txnPrefixes[Prefix{Value: prefix.String(), Bucket: ctx.Buckets.Transactions}] = true
 		} else {
 			key := TxnKey{
 				ProfileId: profileId,
@@ -255,7 +255,7 @@ func IngestTxnRefreshes(ctx AppContext, profileId string, txns []yodlee.DataExtr
 		}
 	}
 
-	joinPuts := PutObjects(ctx, ctx.TxnBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.Buckets.Transactions, putList)
 	deleteErrs := DeletePrefixes(ctx, txnPrefixes)
 
 	slog.InfoContext(ctx, "finished ingest txn refreshes", "elapsed", time.Since(start))
@@ -263,7 +263,7 @@ func IngestTxnRefreshes(ctx AppContext, profileId string, txns []yodlee.DataExtr
 	return TxnRefreshResult{PutResults: joinPuts(), DeleteErrors: deleteErrs}
 }
 
-func IngestDeleteRetries(ctx AppContext, deleteRetries []DeleteRetry) []DeleteResult {
+func IngestDeleteRetries(ctx Context, deleteRetries []DeleteRetry) []DeleteResult {
 	slog.InfoContext(ctx, "begin ingest delete retries", "deleteRetries", deleteRetries)
 
 	deletes := makeDeleteSupervisor(ctx)
@@ -302,13 +302,13 @@ func (o PutInput[T]) String() string {
 }
 
 // PutObjects uploads objects to a given Bucket async and returns any failed uploads when the task is joined
-func PutObjects[Input any](ctx AppContext, bucket infra.Bucket, inputObjects []PutInput[Input]) func() []PutResult[Input] {
+func PutObjects[Input any](ctx Context, bucket infra.Bucket, inputObjects []PutInput[Input]) func() []PutResult[Input] {
 	results := make([]PutResult[Input], len(inputObjects))
 
 	var wg sync.WaitGroup
 
 	for i, object := range inputObjects {
-		body, ok := jsonutil.EncodeGzipJSON(ctx, object.Input)
+		body, ok := EncodeGzipJSON(ctx, object.Input)
 		if !ok {
 			continue
 		}
@@ -316,7 +316,7 @@ func PutObjects[Input any](ctx AppContext, bucket infra.Bucket, inputObjects []P
 		go func() {
 			defer wg.Done()
 
-			_, err := ctx.S3Client.PutObject(ctx, &s3.PutObjectInput{
+			_, err := ctx.S3.PutObject(ctx, &s3.PutObjectInput{
 				Bucket: aws.String(string(bucket)),
 				Key:    aws.String(object.Key),
 				Body:   bytes.NewReader(body),
@@ -354,7 +354,7 @@ func PutObjects[Input any](ctx AppContext, bucket infra.Bucket, inputObjects []P
 }
 
 type Supervisor struct {
-	context AppContext
+	context Context
 	wg      sync.WaitGroup
 }
 
@@ -372,7 +372,7 @@ type ListAcctsTable struct {
 	lock  sync.Mutex
 }
 
-func makeListAcctsSupervisor(ctx AppContext) ListAcctsTable {
+func makeListAcctsSupervisor(ctx Context) ListAcctsTable {
 	return ListAcctsTable{
 		Supervisor: Supervisor{context: ctx},
 		table:      make(map[string]bool),
@@ -418,7 +418,7 @@ type DeleteSupervisor struct {
 	lock       sync.Mutex
 }
 
-func makeDeleteSupervisor(ctx AppContext) DeleteSupervisor {
+func makeDeleteSupervisor(ctx Context) DeleteSupervisor {
 	return DeleteSupervisor{
 		Supervisor: Supervisor{context: ctx},
 	}
@@ -475,7 +475,7 @@ func (ds *DeleteSupervisor) wait() []DeleteResult {
 
 // DeleteCncts deletes all records with the following account keys from all parts of s3.
 // blocks until all goroutines are complete, while logs any failed delete calls.
-func DeleteCncts(ctx AppContext, keys []CnctKey) []DeleteResult {
+func DeleteCncts(ctx Context, keys []CnctKey) []DeleteResult {
 	if len(keys) == 0 {
 		return nil
 	}
@@ -490,24 +490,24 @@ func DeleteCncts(ctx AppContext, keys []CnctKey) []DeleteResult {
 	deletes := makeDeleteSupervisor(ctx)
 
 	for cnctPrefix := range cnctPrefixes {
-		deletes.DeleteList(ctx.CnctBucket, ListObjectsByPrefix(ctx, ctx.CnctBucket, cnctPrefix))
+		deletes.DeleteList(ctx.Buckets.Connections, ListObjectsByPrefix(ctx, ctx.Buckets.Connections, cnctPrefix))
 	}
 
 	// in addition to deleting each cnct by prefix, we need to parse the acctID and create an acctPrefix to delete txns and holdings.
 	listAccts := makeListAcctsSupervisor(ctx)
 
 	for cnctPrefix := range cnctPrefixes {
-		listIDsChan := ListObjectsByPrefix(ctx, ctx.AcctBucket, cnctPrefix)
+		listIDsChan := ListObjectsByPrefix(ctx, ctx.Buckets.Accounts, cnctPrefix)
 		deleteIDsChan := listAccts.InterceptListedPrefixes(listIDsChan)
-		deletes.DeleteList(ctx.AcctBucket, deleteIDsChan)
+		deletes.DeleteList(ctx.Buckets.Accounts, deleteIDsChan)
 	}
 
 	acctsPrefixTable := listAccts.Wait()
 
 	for acctPrefix := range acctsPrefixTable {
 		for _, bucket := range []infra.Bucket{
-			ctx.HoldBucket,
-			ctx.TxnBucket,
+			ctx.Buckets.Holdings,
+			ctx.Buckets.Transactions,
 		} {
 			deletes.DeleteList(bucket, ListObjectsByPrefix(ctx, bucket, acctPrefix))
 		}
@@ -518,7 +518,7 @@ func DeleteCncts(ctx AppContext, keys []CnctKey) []DeleteResult {
 
 // DeleteAccts deletes all records with the following cnct keys from all parts s3.
 // blocks until all goroutines are complete, while logs any failed delete calls.
-func DeleteAccts(ctx AppContext, keys []AcctKey) []DeleteResult {
+func DeleteAccts(ctx Context, keys []AcctKey) []DeleteResult {
 	if len(keys) == 0 {
 		return nil
 	}
@@ -540,14 +540,14 @@ func DeleteAccts(ctx AppContext, keys []AcctKey) []DeleteResult {
 
 	for acctMemPrefix := range acctMembPrefixes {
 		for _, bucket := range []infra.Bucket{
-			ctx.HoldBucket,
-			ctx.TxnBucket,
+			ctx.Buckets.Holdings,
+			ctx.Buckets.Transactions,
 		} {
 			deletes.DeleteList(bucket, ListObjectsByPrefix(ctx, bucket, acctMemPrefix))
 		}
 	}
 	for acctPrefix := range acctPrefixes {
-		deletes.DeleteList(ctx.AcctBucket, ListObjectsByPrefix(ctx, ctx.AcctBucket, acctPrefix))
+		deletes.DeleteList(ctx.Buckets.Accounts, ListObjectsByPrefix(ctx, ctx.Buckets.Accounts, acctPrefix))
 	}
 
 	return deletes.wait()
@@ -563,7 +563,7 @@ func (p Prefix) String() string {
 }
 
 // DeletePrefixes generically deletes pairs of prefixes in one shot.
-func DeletePrefixes(ctx AppContext, prefixes map[Prefix]bool) []DeleteResult {
+func DeletePrefixes(ctx Context, prefixes map[Prefix]bool) []DeleteResult {
 	if len(prefixes) == 0 {
 		return nil
 	}
@@ -588,17 +588,17 @@ type ListResult struct {
 
 // ListObjectsByPrefix lists all object keys for a certain prefix in a Bucket and streams each page of data through a channel as they come.
 // aws s3 API does not support multiple buckets/prefixes per call, so each Bucket prefix needs its own api call.
-func ListObjectsByPrefix(ctx AppContext, bucket infra.Bucket, prefix string) chan ListResult {
+func ListObjectsByPrefix(ctx Context, bucket infra.Bucket, prefix string) chan ListResult {
 	resultsChan := make(chan ListResult)
 
 	// paginate through all objects under the given prefix for a Bucket and send each page to the channel. closes when all pages have been walked
 	go func() {
 		defer close(resultsChan)
 
-		paginator := s3.NewListObjectsV2Paginator(ctx.S3Client, &s3.ListObjectsV2Input{
+		paginator := s3.NewListObjectsV2Paginator(ctx.S3, &s3.ListObjectsV2Input{
 			Bucket:  aws.String(string(bucket)),
 			Prefix:  aws.String(prefix),
-			MaxKeys: ctx.PageLength,
+			MaxKeys: ctx.PaginationLen,
 		})
 		page := 0
 
@@ -643,13 +643,13 @@ type DeleteResult struct {
 	Err    error
 }
 
-func DeleteObjects(ctx AppContext, bucket infra.Bucket, keys []string) DeleteResult {
+func DeleteObjects(ctx Context, bucket infra.Bucket, keys []string) DeleteResult {
 	objectIDs := make([]s3types.ObjectIdentifier, 0, len(keys))
 	for _, key := range keys {
 		objectIDs = append(objectIDs, s3types.ObjectIdentifier{Key: aws.String(key)})
 	}
 
-	_, err := ctx.S3Client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+	_, err := ctx.S3.DeleteObjects(ctx, &s3.DeleteObjectsInput{
 		Bucket: aws.String(string(bucket)),
 		Delete: &s3types.Delete{Objects: objectIDs},
 	})

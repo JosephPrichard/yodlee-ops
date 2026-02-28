@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 	"time"
-	"yodleeops/internal/infra"
+	"yodleeops/infra"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -26,7 +26,7 @@ var setupAppMu sync.Mutex
 
 var localstackCont testcontainers.Container
 
-func SetupAwsITest(t *testing.T) infra.AwsClient {
+func SetupAwsITest(t *testing.T) infra.AWS {
 	// global lock for the entire initialization phase.
 	// this prevents multiple containers for the same infra from being spawned
 	setupAppMu.Lock()
@@ -65,16 +65,16 @@ func SetupAwsITest(t *testing.T) infra.AwsClient {
 	client := infra.MakeAwsClient(cfg)
 
 	// mock the bucket data for each itest.
-	client.CnctBucket = unique(client.CnctBucket)
-	client.AcctBucket = unique(client.AcctBucket)
-	client.HoldBucket = unique(client.HoldBucket)
-	client.TxnBucket = unique(client.TxnBucket)
+	client.Buckets.Connections = unique(client.Buckets.Connections)
+	client.Buckets.Accounts = unique(client.Buckets.Accounts)
+	client.Buckets.Holdings = unique(client.Buckets.Holdings)
+	client.Buckets.Transactions = unique(client.Buckets.Transactions)
 
 	createBuckets(ctx, t, cfg, client)
 	return client
 }
 
-func createBuckets(ctx context.Context, t *testing.T, cfg infra.Config, client infra.AwsClient) {
+func createBuckets(ctx context.Context, t *testing.T, cfg infra.Config, client infra.AWS) {
 	awsCfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(cfg.AwsDefaultRegion),
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("testing", "testing", "")),
@@ -87,10 +87,10 @@ func createBuckets(ctx context.Context, t *testing.T, cfg infra.Config, client i
 		o.UsePathStyle = true
 	})
 	for _, bucket := range []infra.Bucket{
-		client.CnctBucket,
-		client.AcctBucket,
-		client.HoldBucket,
-		client.TxnBucket,
+		client.Buckets.Connections,
+		client.Buckets.Accounts,
+		client.Buckets.Holdings,
+		client.Buckets.Transactions,
 	} {
 		if _, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String(string(bucket))}); err != nil {
 			t.Fatalf("failed to create bucket %s: %s", bucket, err)

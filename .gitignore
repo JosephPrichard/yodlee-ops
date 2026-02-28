@@ -27,8 +27,6 @@ go.work.sum
 # env file
 .env
 
-frontend/dist
-frontend/src/api
 openapi/static
 openapi/sources
 

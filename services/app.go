@@ -2,16 +2,16 @@ package svc
 
 import (
 	"context"
-	"yodleeops/internal/infra"
+	"yodleeops/infra"
 )
 
 type App struct {
-	infra.AwsClient
+	infra.AWS
 	infra.KafkaClient
 	FiMessageBroadcaster *FiMessageBroadcaster
 }
 
-type AppContext struct {
+type Context struct {
 	context.Context
 	*App
 }

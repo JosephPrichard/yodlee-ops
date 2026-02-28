@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"yodleeops/internal/infra"
+	"yodleeops/infra"
 )
 
 type CnctKey struct {
@@ -153,11 +153,11 @@ func TimeParseLax(dateString string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("parse time with any known layout: %s", dateString)
 }
 
-func (o *OpsFiMetadata) ParseOpsFiMetadata(buckets infra.S3Buckets, bucket infra.Bucket, key string) error {
+func (o *OpsFiMetadata) ParseOpsFiMetadata(buckets infra.Buckets, bucket infra.Bucket, key string) error {
 	tokens := strings.Split(key, "/")
 
 	switch bucket {
-	case buckets.CnctBucket:
+	case buckets.Connections:
 		wantTokenCount := 4
 		if len(tokens) != wantTokenCount {
 			return ParseOpsFiMetadataError{Key: key, Bucket: bucket, WantTokenCount: wantTokenCount, ActualTokenCount: len(tokens)}
@@ -165,7 +165,7 @@ func (o *OpsFiMetadata) ParseOpsFiMetadata(buckets infra.S3Buckets, bucket infra
 		o.ProfileID = tokens[0]
 		o.ProviderAccountID = tokens[1]
 		o.PartyIDTypeCd = tokens[2]
-	case buckets.AcctBucket:
+	case buckets.Accounts:
 		wantTokenCount := 5
 		if len(tokens) != wantTokenCount {
 			return ParseOpsFiMetadataError{Key: key, Bucket: bucket, WantTokenCount: wantTokenCount, ActualTokenCount: len(tokens)}
@@ -174,7 +174,7 @@ func (o *OpsFiMetadata) ParseOpsFiMetadata(buckets infra.S3Buckets, bucket infra
 		o.ProviderAccountID = tokens[1]
 		o.PartyIDTypeCd = tokens[2]
 		o.AccountID = tokens[3]
-	case buckets.HoldBucket, buckets.TxnBucket:
+	case buckets.Holdings, buckets.Transactions:
 		wantTokenCount := 5
 		if len(tokens) != wantTokenCount {
 			return ParseOpsFiMetadataError{Key: key, Bucket: bucket, WantTokenCount: wantTokenCount, ActualTokenCount: len(tokens)}

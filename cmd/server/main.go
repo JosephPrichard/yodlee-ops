@@ -10,7 +10,7 @@ import (
 	"os/signal"
 	"time"
 	"yodleeops/cmd"
-	"yodleeops/internal/infra"
+	"yodleeops/infra"
 	svc "yodleeops/services"
 )
 
@@ -25,7 +25,7 @@ func main() {
 	config.IsLocal = true
 
 	app := &svc.App{
-		AwsClient:            infra.MakeAwsClient(config),
+		AWS:                  infra.MakeAwsClient(config),
 		KafkaClient:          infra.MakeKafkaConsumerProducer(config),
 		FiMessageBroadcaster: &svc.FiMessageBroadcaster{},
 	}

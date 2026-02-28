@@ -61,11 +61,6 @@ func MakeConfig() Config {
 	}
 }
 
-type Clients struct {
-	KafkaClient
-	AwsClient
-}
-
 type KafkaClient struct {
 	KafkaBrokers []string
 
@@ -175,27 +170,27 @@ func (k *KafkaClient) Close() error {
 	)
 }
 
-type S3Buckets struct {
-	CnctBucket Bucket
-	AcctBucket Bucket
-	HoldBucket Bucket
-	TxnBucket  Bucket
+type Buckets struct {
+	Connections  Bucket
+	Accounts     Bucket
+	Holdings     Bucket
+	Transactions Bucket
 }
 
-type AwsClient struct {
-	S3Client   S3Client
-	PageLength *int32
-	S3Buckets
+type AWS struct {
+	S3            S3
+	PaginationLen *int32
+	Buckets       Buckets
 }
 
-type S3Client interface {
+type S3 interface {
 	PutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
 	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 	ListObjectsV2(ctx context.Context, params *s3.ListObjectsV2Input, optFns ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
 	DeleteObjects(ctx context.Context, params *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
 }
 
-func MakeAwsClient(cfg Config) AwsClient {
+func MakeAwsClient(cfg Config) AWS {
 	opts := []func(*config.LoadOptions) error{
 		config.WithRegion(cfg.AwsDefaultRegion),
 	}
@@ -208,19 +203,19 @@ func MakeAwsClient(cfg Config) AwsClient {
 		log.Fatalf("failed to load AWS config: %v", err)
 	}
 
-	return AwsClient{
-		S3Client: s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+	return AWS{
+		S3: s3.NewFromConfig(awsCfg, func(o *s3.Options) {
 			if cfg.AwsEndpoint != "" {
 				o.BaseEndpoint = aws.String(cfg.AwsEndpoint)
 				o.UsePathStyle = true
 			}
 		}),
-		PageLength: nil,
-		S3Buckets: S3Buckets{
-			CnctBucket: CnctBucket,
-			AcctBucket: AcctBucket,
-			HoldBucket: HoldBucket,
-			TxnBucket:  TxnBucket,
+		PaginationLen: nil,
+		Buckets: Buckets{
+			Connections:  CnctBucket,
+			Accounts:     AcctBucket,
+			Holdings:     HoldBucket,
+			Transactions: TxnBucket,
 		},
 	}
 }

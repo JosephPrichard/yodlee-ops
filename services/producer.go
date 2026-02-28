@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"github.com/segmentio/kafka-go"
 	"log/slog"
-	"yodleeops/internal/infra"
+	"yodleeops/infra"
 )
 
-func ProduceJsonMessage(ctx AppContext, topic infra.Topic, key string, fiMessage any) {
+func ProduceJsonMessage(ctx Context, topic infra.Topic, key string, fiMessage any) {
 	inputBytes, err := json.Marshal(fiMessage)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to republish json messages", "err", err)
@@ -65,7 +65,7 @@ func MakeDeleteErrorsMsgs(ctx context.Context, profileId string, deleteErrs []De
 	return msgs
 }
 
-func ProduceDeleteErrors(ctx AppContext, profileId string, deleteErrs []DeleteResult) {
+func ProduceDeleteErrors(ctx Context, profileId string, deleteErrs []DeleteResult) {
 	deleteErrorMsgs := MakeDeleteErrorsMsgs(ctx, profileId, deleteErrs)
 
 	var msgs []kafka.Message

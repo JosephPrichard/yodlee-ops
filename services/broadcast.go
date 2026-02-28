@@ -4,7 +4,7 @@ import (
 	"hash/fnv"
 	"slices"
 	"sync"
-	"yodleeops/internal/infra"
+	"yodleeops/infra"
 )
 
 const MaxSubscribeMessages = 10

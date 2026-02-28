@@ -2,8 +2,10 @@ package testutil
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/google/go-cmp/cmp"
@@ -12,8 +14,7 @@ import (
 	"io"
 	"net/http/httptest"
 	"testing"
-	"yodleeops/internal/infra"
-	"yodleeops/internal/jsonutil"
+	"yodleeops/infra"
 )
 
 func Equal[T any](t *testing.T, expected, actual T, opts ...cmp.Option) {
@@ -29,14 +30,26 @@ type WantObject[JSON any] struct {
 	Value  JSON
 }
 
-func AssertObjects[JSON any](t *testing.T, awsClient *infra.AwsClient, objects []WantObject[JSON], opts ...cmp.Option) {
+func DecodeGzipJSON[JSON any](r io.Reader, decoded *JSON) error {
+	gzipReader, err := gzip.NewReader(r)
+	if err != nil {
+		return fmt.Errorf("make gzip reader: %w", err)
+	}
+	defer gzipReader.Close()
+	if err := json.NewDecoder(gzipReader).Decode(decoded); err != nil {
+		return fmt.Errorf("decode gzip json: %w", err)
+	}
+	return nil
+}
+
+func AssertObjects[JSON any](t *testing.T, awsClient *infra.AWS, objects []WantObject[JSON], opts ...cmp.Option) {
 	opts = append([]cmp.Option{protocmp.Transform()}, opts...)
 
 	t.Helper()
 
 	for _, object := range objects {
 		func() {
-			resp, err := awsClient.S3Client.GetObject(context.Background(), &s3.GetObjectInput{
+			resp, err := awsClient.S3.GetObject(context.Background(), &s3.GetObjectInput{
 				Bucket: aws.String(string(object.Bucket)),
 				Key:    aws.String(object.Key),
 			})
@@ -51,7 +64,7 @@ func AssertObjects[JSON any](t *testing.T, awsClient *infra.AwsClient, objects [
 			t.Logf("got object %s/%s (%d bytes)", object.Bucket, object.Key, len(bodyBytes))
 
 			var s3Value JSON
-			require.NoError(t, jsonutil.DecodeGzipJSON(bytes.NewReader(bodyBytes), &s3Value))
+			require.NoError(t, DecodeGzipJSON(bytes.NewReader(bodyBytes), &s3Value))
 			//require.NoError(t, json.Unmarshal(bodyBytes, &s3Value))
 
 			Equal(t, object.Value, s3Value, opts...)
@@ -64,11 +77,16 @@ type WantKey struct {
 	Key    string
 }
 
-func GetAllKeys(t *testing.T, awsClient infra.AwsClient) []WantKey {
+func GetAllKeys(t *testing.T, a infra.AWS) []WantKey {
 	var keys []WantKey
 
-	for _, bucket := range []infra.Bucket{awsClient.CnctBucket, awsClient.AcctBucket, awsClient.HoldBucket, awsClient.TxnBucket} {
-		paginator := s3.NewListObjectsV2Paginator(awsClient.S3Client, &s3.ListObjectsV2Input{Bucket: aws.String(string(bucket))})
+	for _, bucket := range []infra.Bucket{
+		a.Buckets.Connections,
+		a.Buckets.Accounts,
+		a.Buckets.Transactions,
+		a.Buckets.Holdings,
+	} {
+		paginator := s3.NewListObjectsV2Paginator(a.S3, &s3.ListObjectsV2Input{Bucket: aws.String(string(bucket))})
 
 		for paginator.HasMorePages() {
 			page, err := paginator.NextPage(context.Background())

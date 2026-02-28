@@ -12,8 +12,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"yodleeops/internal/infra"
-	"yodleeops/internal/jsonutil"
+	"yodleeops/infra"
 )
 
 type OpsFiGeneric struct {
@@ -37,7 +36,10 @@ func FlattenNestedOpsFiMetadata(nestedOpsFiMetadata [][]OpsFiMetadata) []OpsFiMe
 	return opsFiMetadata
 }
 
-const NilContinuationToken = ""
+const (
+	NoContinuationToken = ""
+	EmptyCursor         = ""
+)
 
 func MakeReturnCursor(profileIDContinuationTokenMap map[string]string, queries []ListFiMetadataQuery) string {
 	cursorArray := make([]string, 0, len(queries))
@@ -45,14 +47,14 @@ func MakeReturnCursor(profileIDContinuationTokenMap map[string]string, queries [
 		continuationToken := profileIDContinuationTokenMap[pair.ProfileID]
 		cursorArray = append(cursorArray, continuationToken)
 	}
-	isAllContinuationTokenNil := true
+	hasNoContinuationTokens := true
 	for _, continuationToken := range cursorArray {
-		if continuationToken != NilContinuationToken {
-			isAllContinuationTokenNil = false
+		if continuationToken != NoContinuationToken {
+			hasNoContinuationTokens = false
 		}
 	}
-	if isAllContinuationTokenNil {
-		return "" // no more continuation tokens means = return empty cursor
+	if hasNoContinuationTokens {
+		return EmptyCursor
 	}
 	return strings.Join(cursorArray, ",")
 }
@@ -70,7 +72,7 @@ type ListFiMetadataResult struct {
 	Cursor        string          `json:"cursor"`
 }
 
-func ListFiMetadataByProfileIDs(appCtx AppContext, bucket infra.Bucket, queries []ListFiMetadataQuery) (results ListFiMetadataResult, err error) {
+func ListFiMetadataByProfileIDs(appCtx Context, bucket infra.Bucket, queries []ListFiMetadataQuery) (results ListFiMetadataResult, err error) {
 	nestedOpsFiMetadata := make([][]OpsFiMetadata, len(queries))
 
 	var cursorsLock sync.Mutex
@@ -79,7 +81,7 @@ func ListFiMetadataByProfileIDs(appCtx AppContext, bucket infra.Bucket, queries 
 	eg, egCtx := errgroup.WithContext(appCtx)
 	for i, pair := range queries {
 		eg.Go(func() error {
-			opsFiMetadata, nextCursor, err := ListFiMetadataByPrefix(AppContext{Context: egCtx, App: appCtx.App}, bucket, pair.ProfileID, pair.ContinuationToken)
+			opsFiMetadata, nextCursor, err := ListFiMetadataByPrefix(Context{Context: egCtx, App: appCtx.App}, bucket, pair.ProfileID, pair.ContinuationToken)
 			if err != nil {
 				return fmt.Errorf("list metadata job index=%d: %w", i, err)
 			}
@@ -104,21 +106,21 @@ func ListFiMetadataByProfileIDs(appCtx AppContext, bucket infra.Bucket, queries 
 	return ListFiMetadataResult{OpsFiMetadata: opsFiMetadata, Cursor: cursor}, nil
 }
 
-func ListFiMetadataByPrefix(ctx AppContext, bucket infra.Bucket, prefix string, cursor string) ([]OpsFiMetadata, string, error) {
+func ListFiMetadataByPrefix(ctx Context, bucket infra.Bucket, prefix string, cursor string) ([]OpsFiMetadata, string, error) {
 	var continuationToken *string
 	if cursor != "" {
 		continuationToken = aws.String(cursor)
 	}
 	slog.InfoContext(ctx, "listing metadata records", "bucket", bucket, "prefix", prefix, "continuationToken", continuationToken)
 
-	output, err := ctx.S3Client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+	output, err := ctx.S3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 		Bucket:            aws.String(string(bucket)),
 		Prefix:            aws.String(prefix),
 		ContinuationToken: continuationToken,
-		MaxKeys:           ctx.AwsClient.PageLength,
+		MaxKeys:           ctx.AWS.PaginationLen,
 	})
 	if err != nil {
-		return nil, NilContinuationToken, fmt.Errorf("list objects by prefix=%s, cursor=%s and bucket=%s: %w", prefix, cursor, bucket, err)
+		return nil, NoContinuationToken, fmt.Errorf("list objects by prefix=%s, cursor=%s and bucket=%s: %w", prefix, cursor, bucket, err)
 	}
 
 	opsFiMetadata := make([]OpsFiMetadata, 0)
@@ -130,7 +132,7 @@ func ListFiMetadataByPrefix(ctx AppContext, bucket infra.Bucket, prefix string, 
 			Key:          *obj.Key,
 			LastModified: *obj.LastModified,
 		}
-		if err := metadataRecord.ParseOpsFiMetadata(ctx.S3Buckets, bucket, *obj.Key); err != nil {
+		if err := metadataRecord.ParseOpsFiMetadata(ctx.Buckets, bucket, *obj.Key); err != nil {
 			slog.ErrorContext(ctx, "failed to parse ops fi metadata record", "Key", *obj.Key, "err", err)
 		} else {
 			opsFiMetadata = append(opsFiMetadata, metadataRecord)
@@ -138,7 +140,7 @@ func ListFiMetadataByPrefix(ctx AppContext, bucket infra.Bucket, prefix string, 
 	}
 
 	hasMore := output.IsTruncated != nil && *output.IsTruncated
-	nextCursor := NilContinuationToken
+	nextCursor := NoContinuationToken
 	if hasMore && output.NextContinuationToken != nil {
 		nextCursor = *output.NextContinuationToken
 	}
@@ -149,8 +151,8 @@ func ListFiMetadataByPrefix(ctx AppContext, bucket infra.Bucket, prefix string, 
 
 var ErrKeyNotFound = errors.New("key not found")
 
-func GetFiObject(ctx AppContext, bucket infra.Bucket, key string) (fiObject OpsFiGeneric, err error) {
-	object, err := ctx.S3Client.GetObject(ctx, &s3.GetObjectInput{
+func GetFiObject(ctx Context, bucket infra.Bucket, key string) (fiObject OpsFiGeneric, err error) {
+	object, err := ctx.S3.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(string(bucket)),
 		Key:    aws.String(key),
 	})
@@ -166,7 +168,7 @@ func GetFiObject(ctx AppContext, bucket infra.Bucket, key string) (fiObject OpsF
 
 	slog.InfoContext(ctx, "retrieved object", "bucket", bucket, "key", key)
 
-	if err := jsonutil.DecodeGzipJSON(object.Body, &fiObject); err != nil {
+	if err := DecodeGzipJSON(object.Body, &fiObject); err != nil {
 		return fiObject, fmt.Errorf("decode gzip json: %w", err)
 	}
 	return fiObject, nil

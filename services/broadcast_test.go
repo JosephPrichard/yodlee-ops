@@ -3,7 +3,7 @@ package svc
 import (
 	"github.com/stretchr/testify/assert"
 	"testing"
-	"yodleeops/internal/infra"
+	"yodleeops/infra"
 )
 
 func TestFiMessageBroadcaster(t *testing.T) {

@@ -2,8 +2,8 @@ package svc
 
 import (
 	"time"
-	"yodleeops/internal/infra"
-	"yodleeops/internal/yodlee"
+	"yodleeops/infra"
+	"yodleeops/yodlee"
 )
 
 type YodleeWrapper[YodleeInput any] interface {

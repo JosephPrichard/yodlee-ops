@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
-	"yodleeops/internal/infra"
+	"yodleeops/infra"
 	openapi "yodleeops/openapi/sources"
 )
 
@@ -139,19 +139,19 @@ func (app *App) StreamFiObjectLogs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func BucketFromSubject(buckets infra.S3Buckets, subject openapi.FiSubject) infra.Bucket {
+func BucketFromSubject(buckets infra.Buckets, subject openapi.FiSubject) infra.Bucket {
 	var bucket infra.Bucket
 	switch subject {
 	case openapi.FiSubjectConnections:
-		bucket = buckets.CnctBucket
+		bucket = buckets.Connections
 	case openapi.FiSubjectAccounts:
-		bucket = buckets.AcctBucket
+		bucket = buckets.Accounts
 	case openapi.FiSubjectTransactions:
-		bucket = buckets.TxnBucket
+		bucket = buckets.Transactions
 	case openapi.FiSubjectHoldings:
-		bucket = buckets.HoldBucket
+		bucket = buckets.Holdings
 	default:
-		bucket = buckets.CnctBucket
+		bucket = buckets.Connections
 	}
 	return bucket
 }
@@ -183,14 +183,14 @@ var _ openapi.Handler = (*FiOpsAPIHandler)(nil)
 const InternalServerErrorMessage = "internal server error"
 
 func (h *FiOpsAPIHandler) GetFiMetadataByPrefix(ctx context.Context, params openapi.GetFiMetadataByPrefixParams) (openapi.GetFiMetadataByPrefixRes, error) {
-	appCtx := AppContext{Context: ctx, App: h.App}
+	appCtx := Context{Context: ctx, App: h.App}
 
 	internalServerError := func(err error) *openapi.GetFiMetadataByPrefixInternalServerError {
 		slog.ErrorContext(ctx, "failed to list fi metadata by prefix", "err", err, "params", params)
 		return &openapi.GetFiMetadataByPrefixInternalServerError{ErrorCode: openapi.ErrorCodeFATALERROR, ErrorDesc: InternalServerErrorMessage}
 	}
 
-	bucket := BucketFromSubject(h.S3Buckets, params.Subject)
+	bucket := BucketFromSubject(h.Buckets, params.Subject)
 
 	opsFiMetadata, nextCursor, err := ListFiMetadataByPrefix(appCtx, bucket, params.Prefix, params.Cursor.Value)
 	if err != nil {
@@ -204,7 +204,7 @@ func (h *FiOpsAPIHandler) GetFiMetadataByPrefix(ctx context.Context, params open
 }
 
 func (h *FiOpsAPIHandler) GetFiMetadataByProfiles(ctx context.Context, params openapi.GetFiMetadataByProfilesParams) (openapi.GetFiMetadataByProfilesRes, error) {
-	appCtx := AppContext{Context: ctx, App: h.App}
+	appCtx := Context{Context: ctx, App: h.App}
 
 	internalServerError := func(err error) *openapi.GetFiMetadataByProfilesInternalServerError {
 		slog.ErrorContext(ctx, "failed to list fi metadata by profiles", "err", err, "params", params)
@@ -212,7 +212,7 @@ func (h *FiOpsAPIHandler) GetFiMetadataByProfiles(ctx context.Context, params op
 	}
 
 	profileIDs := strings.Split(params.ProfileIDs, ",")
-	bucket := BucketFromSubject(h.S3Buckets, params.Subject)
+	bucket := BucketFromSubject(h.Buckets, params.Subject)
 
 	var arrayCursor []string
 	if params.Cursor == "" {
@@ -245,7 +245,7 @@ func (h *FiOpsAPIHandler) GetFiMetadataByProfiles(ctx context.Context, params op
 }
 
 func (h *FiOpsAPIHandler) GetFiObject(ctx context.Context, params openapi.GetFiObjectParams) (openapi.GetFiObjectRes, error) {
-	appCtx := AppContext{Context: ctx, App: h.App}
+	appCtx := Context{Context: ctx, App: h.App}
 
 	internalServerError := func(err error) *openapi.GetFiObjectInternalServerError {
 		slog.ErrorContext(ctx, "failed to get fi object", "err", err)
@@ -253,7 +253,7 @@ func (h *FiOpsAPIHandler) GetFiObject(ctx context.Context, params openapi.GetFiO
 	}
 
 	keyInput := params.Key
-	bucketInput := BucketFromSubject(h.S3Buckets, params.Subject)
+	bucketInput := BucketFromSubject(h.Buckets, params.Subject)
 
 	opsFiObject, err := GetFiObject(appCtx, bucketInput, keyInput)
 	if errors.Is(err, ErrKeyNotFound) {

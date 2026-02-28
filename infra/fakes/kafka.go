@@ -1,9 +1,9 @@
-package infrastub
+package fakes
 
 import (
 	"context"
 	"github.com/segmentio/kafka-go"
-	"yodleeops/internal/infra"
+	"yodleeops/infra"
 )
 
 type KafkaMessage struct {
@@ -12,15 +12,15 @@ type KafkaMessage struct {
 	Value []byte
 }
 
-type Producer struct {
+type FakeProducer struct {
 	Messages []KafkaMessage
 }
 
-func (p *Producer) WriteMessages(_ context.Context, msgs ...kafka.Message) error {
+func (p *FakeProducer) WriteMessages(_ context.Context, msgs ...kafka.Message) error {
 	for _, m := range msgs {
 		p.Messages = append(p.Messages, KafkaMessage{Topic: infra.Topic(m.Topic), Key: string(m.Key), Value: m.Value})
 	}
 	return nil
 }
 
-func (p *Producer) Close() error { return nil }
+func (p *FakeProducer) Close() error { return nil }

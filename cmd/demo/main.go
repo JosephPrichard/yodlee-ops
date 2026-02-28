@@ -12,8 +12,8 @@ import (
 	"strconv"
 	"time"
 	"yodleeops/cmd"
-	"yodleeops/internal/infra"
-	"yodleeops/internal/yodlee"
+	"yodleeops/infra"
+	"yodleeops/yodlee"
 )
 
 // generates random ids with a tight finite range so we can get a random spread of data
