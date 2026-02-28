@@ -113,7 +113,7 @@ func ListFiMetadataByPrefix(ctx Context, bucket infra.Bucket, prefix string, cur
 	}
 	slog.InfoContext(ctx, "listing metadata records", "bucket", bucket, "prefix", prefix, "continuationToken", continuationToken)
 
-	output, err := ctx.S3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+	output, err := ctx.AWS.S3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
 		Bucket:            aws.String(string(bucket)),
 		Prefix:            aws.String(prefix),
 		ContinuationToken: continuationToken,
@@ -132,7 +132,7 @@ func ListFiMetadataByPrefix(ctx Context, bucket infra.Bucket, prefix string, cur
 			Key:          *obj.Key,
 			LastModified: *obj.LastModified,
 		}
-		if err := metadataRecord.ParseOpsFiMetadata(ctx.Buckets, bucket, *obj.Key); err != nil {
+		if err := metadataRecord.ParseOpsFiMetadata(ctx.AWS.Buckets, bucket, *obj.Key); err != nil {
 			slog.ErrorContext(ctx, "failed to parse ops fi metadata record", "Key", *obj.Key, "err", err)
 		} else {
 			opsFiMetadata = append(opsFiMetadata, metadataRecord)
@@ -152,7 +152,7 @@ func ListFiMetadataByPrefix(ctx Context, bucket infra.Bucket, prefix string, cur
 var ErrKeyNotFound = errors.New("key not found")
 
 func GetFiObject(ctx Context, bucket infra.Bucket, key string) (fiObject OpsFiGeneric, err error) {
-	object, err := ctx.S3.GetObject(ctx, &s3.GetObjectInput{
+	object, err := ctx.AWS.S3.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(string(bucket)),
 		Key:    aws.String(key),
 	})

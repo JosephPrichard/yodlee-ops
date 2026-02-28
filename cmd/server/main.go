@@ -26,13 +26,13 @@ func main() {
 
 	app := &svc.App{
 		AWS:                  infra.MakeAwsClient(config),
-		KafkaClient:          infra.MakeKafkaConsumerProducer(config),
+		Kafka:                infra.MakeKafkaConsumerProducer(config),
 		FiMessageBroadcaster: &svc.FiMessageBroadcaster{},
 	}
 
 	consumerCtx, cancelConsumer := context.WithCancel(context.Background())
-	svc.StartConsumers(consumerCtx, app, 3)
-	defer app.Close()
+	svc.StartConsumers(svc.Context{Context: consumerCtx, App: app}, 3)
+	defer app.Kafka.Close()
 
 	go func() {
 		sigChan := make(chan os.Signal, 1)

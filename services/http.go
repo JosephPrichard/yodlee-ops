@@ -190,7 +190,7 @@ func (h *FiOpsAPIHandler) GetFiMetadataByPrefix(ctx context.Context, params open
 		return &openapi.GetFiMetadataByPrefixInternalServerError{ErrorCode: openapi.ErrorCodeFATALERROR, ErrorDesc: InternalServerErrorMessage}
 	}
 
-	bucket := BucketFromSubject(h.Buckets, params.Subject)
+	bucket := BucketFromSubject(h.AWS.Buckets, params.Subject)
 
 	opsFiMetadata, nextCursor, err := ListFiMetadataByPrefix(appCtx, bucket, params.Prefix, params.Cursor.Value)
 	if err != nil {
@@ -212,7 +212,7 @@ func (h *FiOpsAPIHandler) GetFiMetadataByProfiles(ctx context.Context, params op
 	}
 
 	profileIDs := strings.Split(params.ProfileIDs, ",")
-	bucket := BucketFromSubject(h.Buckets, params.Subject)
+	bucket := BucketFromSubject(h.AWS.Buckets, params.Subject)
 
 	var arrayCursor []string
 	if params.Cursor == "" {
@@ -253,7 +253,7 @@ func (h *FiOpsAPIHandler) GetFiObject(ctx context.Context, params openapi.GetFiO
 	}
 
 	keyInput := params.Key
-	bucketInput := BucketFromSubject(h.Buckets, params.Subject)
+	bucketInput := BucketFromSubject(h.AWS.Buckets, params.Subject)
 
 	opsFiObject, err := GetFiObject(appCtx, bucketInput, keyInput)
 	if errors.Is(err, ErrKeyNotFound) {

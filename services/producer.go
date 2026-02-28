@@ -16,7 +16,7 @@ func ProduceJsonMessage(ctx Context, topic infra.Topic, key string, fiMessage an
 	}
 	slog.InfoContext(ctx, "producing json messages", "topic", topic, "size", len(inputBytes), "json", string(inputBytes))
 
-	if err := ctx.Producer.WriteMessages(ctx, kafka.Message{
+	if err := ctx.Kafka.Producer.WriteMessages(ctx, kafka.Message{
 		Key:   []byte(key),
 		Topic: string(topic),
 		Value: inputBytes,
@@ -83,7 +83,7 @@ func ProduceDeleteErrors(ctx Context, profileId string, deleteErrs []DeleteResul
 	}
 
 	if len(msgs) > 0 {
-		if err := ctx.Producer.WriteMessages(ctx, msgs...); err != nil {
+		if err := ctx.Kafka.Producer.WriteMessages(ctx, msgs...); err != nil {
 			slog.ErrorContext(ctx, "failed to produce delete errors to kafka", "err", err)
 		}
 	}

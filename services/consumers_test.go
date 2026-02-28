@@ -125,7 +125,7 @@ func TestFiMessageConsumers(t *testing.T) {
 	appCtx := Context{Context: t.Context(), App: app}
 
 	producerStub := &fakes.FakeProducer{}
-	app.KafkaClient = infra.KafkaClient{Producer: producerStub}
+	app.Kafka = infra.KafkaClient{Producer: producerStub}
 
 	providerAccountRefresh := yodlee.DataExtractsProviderAccount{
 		Id:          99,
@@ -193,12 +193,12 @@ func TestFiMessageConsumers(t *testing.T) {
 			value: []DeleteRetry{
 				{
 					Kind:   ListKind,
-					Bucket: app.Buckets.Transactions,
+					Bucket: app.AWS.Buckets.Transactions,
 					Prefix: "p1/1/100/3000",
 				},
 				{
 					Kind:   DeleteKind,
-					Bucket: app.Buckets.Connections,
+					Bucket: app.AWS.Buckets.Connections,
 					Keys:   []string{"p1/1/30/2025-06-15"},
 				},
 			},
@@ -239,36 +239,36 @@ func TestFiMessageConsumers(t *testing.T) {
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
-		{Bucket: app.Buckets.Connections, Key: "p1/1/10/2025-06-12"},
-		{Bucket: app.Buckets.Connections, Key: "p1/1/10/2025-06-13"},
-		{Bucket: app.Buckets.Connections, Key: "p1/1/20/2025-06-14"},
-		//{Bucket: app.Buckets.Connections, Key: "p1/1/30/2025-06-15"},
-		{Bucket: app.Buckets.Connections, Key: "p1/1/99/2025-06-13"},
-		{Bucket: app.Buckets.Connections, Key: "p1/1/77/2025-06-13"},
+		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/10/2025-06-12"},
+		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/10/2025-06-13"},
+		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/20/2025-06-14"},
+		//{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/30/2025-06-15"},
+		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/99/2025-06-13"},
+		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/77/2025-06-13"},
 
 		// Accounts
-		{Bucket: app.Buckets.Accounts, Key: "p1/1/10/100/2025-06-12"},
-		{Bucket: app.Buckets.Accounts, Key: "p1/1/10/100/2025-06-13"},
-		{Bucket: app.Buckets.Accounts, Key: "p2/1/20/200/2025-06-14"},
-		{Bucket: app.Buckets.Accounts, Key: "p2/1/30/400/2025-06-15"},
-		{Bucket: app.Buckets.Accounts, Key: "p1/1/99/999/2025-06-13"},
-		{Bucket: app.Buckets.Accounts, Key: "p1/1/77/777/2025-06-13"},
+		{Bucket: app.AWS.Buckets.Accounts, Key: "p1/1/10/100/2025-06-12"},
+		{Bucket: app.AWS.Buckets.Accounts, Key: "p1/1/10/100/2025-06-13"},
+		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/30/400/2025-06-15"},
+		{Bucket: app.AWS.Buckets.Accounts, Key: "p1/1/99/999/2025-06-13"},
+		{Bucket: app.AWS.Buckets.Accounts, Key: "p1/1/77/777/2025-06-13"},
 
 		// Holdings
-		{Bucket: app.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-12"},
-		{Bucket: app.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-13"},
-		{Bucket: app.Buckets.Holdings, Key: "p2/1/100/1000/2025-06-14"},
-		{Bucket: app.Buckets.Holdings, Key: "p2/1/200/2000/2025-06-15"},
-		{Bucket: app.Buckets.Holdings, Key: "p1/1/999/9999/2025-06-13"},
-		{Bucket: app.Buckets.Holdings, Key: "p1/1/777/7777/2025-06-13"},
+		{Bucket: app.AWS.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-12"},
+		{Bucket: app.AWS.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-13"},
+		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/200/2000/2025-06-15"},
+		{Bucket: app.AWS.Buckets.Holdings, Key: "p1/1/999/9999/2025-06-13"},
+		{Bucket: app.AWS.Buckets.Holdings, Key: "p1/1/777/7777/2025-06-13"},
 
 		// Transactions
-		//{Bucket: app.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
-		//{Bucket: app.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
-		{Bucket: app.Buckets.Transactions, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
-		{Bucket: app.Buckets.Transactions, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
-		{Bucket: app.Buckets.Transactions, Key: "p1/1/999/9999/2025-06-13T07:06:18Z"},
-		{Bucket: app.Buckets.Transactions, Key: "p1/1/777/7777/2025-06-13T07:06:18Z"},
+		//{Bucket: app.AWS.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		//{Bucket: app.AWS.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
+		{Bucket: app.AWS.Buckets.Transactions, Key: "p1/1/999/9999/2025-06-13T07:06:18Z"},
+		{Bucket: app.AWS.Buckets.Transactions, Key: "p1/1/777/7777/2025-06-13T07:06:18Z"},
 	}
 
 	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, app.AWS))
@@ -280,7 +280,7 @@ func TestFiMessageConsumers_S3Errors(t *testing.T) {
 	appCtx := Context{Context: t.Context(), App: app}
 
 	producerStub := &fakes.FakeProducer{}
-	app.KafkaClient = infra.KafkaClient{Producer: producerStub}
+	app.Kafka = infra.KafkaClient{Producer: producerStub}
 
 	key := "p1" // all messages for same profileId.
 

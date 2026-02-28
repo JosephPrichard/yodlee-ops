@@ -6,8 +6,8 @@ import (
 )
 
 type App struct {
-	infra.AWS
-	infra.KafkaClient
+	AWS                  infra.AWS
+	Kafka                infra.KafkaClient
 	FiMessageBroadcaster *FiMessageBroadcaster
 }
 

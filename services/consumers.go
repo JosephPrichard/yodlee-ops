@@ -12,34 +12,24 @@ import (
 	"yodleeops/yodlee"
 )
 
-type ConsumersConfig struct {
-	App         *App
-	Context     context.Context
-	Concurrency int
-}
-
-func StartConsumers(ctx context.Context, app *App, concurrency int) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	appCtx := Context{App: app, Context: ctx}
+func StartConsumers(ctx Context, concurrency int) {
 	if concurrency <= 0 {
 		concurrency = 1
 	}
 	for range concurrency {
-		go ConsumeFiMessages(appCtx, appCtx.CnctRefreshConsumer, HandleCnctRefreshMessage)
-		go ConsumeFiMessages(appCtx, appCtx.AcctRefreshConsumer, HandleAcctRefreshMessage)
-		go ConsumeFiMessages(appCtx, appCtx.HoldRefreshConsumer, HandleHoldRefreshMessage)
-		go ConsumeFiMessages(appCtx, appCtx.TxnRefreshConsumer, HandleTxnRefreshMessage)
-		go ConsumeFiMessages(appCtx, appCtx.CnctResponseConsumer, HandleAcctResponseMessage)
-		go ConsumeFiMessages(appCtx, appCtx.AcctResponseConsumer, HandleAcctResponseMessage)
-		go ConsumeFiMessages(appCtx, appCtx.HoldResponseConsumer, HandleHoldResponseMessage)
-		go ConsumeFiMessages(appCtx, appCtx.TxnResponseConsumer, HandleTxnResponseMessage)
-		go ConsumeFiMessages(appCtx, appCtx.DeleteRetryConsumer, HandleDeleteRecoveryMessage)
-		go ConsumeFiMessages(appCtx, appCtx.BroadcastConsumer, HandleBroadcastMessage)
+		go ConsumeFiMessages(ctx, ctx.Kafka.CnctRefreshConsumer, HandleCnctRefreshMessage)
+		go ConsumeFiMessages(ctx, ctx.Kafka.AcctRefreshConsumer, HandleAcctRefreshMessage)
+		go ConsumeFiMessages(ctx, ctx.Kafka.HoldRefreshConsumer, HandleHoldRefreshMessage)
+		go ConsumeFiMessages(ctx, ctx.Kafka.TxnRefreshConsumer, HandleTxnRefreshMessage)
+		go ConsumeFiMessages(ctx, ctx.Kafka.CnctResponseConsumer, HandleAcctResponseMessage)
+		go ConsumeFiMessages(ctx, ctx.Kafka.AcctResponseConsumer, HandleAcctResponseMessage)
+		go ConsumeFiMessages(ctx, ctx.Kafka.HoldResponseConsumer, HandleHoldResponseMessage)
+		go ConsumeFiMessages(ctx, ctx.Kafka.TxnResponseConsumer, HandleTxnResponseMessage)
+		go ConsumeFiMessages(ctx, ctx.Kafka.DeleteRetryConsumer, HandleDeleteRecoveryMessage)
+		go ConsumeFiMessages(ctx, ctx.Kafka.BroadcastConsumer, HandleBroadcastMessage)
 	}
 
-	slog.Info("started consumers", "config", appCtx)
+	slog.InfoContext(ctx, "started consumers", "concurrency", concurrency)
 }
 
 func ConsumeFiMessages[Message any](appCtx Context, reader infra.Consumer, onMessage func(Context, string, Message)) {
