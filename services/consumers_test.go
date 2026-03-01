@@ -3,14 +3,14 @@ package svc
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"testing"
+
 	"yodleeops/infra"
 	"yodleeops/infra/fakes"
-
 	"yodleeops/testutil"
 	"yodleeops/yodlee"
 
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -242,7 +242,7 @@ func TestFiMessageConsumers(t *testing.T) {
 		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/10/2025-06-12"},
 		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/10/2025-06-13"},
 		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/20/2025-06-14"},
-		//{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/30/2025-06-15"},
+		//{Bucket: app.S3.Buckets.Connections, Key: "p1/1/30/2025-06-15"},
 		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/99/2025-06-13"},
 		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/77/2025-06-13"},
 
@@ -263,8 +263,8 @@ func TestFiMessageConsumers(t *testing.T) {
 		{Bucket: app.AWS.Buckets.Holdings, Key: "p1/1/777/7777/2025-06-13"},
 
 		// Transactions
-		//{Bucket: app.AWS.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
-		//{Bucket: app.AWS.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		//{Bucket: app.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		//{Bucket: app.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
 		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
 		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 		{Bucket: app.AWS.Buckets.Transactions, Key: "p1/1/999/9999/2025-06-13T07:06:18Z"},

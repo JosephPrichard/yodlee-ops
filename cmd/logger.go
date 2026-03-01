@@ -23,7 +23,7 @@ func InitLoggers(f *os.File) {
 	if f != nil {
 		logWriter = io.MultiWriter(os.Stderr, f)
 	}
-	handler := slog.NewTextHandler(logWriter, &slog.HandlerOptions{
+	handler := slog.NewJSONHandler(logWriter, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	})
 	slog.SetDefault(slog.New(&TraceHandler{handler}))

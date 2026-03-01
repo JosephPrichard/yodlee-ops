@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
-	"yodleeops/infra"
 
+	"yodleeops/infra"
 	"yodleeops/yodlee"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -317,7 +317,7 @@ func PutObjects[Input any](ctx Context, bucket infra.Bucket, inputObjects []PutI
 			defer wg.Done()
 
 			_, err := ctx.AWS.S3.PutObject(ctx, &s3.PutObjectInput{
-				Bucket: aws.String(string(bucket)),
+				Bucket: bucket.String(),
 				Key:    aws.String(object.Key),
 				Body:   bytes.NewReader(body),
 			})
@@ -596,7 +596,7 @@ func ListObjectsByPrefix(ctx Context, bucket infra.Bucket, prefix string) chan L
 		defer close(resultsChan)
 
 		paginator := s3.NewListObjectsV2Paginator(ctx.AWS.S3, &s3.ListObjectsV2Input{
-			Bucket:  aws.String(string(bucket)),
+			Bucket:  bucket.String(),
 			Prefix:  aws.String(prefix),
 			MaxKeys: ctx.AWS.PaginationLen,
 		})
@@ -650,7 +650,7 @@ func DeleteObjects(ctx Context, bucket infra.Bucket, keys []string) DeleteResult
 	}
 
 	_, err := ctx.AWS.S3.DeleteObjects(ctx, &s3.DeleteObjectsInput{
-		Bucket: aws.String(string(bucket)),
+		Bucket: bucket.String(),
 		Delete: &s3types.Delete{Objects: objectIDs},
 	})
 	if err != nil {

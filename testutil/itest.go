@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+
 	"yodleeops/infra"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -62,7 +63,7 @@ func SetupAwsITest(t *testing.T) infra.AWS {
 		AwsEndpoint:      awsEndpoint,
 	}
 
-	client := infra.MakeAwsClient(cfg)
+	client := infra.MakeAwsClient(infra.MakeS3Client(cfg))
 
 	// mock the bucket data for each itest.
 	client.Buckets.Connections = unique(client.Buckets.Connections)
@@ -80,7 +81,7 @@ func createBuckets(ctx context.Context, t *testing.T, cfg infra.Config, client i
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("testing", "testing", "")),
 	)
 	if err != nil {
-		t.Fatalf("failed to load AWS config: %s", err)
+		t.Fatalf("failed to load S3 config: %s", err)
 	}
 	s3Client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
 		o.BaseEndpoint = aws.String(cfg.AwsEndpoint)
@@ -92,7 +93,7 @@ func createBuckets(ctx context.Context, t *testing.T, cfg infra.Config, client i
 		client.Buckets.Holdings,
 		client.Buckets.Transactions,
 	} {
-		if _, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String(string(bucket))}); err != nil {
+		if _, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: bucket.String()}); err != nil {
 			t.Fatalf("failed to create bucket %s: %s", bucket, err)
 		}
 	}

@@ -2,8 +2,10 @@ package fakes
 
 import (
 	"context"
-	"github.com/segmentio/kafka-go"
+
 	"yodleeops/infra"
+
+	"github.com/segmentio/kafka-go"
 )
 
 type KafkaMessage struct {

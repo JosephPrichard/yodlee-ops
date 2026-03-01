@@ -3,17 +3,19 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"github.com/brianvoe/gofakeit/v6"
-	"github.com/joho/godotenv"
-	"github.com/segmentio/kafka-go"
 	"log"
 	"log/slog"
 	"math/rand"
 	"strconv"
 	"time"
+
 	"yodleeops/cmd"
 	"yodleeops/infra"
 	"yodleeops/yodlee"
+
+	"github.com/brianvoe/gofakeit/v6"
+	"github.com/joho/godotenv"
+	"github.com/segmentio/kafka-go"
 )
 
 // generates random ids with a tight finite range so we can get a random spread of data

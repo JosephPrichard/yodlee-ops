@@ -3,9 +3,11 @@ package fakes
 import (
 	"context"
 	"fmt"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"reflect"
+
 	"yodleeops/infra"
+
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 type BadS3 struct {

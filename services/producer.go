@@ -3,9 +3,11 @@ package svc
 import (
 	"context"
 	"encoding/json"
-	"github.com/segmentio/kafka-go"
 	"log/slog"
+
 	"yodleeops/infra"
+
+	"github.com/segmentio/kafka-go"
 )
 
 func ProduceJsonMessage(ctx Context, topic infra.Topic, key string, fiMessage any) {

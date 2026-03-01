@@ -6,6 +6,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"testing"
+	"time"
+
+	"yodleeops/infra"
+	"yodleeops/infra/fakes"
+	openapi "yodleeops/openapi/sources"
+	"yodleeops/testutil"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/go-faster/jx"
@@ -13,15 +24,6 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"net/http"
-	"net/http/httptest"
-	"net/url"
-	"testing"
-	"time"
-	"yodleeops/infra"
-	"yodleeops/infra/fakes"
-	openapi "yodleeops/openapi/sources"
-	"yodleeops/testutil"
 )
 
 const TestAuthorizationToken = "Bearer <TOKEN>"
@@ -62,7 +64,7 @@ func TestStreamFiObjectLogs(t *testing.T) {
 		FiMessageBroadcaster: &FiMessageBroadcaster{},
 	}
 
-	testServer := httptest.NewServer(MakeRoot(app, ""))
+	testServer := httptest.NewServer(MakeServeMux(app, ""))
 	defer testServer.Close()
 
 	// optimistic timeout in case of a deadlock.
@@ -209,7 +211,7 @@ func TestHandleListFiMessages(t *testing.T) {
 			r.Header.Set("Authorization", TestAuthorizationToken)
 			w := httptest.NewRecorder()
 
-			hander := MakeRoot(test.app, "")
+			hander := MakeServeMux(test.app, "")
 			hander.ServeHTTP(w, r)
 
 			// then
@@ -249,7 +251,7 @@ func TestHandleListFiMessages_Pagination(t *testing.T) {
 		r.Header.Set("Authorization", TestAuthorizationToken)
 		w := httptest.NewRecorder()
 
-		hander := MakeRoot(app, "")
+		hander := MakeServeMux(app, "")
 		hander.ServeHTTP(w, r)
 
 		listFiMetadataResponse := testutil.GetRespBody[openapi.ListFiMetadataResponse](t, w)
@@ -337,7 +339,7 @@ func TestHandleGetFiObject(t *testing.T) {
 	})
 
 	_, err := awsClient.S3.PutObject(t.Context(), &s3.PutObjectInput{
-		Bucket: aws.String(string(awsClient.Buckets.Transactions)),
+		Bucket: awsClient.Buckets.Transactions.String(),
 		Key:    aws.String(testKey),
 		Body:   bytes.NewReader(MustEncodeJson(t, testBody)),
 	})
@@ -394,7 +396,7 @@ func TestHandleGetFiObject(t *testing.T) {
 			r.Header.Set("Authorization", TestAuthorizationToken)
 			w := httptest.NewRecorder()
 
-			hander := MakeRoot(test.app, "")
+			hander := MakeServeMux(test.app, "")
 			hander.ServeHTTP(w, r)
 
 			// then

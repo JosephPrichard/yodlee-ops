@@ -1,9 +1,11 @@
 package svc
 
 import (
-	"github.com/stretchr/testify/assert"
 	"testing"
+
 	"yodleeops/infra"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestParseOpsFiMetadata(t *testing.T) {

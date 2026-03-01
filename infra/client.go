@@ -15,26 +15,6 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-type Topic string
-type Bucket string
-
-const (
-	CnctRefreshTopic    Topic  = "cnct-refreshes"
-	AcctRefreshTopic    Topic  = "acct-refreshes"
-	HoldRefreshTopic    Topic  = "hold-refreshes"
-	TxnRefreshTopic     Topic  = "txn-refreshes"
-	CnctResponseTopic   Topic  = "cnct-responses"
-	AcctResponseTopic   Topic  = "acct-responses"
-	HoldResponseTopic   Topic  = "hold-responses"
-	TxnResponseTopic    Topic  = "txn-responses"
-	DeleteRecoveryTopic Topic  = "delete-recovery"
-	BroadcastTopic      Topic  = "broadcast"
-	CnctBucket          Bucket = "yodlee-cncts"
-	AcctBucket          Bucket = "yodlee-accts"
-	HoldBucket          Bucket = "yodlee-holds"
-	TxnBucket           Bucket = "yodlee-txns"
-)
-
 type Config struct {
 	AwsEndpoint      string
 	AwsDefaultRegion string
@@ -170,13 +150,6 @@ func (k *KafkaClient) Close() error {
 	)
 }
 
-type Buckets struct {
-	Connections  Bucket
-	Accounts     Bucket
-	Holdings     Bucket
-	Transactions Bucket
-}
-
 type AWS struct {
 	S3            S3
 	PaginationLen *int32
@@ -190,7 +163,7 @@ type S3 interface {
 	DeleteObjects(ctx context.Context, params *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
 }
 
-func MakeAwsClient(cfg Config) AWS {
+func MakeS3Client(cfg Config) *s3.Client {
 	opts := []func(*config.LoadOptions) error{
 		config.WithRegion(cfg.AwsDefaultRegion),
 	}
@@ -200,16 +173,20 @@ func MakeAwsClient(cfg Config) AWS {
 
 	awsCfg, err := config.LoadDefaultConfig(context.Background(), opts...)
 	if err != nil {
-		log.Fatalf("failed to load AWS config: %v", err)
+		log.Fatalf("failed to load S3 config: %v", err)
 	}
 
+	return s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		if cfg.AwsEndpoint != "" {
+			o.BaseEndpoint = aws.String(cfg.AwsEndpoint)
+			o.UsePathStyle = true
+		}
+	})
+}
+
+func MakeAwsClient(s3Client *s3.Client) AWS {
 	return AWS{
-		S3: s3.NewFromConfig(awsCfg, func(o *s3.Options) {
-			if cfg.AwsEndpoint != "" {
-				o.BaseEndpoint = aws.String(cfg.AwsEndpoint)
-				o.UsePathStyle = true
-			}
-		}),
+		S3:            s3Client,
 		PaginationLen: nil,
 		Buckets: Buckets{
 			Connections:  CnctBucket,

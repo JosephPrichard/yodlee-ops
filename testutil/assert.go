@@ -6,15 +6,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/google/go-cmp/cmp"
-	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/testing/protocmp"
 	"io"
 	"net/http/httptest"
 	"testing"
+
 	"yodleeops/infra"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/require"
 )
 
 func Equal[T any](t *testing.T, expected, actual T, opts ...cmp.Option) {
@@ -50,7 +52,7 @@ func AssertObjects[JSON any](t *testing.T, awsClient *infra.AWS, objects []WantO
 	for _, object := range objects {
 		func() {
 			resp, err := awsClient.S3.GetObject(context.Background(), &s3.GetObjectInput{
-				Bucket: aws.String(string(object.Bucket)),
+				Bucket: object.Bucket.String(),
 				Key:    aws.String(object.Key),
 			})
 			if err != nil {
@@ -86,7 +88,7 @@ func GetAllKeys(t *testing.T, a infra.AWS) []WantKey {
 		a.Buckets.Transactions,
 		a.Buckets.Holdings,
 	} {
-		paginator := s3.NewListObjectsV2Paginator(a.S3, &s3.ListObjectsV2Input{Bucket: aws.String(string(bucket))})
+		paginator := s3.NewListObjectsV2Paginator(a.S3, &s3.ListObjectsV2Input{Bucket: bucket.String()})
 
 		for paginator.HasMorePages() {
 			page, err := paginator.NextPage(context.Background())

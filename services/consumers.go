@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
 	"log/slog"
 	"time"
+
 	"yodleeops/infra"
 	"yodleeops/yodlee"
+
+	"github.com/google/uuid"
 )
 
 func StartConsumers(ctx Context, concurrency int) {

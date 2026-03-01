@@ -1,16 +1,18 @@
-all: go-generate swagger-ui
+SWAGGER_VERSION := 5.18.2
+SWAGGER_URL := https://github.com/swagger-api/swagger-ui/archive/refs/tags/v$(SWAGGER_VERSION).zip
 
-go-generate:
+all: codegen
+
+codegen:
 	cd openapi && go generate
 
-swagger-ui:
-	docker run --rm -v ./openapi:/openapi redocly/cli build-docs /openapi/yodlee-ops.yaml -o /openapi/static/index.html
-
 install:
-	go install github.com/ogen-go/ogen/cmd/ogen@latest
+	go install github.com/ogen-go/ogen/cmd/ogen@v1.19.0
 
 clean:
 	rm -rf ./openapi/sources
-	rm -rf ./openapi/static
 
 .PHONY: all clean
+
+SWAGGER_VERSION := 5.18.2
+SWAGGER_URL := https://github.com/swagger-api/swagger-ui/archive/refs/tags/v$(SWAGGER_VERSION).zip

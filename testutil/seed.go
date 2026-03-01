@@ -3,6 +3,7 @@ package testutil
 import (
 	"bytes"
 	"testing"
+
 	"yodleeops/infra"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -41,7 +42,7 @@ func SeedS3Buckets(t *testing.T, a infra.AWS) {
 		{Bucket: a.Buckets.Transactions, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 	} {
 		_, err := a.S3.PutObject(t.Context(), &s3.PutObjectInput{
-			Bucket: aws.String(string(record.Bucket)),
+			Bucket: record.Bucket.String(),
 			Key:    aws.String(record.Key),
 			Body:   bytes.NewReader([]byte("test")),
 		})

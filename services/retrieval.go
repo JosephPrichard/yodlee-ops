@@ -4,15 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
-	"golang.org/x/sync/errgroup"
 	"log/slog"
 	"slices"
 	"strings"
 	"sync"
+
 	"yodleeops/infra"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"golang.org/x/sync/errgroup"
 )
 
 type OpsFiGeneric struct {
@@ -114,7 +116,7 @@ func ListFiMetadataByPrefix(ctx Context, bucket infra.Bucket, prefix string, cur
 	slog.InfoContext(ctx, "listing metadata records", "bucket", bucket, "prefix", prefix, "continuationToken", continuationToken)
 
 	output, err := ctx.AWS.S3.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
-		Bucket:            aws.String(string(bucket)),
+		Bucket:            bucket.String(),
 		Prefix:            aws.String(prefix),
 		ContinuationToken: continuationToken,
 		MaxKeys:           ctx.AWS.PaginationLen,
@@ -153,7 +155,7 @@ var ErrKeyNotFound = errors.New("key not found")
 
 func GetFiObject(ctx Context, bucket infra.Bucket, key string) (fiObject OpsFiGeneric, err error) {
 	object, err := ctx.AWS.S3.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(string(bucket)),
+		Bucket: bucket.String(),
 		Key:    aws.String(key),
 	})
 	if err != nil {
