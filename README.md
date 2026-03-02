@@ -29,15 +29,6 @@ Execute
 
 Deployment to the test environment is done through GitHub actions. Refer to `.github/workflows/deploy.yml` 
 
-### Manual
-Build
-
-`$ docker build -t development/yodlee-ops:latest ECR_REGISTRY/ECR_REPOSITORY:$(git log -n 1 --pretty=format:"%H") .`
-
-`$ aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ECR_REGISTRY`
-
-`$ docker push ECR_REGISTRY/IMAGE_NAME`
-
 ### Architecture
 
 <img width="4416" height="2580" alt="Test us-east-1 (1)" src="https://github.com/user-attachments/assets/af77555a-0848-482a-8843-126b27cd66de" />
