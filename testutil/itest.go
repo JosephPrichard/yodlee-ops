@@ -33,8 +33,7 @@ func SetupAwsITest(t *testing.T) infra.AWS {
 	setupAppMu.Lock()
 	defer setupAppMu.Unlock()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	if localstackCont == nil {
 		start := time.Now()

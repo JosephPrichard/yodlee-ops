@@ -27,6 +27,8 @@ Execute
 
 ## Deployment
 
+Deployment to the test environment is done through GitHub actions. Refer to `.github/workflows/deploy.yml` 
+
 ### Manual
 Build
 
@@ -36,3 +38,6 @@ Build
 
 `$ docker push ECR_REGISTRY/IMAGE_NAME`
 
+### Architecture
+
+<img width="2044" height="1504" alt="Test us-east-1" src="https://github.com/user-attachments/assets/d353ef0c-2dbd-4323-9344-6a9ab9c8d228" />
