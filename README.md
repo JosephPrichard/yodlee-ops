@@ -17,17 +17,6 @@ Create a '.env' file at the root for local development or pass them as arguments
 
 ## Development
 
-### 
-Build
-
-`$ docker build -t yodlee-ops:latest .`
-
-Execute
-
-`$ docker run -d -p 8080:8080 yodlee-ops:latest`
-
-OR
-
 Build
 
 `$ make install && make`
@@ -38,6 +27,12 @@ Execute
 
 ## Deployment
 
+### Manual
 Build
 
-`$ docker build -t yodlee-ops:latest .`
+`$ docker build -t development/yodlee-ops:latest ECR_REGISTRY/ECR_REPOSITORY:$(git log -n 1 --pretty=format:"%H") .`
+
+`$ aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin ECR_REGISTRY`
+
+`$ docker push ECR_REGISTRY/IMAGE_NAME`
+

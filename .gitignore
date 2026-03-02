@@ -36,5 +36,5 @@ frontend/public/mockServiceWorker.js
 *.ps1
 
 # Editor/IDE
-# .idea/
+ .idea/
 # .vscode/
