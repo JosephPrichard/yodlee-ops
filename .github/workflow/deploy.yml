@@ -17,7 +17,7 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    environment: production
+    environment: Test # Since this is a POC, 'Test' is the only environment.
 
     steps:
       - name: Checkout
