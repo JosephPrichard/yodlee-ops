@@ -40,4 +40,4 @@ Build
 
 ### Architecture
 
-<img width="2044" height="1504" alt="Test us-east-1" src="https://github.com/user-attachments/assets/d353ef0c-2dbd-4323-9344-6a9ab9c8d228" />
+<img width="4416" height="2580" alt="Test us-east-1 (1)" src="https://github.com/user-attachments/assets/af77555a-0848-482a-8843-126b27cd66de" />
