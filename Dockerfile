@@ -12,10 +12,10 @@ RUN make install
 # ---- Source Layer ----
 COPY . .
 RUN make
-RUN go build -o /bin/app ./cmd/server
+RUN CGO_ENABLED=0 go build -trimpath -ldflags=-s -o /bin/app ./cmd/server
 
 # ---- Runtime Stage ----
-FROM alpine:latest
+FROM alpine:latest AS runner
 
 # Copy swagger page
 COPY --from=builder /sources/openapi ./openapi

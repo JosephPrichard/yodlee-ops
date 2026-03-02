@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -164,27 +165,33 @@ type S3 interface {
 }
 
 func MakeS3Client(cfg Config) *s3.Client {
-	opts := []func(*config.LoadOptions) error{
+	awsOpts := []func(*config.LoadOptions) error{
 		config.WithRegion(cfg.AwsDefaultRegion),
 	}
 	if cfg.IsLocal {
-		opts = append(opts, config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("testing", "testing", "")))
+		staticCreds := credentials.NewStaticCredentialsProvider("testing", "testing", "")
+		awsOpts = append(awsOpts, config.WithCredentialsProvider(staticCreds))
+		slog.Warn("using static localstack credentials provider", "credentials", staticCreds)
 	}
 
-	awsCfg, err := config.LoadDefaultConfig(context.Background(), opts...)
+	awsCfg, err := config.LoadDefaultConfig(context.Background(), awsOpts...)
 	if err != nil {
 		log.Fatalf("failed to load S3 config: %v", err)
 	}
 
-	return s3.NewFromConfig(awsCfg, func(o *s3.Options) {
-		if cfg.AwsEndpoint != "" {
+	var s3Opts []func(*s3.Options)
+
+	if cfg.AwsEndpoint != "" {
+		s3Opts = append(s3Opts, func(o *s3.Options) {
 			o.BaseEndpoint = aws.String(cfg.AwsEndpoint)
 			o.UsePathStyle = true
-		}
-	})
+		})
+	}
+
+	return s3.NewFromConfig(awsCfg, s3Opts...)
 }
 
-func MakeAwsClient(s3Client *s3.Client) AWS {
+func MakeAWS(s3Client *s3.Client) AWS {
 	return AWS{
 		S3:            s3Client,
 		PaginationLen: nil,

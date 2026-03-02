@@ -63,7 +63,7 @@ func SetupAwsITest(t *testing.T) infra.AWS {
 		AwsEndpoint:      awsEndpoint,
 	}
 
-	client := infra.MakeAwsClient(infra.MakeS3Client(cfg))
+	client := infra.MakeAWS(infra.MakeS3Client(cfg))
 
 	// mock the bucket data for each itest.
 	client.Buckets.Connections = unique(client.Buckets.Connections)

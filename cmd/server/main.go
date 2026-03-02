@@ -19,11 +19,10 @@ func main() {
 
 	cmd.InitLoggers(nil)
 	config := infra.MakeConfig()
-	config.IsLocal = true
 
 	s3Client := infra.MakeS3Client(config)
 	app := &svc.App{
-		AWS:                  infra.MakeAwsClient(s3Client),
+		AWS:                  infra.MakeAWS(s3Client),
 		Kafka:                infra.MakeKafkaConsumerProducer(config),
 		FiMessageBroadcaster: &svc.FiMessageBroadcaster{},
 	}
@@ -45,9 +44,6 @@ func main() {
 	//}()
 
 	mux := svc.MakeServeMux(app, config.AllowOrigins)
-	svc.WithHealthChecker(mux, svc.HealthCheckConfig{
-		S3: s3Client,
-	})
 	if err := http.ListenAndServe(":8080", mux); err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}

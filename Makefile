@@ -1,18 +1,15 @@
-SWAGGER_VERSION := 5.18.2
-SWAGGER_URL := https://github.com/swagger-api/swagger-ui/archive/refs/tags/v$(SWAGGER_VERSION).zip
+all: sources
 
-all: codegen
-
-codegen:
+sources:
 	cd openapi && go generate
 
 install:
 	go install github.com/ogen-go/ogen/cmd/ogen@v1.19.0
 
+test:
+	go test ./... -timeout=60s
+
 clean:
 	rm -rf ./openapi/sources
 
 .PHONY: all clean
-
-SWAGGER_VERSION := 5.18.2
-SWAGGER_URL := https://github.com/swagger-api/swagger-ui/archive/refs/tags/v$(SWAGGER_VERSION).zip

@@ -4,9 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/hellofresh/health-go/v5"
-	"github.com/segmentio/kafka-go"
 	"io"
 	"log/slog"
 	"net/http"
@@ -22,7 +19,6 @@ import (
 )
 
 const ApiUrl = "/yodlee-ops/api/v1"
-const FrontendDistDir = "./frontend/dist"
 
 func RootMiddleware(allowedOrigins string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -66,6 +62,11 @@ func MakeServeMux(app *App, allowOrigins string) *http.ServeMux {
 	mux.Handle("GET /swagger/", httpSwagger.Handler(
 		httpSwagger.URL("/swagger/yaml/yodlee-ops.yaml"),
 	))
+
+	// healthcheck.
+	mux.HandleFunc("GET /ping", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 
 	return mux
 }
@@ -288,54 +289,4 @@ func (h *FiOpsAPIHandler) GetFiObject(ctx context.Context, params openapi.GetFiO
 		OriginTopic: string(opsFiObject.OriginTopic),
 		Data:        fiObjectData,
 	}, nil
-}
-
-type HealthCheckConfig struct {
-	Brokers []string
-	S3      *s3.Client
-}
-
-func WithHealthChecker(mux *http.ServeMux, config HealthCheckConfig) {
-	h, err := health.New(
-		health.WithComponent(
-			health.Component{Name: "yodlee-ops", Version: "v1.0"},
-		),
-		health.WithChecks(
-			health.Config{
-				Name:      "Kafka",
-				Timeout:   5 * time.Second,
-				SkipOnErr: true,
-				Check: func(ctx context.Context) error {
-					for _, broker := range config.Brokers {
-						conn, err := kafka.Dial("tcp", broker)
-						if err != nil {
-							return err
-						}
-						if err := conn.Close(); err != nil {
-							return err
-						}
-					}
-					return nil
-				},
-			},
-			health.Config{
-				Name:    "S3",
-				Timeout: 5 * time.Second,
-				Check: func(ctx context.Context) error {
-					for _, bucket := range infra.BucketList {
-						if _, err := config.S3.HeadBucket(context.Background(), &s3.HeadBucketInput{
-							Bucket: bucket.String(),
-						}); err != nil {
-							return err
-						}
-					}
-					return nil
-				},
-			},
-		),
-	)
-	if err != nil {
-		panic(fmt.Sprintf("failed to initialize health check: %v", err))
-	}
-	mux.HandleFunc("GET /healthcheck", h.HandlerFunc)
 }
