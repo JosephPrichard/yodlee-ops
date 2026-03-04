@@ -3,42 +3,44 @@ package svc
 import (
 	"context"
 	"encoding/json"
+	"github.com/IBM/sarama"
 	"log/slog"
 
 	"yodleeops/infra"
-
-	"github.com/segmentio/kafka-go"
 )
 
-func ProduceJsonMessage(ctx Context, topic infra.Topic, key string, fiMessage any) {
-	inputBytes, err := json.Marshal(fiMessage)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to republish json messages", "err", err)
-		return
-	}
-	slog.InfoContext(ctx, "producing json messages", "topic", topic, "size", len(inputBytes), "json", string(inputBytes))
-
-	if err := ctx.Kafka.Producer.WriteMessages(ctx, kafka.Message{
-		Key:   []byte(key),
-		Topic: string(topic),
-		Value: inputBytes,
-	}); err != nil {
-		slog.ErrorContext(ctx, "failed to json messages", "err", err)
-	}
-}
-
-type DeleteErrorMsg struct {
+type JsonMessage struct {
 	Key   string
 	Topic infra.Topic
 	Value any
 }
 
-func MakeDeleteErrorsMsgs(ctx context.Context, profileId string, deleteErrs []DeleteResult) []DeleteErrorMsg {
+func ProduceJsonMessage(ctx Context, message JsonMessage) {
+	inputBytes, err := json.Marshal(message.Value)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to republish json messages", "err", err)
+		return
+	}
+	slog.InfoContext(ctx, "producing json messages", "Topic", message.Topic, "size", len(inputBytes), "json", string(inputBytes))
+
+	messages := &sarama.ProducerMessage{
+		Key:   sarama.ByteEncoder(message.Key),
+		Topic: string(message.Topic),
+		Value: sarama.ByteEncoder(inputBytes),
+	}
+	select {
+	case ctx.Producer.Input() <- messages:
+	case <-ctx.Done():
+		return
+	}
+}
+
+func MakeDeleteErrorsMsgs(ctx context.Context, profileId string, deleteErrs []DeleteResult) []JsonMessage {
 	if len(deleteErrs) == 0 {
 		return nil
 	}
 
-	var msgs []DeleteErrorMsg
+	var msgs []JsonMessage
 	for _, deleteErr := range deleteErrs {
 		var kind string
 		if deleteErr.Prefix != "" {
@@ -56,11 +58,11 @@ func MakeDeleteErrorsMsgs(ctx context.Context, profileId string, deleteErrs []De
 			Prefix: deleteErr.Prefix,
 			Keys:   deleteErr.Keys,
 		}
-		slog.InfoContext(ctx, "producing delete error", "topic", infra.DeleteRecoveryTopic, "deleteRetry", deleteRetry)
+		slog.InfoContext(ctx, "producing delete error", "Topic", infra.DeleteRetryTopic, "deleteRetry", deleteRetry)
 
-		msgs = append(msgs, DeleteErrorMsg{
+		msgs = append(msgs, JsonMessage{
 			Key:   profileId,
-			Topic: infra.DeleteRecoveryTopic,
+			Topic: infra.DeleteRetryTopic,
 			Value: deleteRetry,
 		})
 	}
@@ -69,24 +71,53 @@ func MakeDeleteErrorsMsgs(ctx context.Context, profileId string, deleteErrs []De
 
 func ProduceDeleteErrors(ctx Context, profileId string, deleteErrs []DeleteResult) {
 	deleteErrorMsgs := MakeDeleteErrorsMsgs(ctx, profileId, deleteErrs)
-
-	var msgs []kafka.Message
 	for _, msg := range deleteErrorMsgs {
-		msgBytes, err := json.Marshal(msg)
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to marshal messages for put errors", "err", err)
-			continue
+		ProduceJsonMessage(ctx, msg)
+	}
+}
+
+type BroadcastInput[Wrap YodleeWrapper[Inner], Inner YodleeInput] struct {
+	// content of the fi messages, data extracts, response, etc.
+	FiMessages  []Wrap      `json:"messages"`
+	OriginTopic infra.Topic `json:"originTopic"`
+}
+
+func ProducePutResults[Wrap YodleeWrapper[Inner], Inner YodleeInput](
+	ctx Context,
+	topic infra.Topic,
+	key string,
+	putResults []PutResult[Wrap],
+	mapInputs func([]Inner) any,
+) {
+	var successUploads []Wrap
+	var errInputs []Inner
+
+	for _, putErr := range putResults {
+		if putErr.Err == nil {
+			successUploads = append(successUploads, putErr.Input)
+		} else {
+			errInputs = append(errInputs, putErr.Input.Inner())
 		}
-		msgs = append(msgs, kafka.Message{
-			Key:   []byte(msg.Key),
-			Topic: string(msg.Topic),
-			Value: msgBytes,
-		})
 	}
 
-	if len(msgs) > 0 {
-		if err := ctx.Kafka.Producer.WriteMessages(ctx, msgs...); err != nil {
-			slog.ErrorContext(ctx, "failed to produce delete errors to kafka", "err", err)
+	if len(successUploads) > 0 {
+		// write success uploads with a small wrapper describing the Topic the upload originally came from (for broadcasting).
+		ProduceJsonMessage(ctx, JsonMessage{
+			Topic: infra.BroadcastTopic,
+			Value: BroadcastInput[Wrap, Inner]{FiMessages: successUploads, OriginTopic: topic},
+		})
+	}
+	if len(errInputs) > 0 {
+		// maps the failed inputs into a new datastructure or writes as is.
+		// mapInputs guarantees that `writeErrInputs` is the same type that `e.OriginTopic` expects.
+		var writeErrInputs any = errInputs
+		if mapInputs != nil {
+			writeErrInputs = mapInputs(errInputs)
 		}
+		ProduceJsonMessage(ctx, JsonMessage{
+			Topic: topic,
+			Key:   key,
+			Value: writeErrInputs,
+		})
 	}
 }

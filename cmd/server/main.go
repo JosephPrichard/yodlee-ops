@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
+	"github.com/IBM/sarama"
 	"log"
 	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"time"
 	"yodleeops/cmd"
 	"yodleeops/infra"
 	svc "yodleeops/services"
@@ -20,39 +25,52 @@ func main() {
 	cmd.InitLoggers(nil)
 	config := infra.MakeConfig()
 
+	kafkaConfig := sarama.NewConfig()
+	kafkaConfig.Producer.Return.Errors = true
+
+	producer, err := sarama.NewAsyncProducer(config.KafkaBrokers, kafkaConfig)
+	if err != nil {
+		log.Fatalf("failed to create kafka producer: %v", err)
+	}
+
+	go func() {
+		for err := range producer.Errors() {
+			slog.Error("failed to produce message", "err", err)
+		}
+	}()
+
 	s3Client := infra.MakeS3Client(config)
 	app := &svc.App{
 		AWS:                  infra.MakeAWS(s3Client),
-		Kafka:                infra.MakeKafkaConsumerProducer(config),
+		Producer:             producer,
 		FiMessageBroadcaster: &svc.FiMessageBroadcaster{},
 	}
 
-	//consumerCtx, cancelConsumer := context.WithCancel(context.Background())
-	//svc.StartConsumers(svc.Context{Context: consumerCtx, App: app}, 3)
-	//defer app.Kafka.Close()
-	//
-	//go func() {
-	//	sigChan := make(chan os.Signal, 1)
-	//	signal.Notify(sigChan, os.Interrupt, os.Kill)
-	//	<-sigChan
-	//
-	//	slog.Info("shutting down server")
-	//
-	//	cancelConsumer() // stops the listeners
-	//
-	//	os.Exit(0)
-	//}()
+	rootCtx, cancel := context.WithCancel(context.Background())
+	svc.StartConsumers(rootCtx, app, config.KafkaBrokers)
+
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt, os.Kill)
+		<-sigChan
+
+		slog.Info("shutting down server")
+
+		cancel()
+
+		os.Exit(0)
+	}()
 
 	mux := svc.MakeServeMux(app, config.AllowOrigins)
 	if err := http.ListenAndServe(":8080", mux); err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}
 
-	//for {
-	//	select {
-	//	case <-consumerCtx.Done():
-	//		return
-	//	case <-time.After(time.Millisecond * 50):
-	//	}
-	//}
+	for {
+		select {
+		case <-rootCtx.Done():
+			return
+		case <-time.After(time.Millisecond * 50):
+		}
+	}
 }

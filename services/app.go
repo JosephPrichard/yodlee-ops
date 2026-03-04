@@ -2,13 +2,14 @@ package svc
 
 import (
 	"context"
+	"github.com/IBM/sarama"
 
 	"yodleeops/infra"
 )
 
 type App struct {
 	AWS                  infra.AWS
-	Kafka                infra.KafkaClient
+	Producer             sarama.AsyncProducer
 	FiMessageBroadcaster *FiMessageBroadcaster
 }
 

@@ -3,187 +3,225 @@ package svc
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"github.com/IBM/sarama"
+	"github.com/google/uuid"
+	"log"
 	"log/slog"
 	"time"
 
 	"yodleeops/infra"
 	"yodleeops/yodlee"
-
-	"github.com/google/uuid"
 )
 
-func StartConsumers(ctx Context, concurrency int) {
-	if concurrency <= 0 {
-		concurrency = 1
-	}
-	for range concurrency {
-		go ConsumeFiMessages(ctx, ctx.Kafka.CnctRefreshConsumer, HandleCnctRefreshMessage)
-		go ConsumeFiMessages(ctx, ctx.Kafka.AcctRefreshConsumer, HandleAcctRefreshMessage)
-		go ConsumeFiMessages(ctx, ctx.Kafka.HoldRefreshConsumer, HandleHoldRefreshMessage)
-		go ConsumeFiMessages(ctx, ctx.Kafka.TxnRefreshConsumer, HandleTxnRefreshMessage)
-		go ConsumeFiMessages(ctx, ctx.Kafka.CnctResponseConsumer, HandleAcctResponseMessage)
-		go ConsumeFiMessages(ctx, ctx.Kafka.AcctResponseConsumer, HandleAcctResponseMessage)
-		go ConsumeFiMessages(ctx, ctx.Kafka.HoldResponseConsumer, HandleHoldResponseMessage)
-		go ConsumeFiMessages(ctx, ctx.Kafka.TxnResponseConsumer, HandleTxnResponseMessage)
-		go ConsumeFiMessages(ctx, ctx.Kafka.DeleteRetryConsumer, HandleDeleteRecoveryMessage)
-		go ConsumeFiMessages(ctx, ctx.Kafka.BroadcastConsumer, HandleBroadcastMessage)
+func StartConsumers(ctx context.Context, app *App, kafkaBrokers []string) {
+	consumerGroupID := func(t infra.Topic) string {
+		return string(t) + "_group"
 	}
 
-	slog.InfoContext(ctx, "started consumers", "concurrency", concurrency)
+	groups := []struct {
+		ID      string
+		Topic   infra.Topic
+		Handler sarama.ConsumerGroupHandler
+	}{
+		// fi message topics have a staticly computed group id because only one node receives mesages
+		{
+			ID:      consumerGroupID(infra.CnctRefreshTopic),
+			Topic:   infra.CnctRefreshTopic,
+			Handler: MakeConsumer(app, ConsumeCnctRefreshMessage),
+		},
+		{
+			ID:      consumerGroupID(infra.AcctRefreshTopic),
+			Topic:   infra.AcctRefreshTopic,
+			Handler: MakeConsumer(app, ConsumeAcctRefreshMessage),
+		},
+		{
+			ID:      consumerGroupID(infra.HoldRefreshTopic),
+			Topic:   infra.HoldRefreshTopic,
+			Handler: MakeConsumer(app, ConsumeHoldRefreshMessage),
+		},
+		{
+			ID:      consumerGroupID(infra.TxnRefreshTopic),
+			Topic:   infra.TxnRefreshTopic,
+			Handler: MakeConsumer(app, ConsumeTxnRefreshMessage),
+		},
+		{
+			ID:      consumerGroupID(infra.CnctResponseTopic),
+			Topic:   infra.CnctResponseTopic,
+			Handler: MakeConsumer(app, ConsumeCnctResponseMessage),
+		},
+		{
+			ID:      consumerGroupID(infra.AcctResponseTopic),
+			Topic:   infra.AcctResponseTopic,
+			Handler: MakeConsumer(app, ConsumeAcctResponseMessage),
+		},
+		{
+			ID:      consumerGroupID(infra.HoldResponseTopic),
+			Topic:   infra.HoldResponseTopic,
+			Handler: MakeConsumer(app, ConsumeHoldResponseMessage),
+		},
+		{
+			ID:      consumerGroupID(infra.TxnResponseTopic),
+			Topic:   infra.TxnResponseTopic,
+			Handler: MakeConsumer(app, ConsumeTxnResponseMessage),
+		},
+		{
+			ID:      consumerGroupID(infra.DeleteRetryTopic),
+			Topic:   infra.DeleteRetryTopic,
+			Handler: MakeConsumer(app, ConsumeDeleteRetryMessage),
+		},
+		// the broadcast topic has a dynamically computed group id because each node receives the message
+		{
+			ID:      uuid.NewString(),
+			Topic:   infra.BroadcastTopic,
+			Handler: MakeConsumer(app, ConsumeBroadcastMessage),
+		},
+	}
+	for _, group := range groups {
+		consumerGroup, err := sarama.NewConsumerGroup(kafkaBrokers, group.ID, nil)
+		if err != nil {
+			log.Fatalf("failed to create kafka consumer: %v", err)
+		}
+
+		topics := []string{string(group.Topic)}
+		go func() {
+			for {
+				if err := consumerGroup.Consume(ctx, topics, group.Handler); err != nil {
+					slog.ErrorContext(ctx, "failed to start consumer group", "group", group, "err", err)
+				}
+				if ctx.Err() != nil {
+					return
+				}
+			}
+		}()
+	}
 }
 
-func ConsumeFiMessages[Message any](appCtx Context, reader infra.Consumer, onMessage func(Context, string, Message)) {
-	count := 0
-	readCfg := reader.Config()
-	for {
-		ctx := context.WithValue(appCtx, "trace", uuid.NewString())
+type JSONConsumer[Value any] struct {
+	App       *App
+	OnMessage func(ctx Context, key string, value Value)
+}
 
-		count++
-		m, err := reader.ReadMessage(ctx) // config allows cancel.
-		if errors.Is(err, context.Canceled) {
-			break
-		} else if err != nil {
-			slog.ErrorContext(ctx, "failed to fetch message", "topic", readCfg.Topic, "err", err)
-			continue
+func MakeConsumer[Value any](app *App, onMessage func(ctx Context, key string, value Value)) *JSONConsumer[Value] {
+	return &JSONConsumer[Value]{
+		App:       app,
+		OnMessage: onMessage,
+	}
+}
+
+func (*JSONConsumer[Value]) Setup(sarama.ConsumerGroupSession) error {
+	return nil
+}
+
+func (*JSONConsumer[Value]) Cleanup(sarama.ConsumerGroupSession) error {
+	return nil
+}
+
+func (consumer *JSONConsumer[Value]) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+	for message := range claim.Messages() {
+		session.MarkMessage(message, "")
+
+		ctx := Context{
+			Context: context.WithValue(context.Background(), "trace", uuid.NewString()),
+			App:     consumer.App,
 		}
-		slog.InfoContext(ctx, "read message from kafka topic", "count", count, "topic", readCfg.Topic, "offset", m.Offset, "Key", string(m.Key), "value", string(m.Value))
+
 		start := time.Now()
+		slog.InfoContext(ctx, "read message from kafka topic", "message", message)
 
-		var data Message
-		if err := json.Unmarshal(m.Value, &data); err != nil {
-			slog.ErrorContext(ctx, "failed to unmarshal message", "type", fmt.Sprintf("%T", data), "topic", readCfg.Topic, "err", err)
+		var data Value
+		if err := json.Unmarshal(message.Value, &data); err != nil {
+			slog.ErrorContext(ctx, "failed to unmarshal message", "type", fmt.Sprintf("%T", data), "message", message)
 			continue
 		}
-		onMessage(appCtx, string(m.Key), data)
-		slog.InfoContext(ctx, "consumed message from kafka topic", "count", count, "topic", readCfg.Topic, "elapsed", time.Since(start))
+		consumer.OnMessage(ctx, string(message.Key), data)
+
+		slog.InfoContext(ctx, "consumed message from kafka topic", "message", message, "elapsed", time.Since(start))
 	}
+	return nil
 }
 
-type BroadcastInput[Wrap YodleeWrapper[Inner], Inner any] struct {
-	// content of the fi messages, data extracts, response, etc.
-	FiMessages  []Wrap      `json:"messages"`
-	OriginTopic infra.Topic `json:"originTopic"`
-}
-
-func HandleAfterPublish[Wrap YodleeWrapper[Inner], Inner any](
-	ctx Context,
-	topic infra.Topic,
-	key string,
-	putResults []PutResult[Wrap],
-	mapInputs func([]Inner) any,
-) {
-	var successUploads []Wrap
-	var errInputs []Inner
-
-	for _, putErr := range putResults {
-		if putErr.Err == nil {
-			successUploads = append(successUploads, putErr.Input)
-		} else {
-			errInputs = append(errInputs, putErr.Input.Inner())
-		}
-	}
-
-	if len(successUploads) > 0 {
-		// write success uploads with a small wrapper describing the topic the upload originally came from (for broadcasting).
-		ProduceJsonMessage(ctx, infra.BroadcastTopic, "", BroadcastInput[Wrap, Inner]{
-			FiMessages:  successUploads,
-			OriginTopic: topic,
-		})
-	}
-	if len(errInputs) > 0 {
-		// maps the failed inputs into a new datastructure or writes as is.
-		// mapInputs guarantees that `writeErrInputs` is the same type that `e.OriginTopic` expects.
-		var writeErrInputs any = errInputs
-		if mapInputs != nil {
-			writeErrInputs = mapInputs(errInputs)
-		}
-		ProduceJsonMessage(ctx, topic, key, writeErrInputs)
-	}
-}
-
-func HandleCnctRefreshMessage(ctx Context, key string, cncts []yodlee.DataExtractsProviderAccount) {
+func ConsumeCnctRefreshMessage(ctx Context, key string, cncts []yodlee.DataExtractsProviderAccount) {
 	slog.InfoContext(ctx, "handling cnct refresh messages", "cncts", cncts)
 
 	result := IngestCnctRefreshes(ctx, key, cncts)
 	slog.InfoContext(ctx, "completed cnct refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	HandleAfterPublish(ctx, infra.CnctRefreshTopic, key, result.PutResults, nil)
+	ProducePutResults(ctx, infra.CnctRefreshTopic, key, result.PutResults, nil)
 	ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
-func HandleAcctRefreshMessage(ctx Context, key string, accts []yodlee.DataExtractsAccount) {
+func ConsumeAcctRefreshMessage(ctx Context, key string, accts []yodlee.DataExtractsAccount) {
 	slog.InfoContext(ctx, "handling acct refresh messages", "accts", accts)
 
 	result := IngestAcctsRefreshes(ctx, key, accts)
 	slog.InfoContext(ctx, "completed acct refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	HandleAfterPublish(ctx, infra.AcctRefreshTopic, key, result.PutResults, nil)
+	ProducePutResults(ctx, infra.AcctRefreshTopic, key, result.PutResults, nil)
 	ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
-func HandleTxnRefreshMessage(ctx Context, key string, txns []yodlee.DataExtractsTransaction) {
+func ConsumeTxnRefreshMessage(ctx Context, key string, txns []yodlee.DataExtractsTransaction) {
 	slog.InfoContext(ctx, "handling txn refresh messages", "txns", txns)
 
 	result := IngestTxnRefreshes(ctx, key, txns)
 	slog.InfoContext(ctx, "completed txn refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	HandleAfterPublish(ctx, infra.TxnRefreshTopic, key, result.PutResults, nil)
+	ProducePutResults(ctx, infra.TxnRefreshTopic, key, result.PutResults, nil)
 	ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
-func HandleHoldRefreshMessage(ctx Context, key string, holds []yodlee.DataExtractsHolding) {
+func ConsumeHoldRefreshMessage(ctx Context, key string, holds []yodlee.DataExtractsHolding) {
 	slog.InfoContext(ctx, "handling hold refresh messages", "holds", holds)
 
 	result := IngestHoldRefreshes(ctx, key, holds)
 	slog.InfoContext(ctx, "completed hold refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	HandleAfterPublish(ctx, infra.HoldRefreshTopic, key, result.PutResults, nil)
+	ProducePutResults(ctx, infra.HoldRefreshTopic, key, result.PutResults, nil)
 	ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
-func HandleCnctResponseMessage(ctx Context, key string, cncts yodlee.ProviderAccountResponse) {
+func ConsumeCnctResponseMessage(ctx Context, key string, cncts yodlee.ProviderAccountResponse) {
 	slog.InfoContext(ctx, "handling cnct response messages", "cncts", cncts)
 
 	putResults := IngestCnctResponses(ctx, key, cncts)
 
-	HandleAfterPublish(ctx, infra.CnctResponseTopic, key, putResults, func(errInputs []yodlee.ProviderAccount) any {
+	ProducePutResults(ctx, infra.CnctResponseTopic, key, putResults, func(errInputs []yodlee.ProviderAccount) any {
 		return yodlee.ProviderAccountResponse{ProviderAccount: errInputs}
 	})
 }
 
-func HandleAcctResponseMessage(ctx Context, key string, accts yodlee.AccountResponse) {
+func ConsumeAcctResponseMessage(ctx Context, key string, accts yodlee.AccountResponse) {
 	slog.InfoContext(ctx, "handling acct response messages", "accts", accts)
 
 	putResults := IngestAcctResponses(ctx, key, accts)
 
-	HandleAfterPublish(ctx, infra.AcctResponseTopic, key, putResults, func(errInputs []yodlee.Account) any {
+	ProducePutResults(ctx, infra.AcctResponseTopic, key, putResults, func(errInputs []yodlee.Account) any {
 		return yodlee.AccountResponse{Account: errInputs}
 	})
 }
 
-func HandleTxnResponseMessage(ctx Context, key string, txns yodlee.TransactionResponse) {
+func ConsumeTxnResponseMessage(ctx Context, key string, txns yodlee.TransactionResponse) {
 	slog.InfoContext(ctx, "handling txn response messages", "txns", txns)
 
 	putResults := IngestTxnResponses(ctx, key, txns)
 
-	HandleAfterPublish(ctx, infra.TxnResponseTopic, key, putResults, func(errInputs []yodlee.TransactionWithDateTime) any {
+	ProducePutResults(ctx, infra.TxnResponseTopic, key, putResults, func(errInputs []yodlee.TransactionWithDateTime) any {
 		return yodlee.TransactionResponse{Transaction: errInputs}
 	})
 }
 
-func HandleHoldResponseMessage(ctx Context, key string, holds yodlee.HoldingResponse) {
+func ConsumeHoldResponseMessage(ctx Context, key string, holds yodlee.HoldingResponse) {
 	slog.InfoContext(ctx, "handling hold response messages", "holds", holds)
 
 	putResults := IngestHoldResponses(ctx, key, holds)
 
-	HandleAfterPublish(ctx, infra.HoldResponseTopic, key, putResults, func(errInputs []yodlee.Holding) any {
+	ProducePutResults(ctx, infra.HoldResponseTopic, key, putResults, func(errInputs []yodlee.Holding) any {
 		return yodlee.HoldingResponse{Holding: errInputs}
 	})
 }
 
-func HandleDeleteRecoveryMessage(ctx Context, key string, deleteRetries []DeleteRetry) {
+func ConsumeDeleteRetryMessage(ctx Context, key string, deleteRetries []DeleteRetry) {
 	slog.InfoContext(ctx, "handling delete recovery messages", "deleteRetries", deleteRetries)
 
 	deleteErrors := IngestDeleteRetries(ctx, deleteRetries)
@@ -195,7 +233,7 @@ type BroadcastOutput struct {
 	FiMessages  []json.RawMessage `json:"messages"`
 }
 
-func HandleBroadcastMessage(ctx Context, _ string, broadcast BroadcastOutput) {
+func ConsumeBroadcastMessage(ctx Context, _ string, broadcast BroadcastOutput) {
 	for _, binaryMsg := range broadcast.FiMessages {
 		var opsFiMessage OpsFiMessage
 		if err := json.Unmarshal(binaryMsg, &opsFiMessage); err != nil {
@@ -204,7 +242,7 @@ func HandleBroadcastMessage(ctx Context, _ string, broadcast BroadcastOutput) {
 		}
 
 		strMsg := string(binaryMsg)
-		slog.InfoContext(ctx, "broadcasting message", "topic", opsFiMessage.OriginTopic, "message", strMsg)
+		slog.InfoContext(ctx, "broadcasting message", "Topic", opsFiMessage.OriginTopic, "message", strMsg)
 		ctx.FiMessageBroadcaster.Broadcast(opsFiMessage.ProfileId, opsFiMessage.OriginTopic, strMsg)
 	}
 }

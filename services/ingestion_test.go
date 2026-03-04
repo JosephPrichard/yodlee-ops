@@ -256,27 +256,27 @@ func TestIngestCnctRefreshes(t *testing.T) {
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
 		// Connections
-		//{Bucket: app.S3.Buckets.Connections, Key: "p1/1/10/2025-06-12"},
-		//{Bucket: app.S3.Buckets.Connections, Key: "p1/1/10/2025-06-13"},
+		//{Bucket: App.S3.Buckets.Connections, Key: "p1/1/10/2025-06-12"},
+		//{Bucket: App.S3.Buckets.Connections, Key: "p1/1/10/2025-06-13"},
 		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/20/2025-06-14"},
 		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/30/2025-06-15"},
 		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/99/2025-06-13"},
 
 		// Accounts
-		//{Bucket: app.S3.Buckets.Accounts, Key: "p1/1/10/100/2025-06-12"},
-		//{Bucket: app.S3.Buckets.Accounts, Key: "p1/1/10/100/2025-06-13"},
+		//{Bucket: App.S3.Buckets.Accounts, Key: "p1/1/10/100/2025-06-12"},
+		//{Bucket: App.S3.Buckets.Accounts, Key: "p1/1/10/100/2025-06-13"},
 		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/20/200/2025-06-14"},
 		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/30/400/2025-06-15"},
 
 		// Holdings
-		//{Bucket: app.S3.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-12"},
-		//{Bucket: app.S3.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-13"},
+		//{Bucket: App.S3.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-12"},
+		//{Bucket: App.S3.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-13"},
 		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/100/1000/2025-06-14"},
 		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/200/2000/2025-06-15"},
 
 		// Transactions
-		//{Bucket: app.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
-		//{Bucket: app.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		//{Bucket: App.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		//{Bucket: App.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
 		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
 		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 	}
@@ -329,21 +329,21 @@ func TestIngestAcctRefreshes(t *testing.T) {
 		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/30/2025-06-15"},
 
 		// Accounts
-		//{Bucket: app.S3.Buckets.Accounts, Key: "p1/1/10/100/2025-06-12"},
-		//{Bucket: app.S3.Buckets.Accounts, Key: "p1/1/10/100/2025-06-13"},
+		//{Bucket: App.S3.Buckets.Accounts, Key: "p1/1/10/100/2025-06-12"},
+		//{Bucket: App.S3.Buckets.Accounts, Key: "p1/1/10/100/2025-06-13"},
 		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/20/200/2025-06-14"},
 		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/30/400/2025-06-15"},
 		{Bucket: app.AWS.Buckets.Accounts, Key: "p1/1/99/999/2025-06-13"},
 
 		// Holdings
-		//{Bucket: app.S3.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-12"},
-		//{Bucket: app.S3.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-13"},
+		//{Bucket: App.S3.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-12"},
+		//{Bucket: App.S3.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-13"},
 		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/100/1000/2025-06-14"},
 		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/200/2000/2025-06-15"},
 
 		// Transactions
-		//{Bucket: app.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
-		//{Bucket: app.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		//{Bucket: App.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		//{Bucket: App.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
 		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
 		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 	}
@@ -408,8 +408,8 @@ func TestIngestTxnRefreshes(t *testing.T) {
 		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/200/2000/2025-06-15"},
 
 		// Transactions
-		//{Bucket: app.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
-		//{Bucket: app.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		//{Bucket: App.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		//{Bucket: App.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
 		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
 		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 		{Bucket: app.AWS.Buckets.Transactions, Key: "p1/1/999/9999/2025-06-13T07:06:18Z"},
@@ -517,8 +517,8 @@ func TestIngestDeleteRetries(t *testing.T) {
 		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/30/2025-06-15"},
 
 		// Accounts
-		//{Bucket: app.S3.Buckets.Accounts, Key: "p1/1/10/100/2025-06-12"},
-		//{Bucket: app.S3.Buckets.Accounts, Key: "p1/1/10/100/2025-06-13"},
+		//{Bucket: App.S3.Buckets.Accounts, Key: "p1/1/10/100/2025-06-12"},
+		//{Bucket: App.S3.Buckets.Accounts, Key: "p1/1/10/100/2025-06-13"},
 		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/20/200/2025-06-14"},
 		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/30/400/2025-06-15"},
 
@@ -529,8 +529,8 @@ func TestIngestDeleteRetries(t *testing.T) {
 		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/200/2000/2025-06-15"},
 
 		// Transactions
-		//{Bucket: app.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
-		//{Bucket: app.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		//{Bucket: App.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		//{Bucket: App.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
 		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
 		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 	}

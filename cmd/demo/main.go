@@ -1,8 +1,8 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
+	"github.com/IBM/sarama"
 	"log"
 	"log/slog"
 	"math/rand"
@@ -15,7 +15,6 @@ import (
 
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/joho/godotenv"
-	"github.com/segmentio/kafka-go"
 )
 
 // generates random ids with a tight finite range so we can get a random spread of data
@@ -213,10 +212,22 @@ func main() {
 
 	cmd.InitLoggers(nil)
 	config := infra.MakeConfig()
-	ctx := context.Background()
 
 	slog.Info("starting test producer", "config", config)
-	kafkaClient := infra.MakeKafkaProducers(config)
+
+	kafkaConfig := sarama.NewConfig()
+	kafkaConfig.Producer.Return.Errors = true
+
+	producer, err := sarama.NewAsyncProducer(config.KafkaBrokers, kafkaConfig)
+	if err != nil {
+		log.Fatalf("failed to create kafka producer: %v", err)
+	}
+
+	go func() {
+		for err := range producer.Errors() {
+			slog.Error("failed to produce message", "err", err)
+		}
+	}()
 
 	ticker := time.NewTicker(500 * time.Millisecond)
 	for range ticker.C {
@@ -264,8 +275,10 @@ func main() {
 			continue
 		}
 
-		if err := kafkaClient.Producer.WriteMessages(ctx, kafka.Message{Topic: string(topic), Key: makePartyId(), Value: v}); err != nil {
-			slog.Error("failed to produce message", "err", err)
+		producer.Input() <- &sarama.ProducerMessage{
+			Topic: string(topic),
+			Key:   sarama.StringEncoder(makePartyId()),
+			Value: sarama.ByteEncoder(v),
 		}
 	}
 }
