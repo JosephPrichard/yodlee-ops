@@ -18,25 +18,24 @@ import (
 
 var fiMessageOpts = []cmp.Option{cmpopts.IgnoreFields(OpsFiMessage{}, "Timestamp")}
 
-func setupIngestionTest(t *testing.T) *App {
-	awsClient := testutil.SetupAwsITest(t)
+func setupIngestionTest(t *testing.T) *State {
+	awsClient := testutil.SetupITest(t)
 
-	app := &App{AWS: awsClient}
-	app.AWS.PaginationLen = aws.Int32(1) // testing ListObjectsV2 pagination.
+	state := &State{AWS: awsClient}
+	state.AWS.PaginationLen = aws.Int32(1) // testing ListObjectsV2 pagination.
 
-	testutil.SeedS3Buckets(t, app.AWS)
-	return app
+	return state
 }
 
 func TestIngestCnctResponses(t *testing.T) {
 	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	app := setupIngestionTest(t)
-	appCtx := Context{Context: ctx, App: app}
+	state := setupIngestionTest(t)
+	stateCtx := Context{Context: ctx, State: state}
 
 	// when
-	putResults := IngestCnctResponses(appCtx, "p1", yodlee.ProviderAccountResponse{
+	putResults := IngestCnctResponses(stateCtx, "p1", yodlee.ProviderAccountResponse{
 		ProviderAccount: []yodlee.ProviderAccount{
 			{
 				Id:          1,
@@ -55,7 +54,7 @@ func TestIngestCnctResponses(t *testing.T) {
 	// then
 	wantObjects := []testutil.WantObject[OpsProviderAccount]{
 		{
-			Bucket: app.AWS.Buckets.Connections,
+			Bucket: infra.CnctBucket,
 			Key:    "p1/1/1/2025-06-12",
 			Value: OpsProviderAccount{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.CnctResponseTopic},
@@ -63,7 +62,7 @@ func TestIngestCnctResponses(t *testing.T) {
 			},
 		},
 		{
-			Bucket: app.AWS.Buckets.Connections,
+			Bucket: infra.CnctBucket,
 			Key:    "p1/1/100/2025-06-13",
 			Value: OpsProviderAccount{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.CnctResponseTopic},
@@ -71,18 +70,18 @@ func TestIngestCnctResponses(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, &app.AWS, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &state.AWS, wantObjects, fiMessageOpts...)
 }
 
 func TestIngestAcctResponses(t *testing.T) {
 	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	app := setupIngestionTest(t)
-	appCtx := Context{Context: ctx, App: app}
+	state := setupIngestionTest(t)
+	stateCtx := Context{Context: ctx, State: state}
 
 	// when
-	putResults := IngestAcctResponses(appCtx, "p1", yodlee.AccountResponse{
+	putResults := IngestAcctResponses(stateCtx, "p1", yodlee.AccountResponse{
 		Account: []yodlee.Account{
 			{
 				ProviderAccountId: 1,
@@ -103,7 +102,7 @@ func TestIngestAcctResponses(t *testing.T) {
 	// then
 	wantObjects := []testutil.WantObject[OpsAccount]{
 		{
-			Bucket: app.AWS.Buckets.Accounts,
+			Bucket: infra.AcctBucket,
 			Key:    "p1/1/1/1/2025-06-12",
 			Value: OpsAccount{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.AcctResponseTopic},
@@ -111,7 +110,7 @@ func TestIngestAcctResponses(t *testing.T) {
 			},
 		},
 		{
-			Bucket: app.AWS.Buckets.Accounts,
+			Bucket: infra.AcctBucket,
 			Key:    "p1/1/100/200/2025-06-13",
 			Value: OpsAccount{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.AcctResponseTopic},
@@ -119,18 +118,18 @@ func TestIngestAcctResponses(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, &app.AWS, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &state.AWS, wantObjects, fiMessageOpts...)
 }
 
 func TestIngestHoldResponses(t *testing.T) {
 	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	app := setupIngestionTest(t)
-	appCtx := Context{Context: ctx, App: app}
+	state := setupIngestionTest(t)
+	stateCtx := Context{Context: ctx, State: state}
 
 	// when
-	putResults := IngestHoldResponses(appCtx, "p1", yodlee.HoldingResponse{
+	putResults := IngestHoldResponses(stateCtx, "p1", yodlee.HoldingResponse{
 		Holding: []yodlee.Holding{
 			{
 				AccountId:   1,
@@ -151,7 +150,7 @@ func TestIngestHoldResponses(t *testing.T) {
 	// then
 	wantObjects := []testutil.WantObject[OpsHolding]{
 		{
-			Bucket: app.AWS.Buckets.Holdings,
+			Bucket: infra.HoldBucket,
 			Key:    "p1/1/1/1/2025-06-12",
 			Value: OpsHolding{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.HoldResponseTopic},
@@ -159,7 +158,7 @@ func TestIngestHoldResponses(t *testing.T) {
 			},
 		},
 		{
-			Bucket: app.AWS.Buckets.Holdings,
+			Bucket: infra.HoldBucket,
 			Key:    "p1/1/200/100/2025-06-13",
 			Value: OpsHolding{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.HoldResponseTopic},
@@ -167,18 +166,18 @@ func TestIngestHoldResponses(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, &app.AWS, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &state.AWS, wantObjects, fiMessageOpts...)
 }
 
 func TestIngestTxnResponses(t *testing.T) {
 	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	app := setupIngestionTest(t)
-	appCtx := Context{Context: ctx, App: app}
+	state := setupIngestionTest(t)
+	stateCtx := Context{Context: ctx, State: state}
 
 	// when
-	putResults := IngestTxnResponses(appCtx, "p1", yodlee.TransactionResponse{
+	putResults := IngestTxnResponses(stateCtx, "p1", yodlee.TransactionResponse{
 		Transaction: []yodlee.TransactionWithDateTime{
 			{
 				AccountId:   1,
@@ -199,7 +198,7 @@ func TestIngestTxnResponses(t *testing.T) {
 	// then
 	wantObjects := []testutil.WantObject[OpsTransaction]{
 		{
-			Bucket: app.AWS.Buckets.Transactions,
+			Bucket: infra.TxnBucket,
 			Key:    "p1/1/1/1/2025-06-11T07:06:18Z",
 			Value: OpsTransaction{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.TxnResponseTopic},
@@ -207,7 +206,7 @@ func TestIngestTxnResponses(t *testing.T) {
 			},
 		},
 		{
-			Bucket: app.AWS.Buckets.Transactions,
+			Bucket: infra.TxnBucket,
 			Key:    "p1/1/200/200/2025-06-13T07:06:18Z",
 			Value: OpsTransaction{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.TxnResponseTopic},
@@ -215,18 +214,18 @@ func TestIngestTxnResponses(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, &app.AWS, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &state.AWS, wantObjects, fiMessageOpts...)
 }
 
 func TestIngestCnctRefreshes(t *testing.T) {
 	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	app := setupIngestionTest(t)
-	appCtx := Context{Context: ctx, App: app}
+	state := setupIngestionTest(t)
+	stateCtx := Context{Context: ctx, State: state}
 
 	// when
-	result := IngestCnctRefreshes(appCtx, "p1", []yodlee.DataExtractsProviderAccount{
+	result := IngestCnctRefreshes(stateCtx, "p1", []yodlee.DataExtractsProviderAccount{
 		{
 			IsDeleted: true,
 			Id:        10,
@@ -243,7 +242,7 @@ func TestIngestCnctRefreshes(t *testing.T) {
 	// then
 	wantObjects := []testutil.WantObject[OpsProviderAccountRefresh]{
 		{
-			Bucket: app.AWS.Buckets.Connections,
+			Bucket: infra.CnctBucket,
 			Key:    "p1/1/99/2025-06-13",
 			Value: OpsProviderAccountRefresh{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.CnctRefreshTopic},
@@ -251,47 +250,47 @@ func TestIngestCnctRefreshes(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, &app.AWS, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &state.AWS, wantObjects, fiMessageOpts...)
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
 		// Connections
-		//{Bucket: App.S3.Buckets.Connections, Key: "p1/1/10/2025-06-12"},
-		//{Bucket: App.S3.Buckets.Connections, Key: "p1/1/10/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/20/2025-06-14"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/30/2025-06-15"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/99/2025-06-13"},
+		//{Bucket: infra.CnctBucket, Key: "p1/1/10/2025-06-12"},
+		//{Bucket: infra.CnctBucket, Key: "p1/1/10/2025-06-13"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/30/2025-06-15"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/99/2025-06-13"},
 
 		// Accounts
-		//{Bucket: App.S3.Buckets.Accounts, Key: "p1/1/10/100/2025-06-12"},
-		//{Bucket: App.S3.Buckets.Accounts, Key: "p1/1/10/100/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/20/200/2025-06-14"},
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/30/400/2025-06-15"},
+		//{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
+		//{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
+		{Bucket: infra.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: infra.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
 
 		// Holdings
-		//{Bucket: App.S3.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-12"},
-		//{Bucket: App.S3.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/100/1000/2025-06-14"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/200/2000/2025-06-15"},
+		//{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
+		//{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
+		{Bucket: infra.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: infra.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
 
 		// Transactions
-		//{Bucket: App.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
-		//{Bucket: App.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
-		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
-		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
+		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		{Bucket: infra.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: infra.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 	}
-	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, app.AWS))
+	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, state.AWS))
 }
 
 func TestIngestAcctRefreshes(t *testing.T) {
 	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	app := setupIngestionTest(t)
-	appCtx := Context{Context: ctx, App: app}
+	state := setupIngestionTest(t)
+	stateCtx := Context{Context: ctx, State: state}
 
 	// when
-	result := IngestAcctsRefreshes(appCtx, "p1", []yodlee.DataExtractsAccount{
+	result := IngestAcctsRefreshes(stateCtx, "p1", []yodlee.DataExtractsAccount{
 		{
 			IsDeleted:         true,
 			ProviderAccountId: 10,
@@ -310,7 +309,7 @@ func TestIngestAcctRefreshes(t *testing.T) {
 	// then
 	wantObjects := []testutil.WantObject[OpsAccountRefresh]{
 		{
-			Bucket: app.AWS.Buckets.Accounts,
+			Bucket: infra.AcctBucket,
 			Key:    "p1/1/99/999/2025-06-13",
 			Value: OpsAccountRefresh{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.AcctRefreshTopic},
@@ -318,47 +317,47 @@ func TestIngestAcctRefreshes(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, &app.AWS, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &state.AWS, wantObjects, fiMessageOpts...)
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
 		// Connections
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/10/2025-06-12"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/10/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/20/2025-06-14"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/30/2025-06-15"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/10/2025-06-12"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/10/2025-06-13"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/30/2025-06-15"},
 
 		// Accounts
-		//{Bucket: App.S3.Buckets.Accounts, Key: "p1/1/10/100/2025-06-12"},
-		//{Bucket: App.S3.Buckets.Accounts, Key: "p1/1/10/100/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/20/200/2025-06-14"},
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/30/400/2025-06-15"},
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p1/1/99/999/2025-06-13"},
+		//{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
+		//{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
+		{Bucket: infra.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: infra.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
+		{Bucket: infra.AcctBucket, Key: "p1/1/99/999/2025-06-13"},
 
 		// Holdings
-		//{Bucket: App.S3.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-12"},
-		//{Bucket: App.S3.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/100/1000/2025-06-14"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/200/2000/2025-06-15"},
+		//{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
+		//{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
+		{Bucket: infra.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: infra.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
 
 		// Transactions
-		//{Bucket: App.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
-		//{Bucket: App.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
-		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
-		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
+		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		{Bucket: infra.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: infra.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 	}
-	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, app.AWS))
+	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, state.AWS))
 }
 
 func TestIngestTxnRefreshes(t *testing.T) {
 	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	app := setupIngestionTest(t)
-	appCtx := Context{Context: ctx, App: app}
+	state := setupIngestionTest(t)
+	stateCtx := Context{Context: ctx, State: state}
 
 	// when
-	result := IngestTxnRefreshes(appCtx, "p1", []yodlee.DataExtractsTransaction{
+	result := IngestTxnRefreshes(stateCtx, "p1", []yodlee.DataExtractsTransaction{
 		{
 			IsDeleted: true,
 			AccountId: 100,
@@ -377,7 +376,7 @@ func TestIngestTxnRefreshes(t *testing.T) {
 	// then
 	wantObjects := []testutil.WantObject[OpsTransactionRefresh]{
 		{
-			Bucket: app.AWS.Buckets.Transactions,
+			Bucket: infra.TxnBucket,
 			Key:    "p1/1/999/9999/2025-06-13T07:06:18Z",
 			Value: OpsTransactionRefresh{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.TxnRefreshTopic},
@@ -385,47 +384,47 @@ func TestIngestTxnRefreshes(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, &app.AWS, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &state.AWS, wantObjects, fiMessageOpts...)
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
 		// Connections
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/10/2025-06-12"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/10/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/20/2025-06-14"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/30/2025-06-15"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/10/2025-06-12"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/10/2025-06-13"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/30/2025-06-15"},
 
 		// Accounts
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p1/1/10/100/2025-06-12"},
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p1/1/10/100/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/20/200/2025-06-14"},
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/30/400/2025-06-15"},
+		{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
+		{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
+		{Bucket: infra.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: infra.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
 
 		// Holdings
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-12"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/100/1000/2025-06-14"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/200/2000/2025-06-15"},
+		{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
+		{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
+		{Bucket: infra.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: infra.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
 
 		// Transactions
-		//{Bucket: App.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
-		//{Bucket: App.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
-		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
-		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
-		{Bucket: app.AWS.Buckets.Transactions, Key: "p1/1/999/9999/2025-06-13T07:06:18Z"},
+		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		{Bucket: infra.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: infra.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
+		{Bucket: infra.TxnBucket, Key: "p1/1/999/9999/2025-06-13T07:06:18Z"},
 	}
-	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, app.AWS))
+	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, state.AWS))
 }
 
 func TestIngestHoldRefreshes(t *testing.T) {
 	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	app := setupIngestionTest(t)
-	appCtx := Context{Context: ctx, App: app}
+	state := setupIngestionTest(t)
+	stateCtx := Context{Context: ctx, State: state}
 
 	// when
-	result := IngestHoldRefreshes(appCtx, "p1", []yodlee.DataExtractsHolding{
+	result := IngestHoldRefreshes(stateCtx, "p1", []yodlee.DataExtractsHolding{
 		// holdings can't be deleted individually (only the account that contains the holdings can be deleted).
 		//{
 		//	IsDeleted:   true,
@@ -445,7 +444,7 @@ func TestIngestHoldRefreshes(t *testing.T) {
 	// then
 	wantObjects := []testutil.WantObject[OpsHoldingRefresh]{
 		{
-			Bucket: app.AWS.Buckets.Holdings,
+			Bucket: infra.HoldBucket,
 			Key:    "p1/1/999/9999/2025-06-13",
 			Value: OpsHoldingRefresh{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.HoldRefreshTopic},
@@ -453,55 +452,55 @@ func TestIngestHoldRefreshes(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, &app.AWS, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &state.AWS, wantObjects, fiMessageOpts...)
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
 		// Connections
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/10/2025-06-12"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/10/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/20/2025-06-14"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/30/2025-06-15"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/10/2025-06-12"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/10/2025-06-13"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/30/2025-06-15"},
 
 		// Accounts
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p1/1/10/100/2025-06-12"},
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p1/1/10/100/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/20/200/2025-06-14"},
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/30/400/2025-06-15"},
+		{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
+		{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
+		{Bucket: infra.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: infra.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
 
 		// Holdings
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-12"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/100/1000/2025-06-14"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/200/2000/2025-06-15"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p1/1/999/9999/2025-06-13"},
+		{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
+		{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
+		{Bucket: infra.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: infra.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
+		{Bucket: infra.HoldBucket, Key: "p1/1/999/9999/2025-06-13"},
 
 		// Transactions
-		{Bucket: app.AWS.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
-		{Bucket: app.AWS.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
-		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
-		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
+		{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		{Bucket: infra.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: infra.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 	}
-	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, app.AWS))
+	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, state.AWS))
 }
 
 func TestIngestDeleteRetries(t *testing.T) {
 	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	app := setupIngestionTest(t)
-	appCtx := Context{Context: ctx, App: app}
+	state := setupIngestionTest(t)
+	stateCtx := Context{Context: ctx, State: state}
 
 	// when
-	results := IngestDeleteRetries(appCtx, []DeleteRetry{
+	results := IngestDeleteRetries(stateCtx, []DeleteRetry{
 		{
 			Kind:   ListKind,
-			Bucket: app.AWS.Buckets.Accounts,
+			Bucket: infra.AcctBucket,
 			Prefix: "p1/1/10",
 		},
 		{
 			Kind:   DeleteKind,
-			Bucket: app.AWS.Buckets.Transactions,
+			Bucket: infra.TxnBucket,
 			Keys:   []string{"p1/1/100/3000/2025-06-12T00:14:37Z", "p1/1/100/3000/2025-06-12T02:48:09Z"},
 		},
 	})
@@ -511,30 +510,30 @@ func TestIngestDeleteRetries(t *testing.T) {
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
 		// Connections
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/10/2025-06-12"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/10/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/20/2025-06-14"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/30/2025-06-15"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/10/2025-06-12"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/10/2025-06-13"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/30/2025-06-15"},
 
 		// Accounts
-		//{Bucket: App.S3.Buckets.Accounts, Key: "p1/1/10/100/2025-06-12"},
-		//{Bucket: App.S3.Buckets.Accounts, Key: "p1/1/10/100/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/20/200/2025-06-14"},
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/30/400/2025-06-15"},
+		//{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
+		//{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
+		{Bucket: infra.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: infra.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
 
 		// Holdings
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-12"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/100/1000/2025-06-14"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/200/2000/2025-06-15"},
+		{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
+		{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
+		{Bucket: infra.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: infra.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
 
 		// Transactions
-		//{Bucket: App.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
-		//{Bucket: App.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
-		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
-		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
+		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		{Bucket: infra.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: infra.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 	}
-	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, app.AWS))
+	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, state.AWS))
 }
 
 func putResultOpts[T any]() []cmp.Option {
@@ -548,18 +547,18 @@ func putResultOpts[T any]() []cmp.Option {
 func TestIngest_PutFailure(t *testing.T) {
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
-	setupTest := func(failKey string) *App {
-		app := setupIngestionTest(t)
-		fakes.MakeBadS3Client(&app.AWS, fakes.BadS3Config{
+	setupTest := func(failKey string) *State {
+		state := setupIngestionTest(t)
+		fakes.MakeBadS3Client(&state.AWS, fakes.BadS3Config{
 			FailPutKey: failKey,
 		})
-		return app
+		return state
 	}
 
 	t.Run("CnctResponse", func(t *testing.T) {
 		failKey := "p1/1/90/2025-06-12"
-		app := setupTest(failKey)
-		appCtx := Context{Context: ctx, App: app}
+		state := setupTest(failKey)
+		stateCtx := Context{Context: ctx, State: state}
 
 		input := yodlee.ProviderAccountResponse{
 			ProviderAccount: []yodlee.ProviderAccount{
@@ -570,7 +569,7 @@ func TestIngest_PutFailure(t *testing.T) {
 				},
 			},
 		}
-		putResults := IngestCnctResponses(appCtx, "p1", input)
+		putResults := IngestCnctResponses(stateCtx, "p1", input)
 
 		want := []PutCnctResult{
 			{
@@ -583,8 +582,8 @@ func TestIngest_PutFailure(t *testing.T) {
 
 	t.Run("AcctResponse", func(t *testing.T) {
 		failKey := "p1/1/90/900/2025-06-12"
-		app := setupTest(failKey)
-		appCtx := Context{Context: ctx, App: app}
+		state := setupTest(failKey)
+		stateCtx := Context{Context: ctx, State: state}
 
 		input := yodlee.AccountResponse{
 			Account: []yodlee.Account{
@@ -596,7 +595,7 @@ func TestIngest_PutFailure(t *testing.T) {
 				},
 			},
 		}
-		putResults := IngestAcctResponses(appCtx, "p1", input)
+		putResults := IngestAcctResponses(stateCtx, "p1", input)
 
 		want := []PutAcctResult{
 			{
@@ -609,8 +608,8 @@ func TestIngest_PutFailure(t *testing.T) {
 
 	t.Run("HoldResponse", func(t *testing.T) {
 		failKey := "p1/1/900/9000/2025-06-12"
-		app := setupTest(failKey)
-		appCtx := Context{Context: ctx, App: app}
+		state := setupTest(failKey)
+		stateCtx := Context{Context: ctx, State: state}
 
 		input := yodlee.HoldingResponse{
 			Holding: []yodlee.Holding{
@@ -622,7 +621,7 @@ func TestIngest_PutFailure(t *testing.T) {
 				},
 			},
 		}
-		putResults := IngestHoldResponses(appCtx, "p1", input)
+		putResults := IngestHoldResponses(stateCtx, "p1", input)
 
 		want := []PutHoldResult{
 			{
@@ -635,8 +634,8 @@ func TestIngest_PutFailure(t *testing.T) {
 
 	t.Run("TxnResponse", func(t *testing.T) {
 		failKey := "p1/1/900/9000/2025-06-11T07:06:18Z"
-		app := setupTest(failKey)
-		appCtx := Context{Context: ctx, App: app}
+		state := setupTest(failKey)
+		stateCtx := Context{Context: ctx, State: state}
 
 		input := yodlee.TransactionResponse{
 			Transaction: []yodlee.TransactionWithDateTime{
@@ -648,7 +647,7 @@ func TestIngest_PutFailure(t *testing.T) {
 				},
 			},
 		}
-		putResults := IngestTxnResponses(appCtx, "p1", input)
+		putResults := IngestTxnResponses(stateCtx, "p1", input)
 
 		want := []PutTxnResult{
 			{
@@ -661,8 +660,8 @@ func TestIngest_PutFailure(t *testing.T) {
 
 	t.Run("CnctRefresh", func(t *testing.T) {
 		failKey := "p1/1/90/2025-06-12"
-		app := setupTest(failKey)
-		appCtx := Context{Context: ctx, App: app}
+		state := setupTest(failKey)
+		stateCtx := Context{Context: ctx, State: state}
 
 		input := []yodlee.DataExtractsProviderAccount{
 			{
@@ -671,7 +670,7 @@ func TestIngest_PutFailure(t *testing.T) {
 				RequestId:   "REQUEST",
 			},
 		}
-		result := IngestCnctRefreshes(appCtx, "p1", input)
+		result := IngestCnctRefreshes(stateCtx, "p1", input)
 
 		want := CnctRefreshResult{
 			PutResults: []PutResult[OpsProviderAccountRefresh]{
@@ -686,8 +685,8 @@ func TestIngest_PutFailure(t *testing.T) {
 
 	t.Run("AcctRefresh", func(t *testing.T) {
 		failKey := "p1/1/90/900/2025-06-12"
-		app := setupTest(failKey)
-		appCtx := Context{Context: ctx, App: app}
+		state := setupTest(failKey)
+		stateCtx := Context{Context: ctx, State: state}
 
 		input := []yodlee.DataExtractsAccount{
 			{
@@ -698,7 +697,7 @@ func TestIngest_PutFailure(t *testing.T) {
 			},
 		}
 
-		result := IngestAcctsRefreshes(appCtx, "p1", input)
+		result := IngestAcctsRefreshes(stateCtx, "p1", input)
 
 		want := AcctRefreshResult{
 			PutResults: []PutResult[OpsAccountRefresh]{
@@ -713,8 +712,8 @@ func TestIngest_PutFailure(t *testing.T) {
 
 	t.Run("HoldRefresh", func(t *testing.T) {
 		failKey := "p1/1/900/9000/2025-06-12"
-		app := setupTest(failKey)
-		appCtx := Context{Context: ctx, App: app}
+		state := setupTest(failKey)
+		stateCtx := Context{Context: ctx, State: state}
 
 		input := []yodlee.DataExtractsHolding{
 			{
@@ -725,7 +724,7 @@ func TestIngest_PutFailure(t *testing.T) {
 			},
 		}
 
-		result := IngestHoldRefreshes(appCtx, "p1", input)
+		result := IngestHoldRefreshes(stateCtx, "p1", input)
 
 		want := HoldRefreshResult{
 			PutResults: []PutResult[OpsHoldingRefresh]{
@@ -740,8 +739,8 @@ func TestIngest_PutFailure(t *testing.T) {
 
 	t.Run("TxnRefresh", func(t *testing.T) {
 		failKey := "p1/1/900/9000/2025-06-11T07:06:18Z"
-		app := setupTest(failKey)
-		appCtx := Context{Context: ctx, App: app}
+		state := setupTest(failKey)
+		stateCtx := Context{Context: ctx, State: state}
 
 		input := []yodlee.DataExtractsTransaction{
 			{
@@ -752,7 +751,7 @@ func TestIngest_PutFailure(t *testing.T) {
 			},
 		}
 
-		result := IngestTxnRefreshes(appCtx, "p1", input)
+		result := IngestTxnRefreshes(stateCtx, "p1", input)
 
 		want := TxnRefreshResult{
 			PutResults: []PutResult[OpsTransactionRefresh]{
@@ -772,19 +771,19 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	t.Run("CnctRefresh", func(t *testing.T) {
-		app := setupIngestionTest(t)
-		appCtx := Context{Context: ctx, App: app}
+		state := setupIngestionTest(t)
+		stateCtx := Context{Context: ctx, State: state}
 
-		fakes.MakeBadS3Client(&app.AWS, fakes.BadS3Config{
+		fakes.MakeBadS3Client(&state.AWS, fakes.BadS3Config{
 			FailListPrefix: map[infra.Bucket]string{
-				app.AWS.Buckets.Transactions: "p1/1/100", // fail to list txn by prefix
+				infra.TxnBucket: "p1/1/100", // fail to list txn by prefix
 			},
 			FailDeleteKeys: map[string]bool{
 				"p1/1/100/1000/2025-06-12": true, // fail to delete a holding
 			},
 		})
 
-		result := IngestCnctRefreshes(appCtx, "p1", []yodlee.DataExtractsProviderAccount{
+		result := IngestCnctRefreshes(stateCtx, "p1", []yodlee.DataExtractsProviderAccount{
 			{
 				IsDeleted: true,
 				Id:        10, // contains account 100 and holding 1000 in seeded data.
@@ -792,26 +791,26 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 		})
 
 		want := []DeleteResult{
-			{Bucket: app.AWS.Buckets.Transactions, Prefix: "p1/1/100"},
-			{Bucket: app.AWS.Buckets.Holdings, Keys: []string{"p1/1/100/1000/2025-06-12"}},
+			{Bucket: infra.TxnBucket, Prefix: "p1/1/100"},
+			{Bucket: infra.HoldBucket, Keys: []string{"p1/1/100/1000/2025-06-12"}},
 		}
 		testutil.Equal(t, want, result.DeleteErrors, deleteResultOpts...)
 	})
 
 	t.Run("AcctRefresh", func(t *testing.T) {
-		app := setupIngestionTest(t)
-		appCtx := Context{Context: ctx, App: app}
+		state := setupIngestionTest(t)
+		stateCtx := Context{Context: ctx, State: state}
 
-		fakes.MakeBadS3Client(&app.AWS, fakes.BadS3Config{
+		fakes.MakeBadS3Client(&state.AWS, fakes.BadS3Config{
 			FailListPrefix: map[infra.Bucket]string{
-				app.AWS.Buckets.Transactions: "p1/1/100", // fail to list txn by prefix
+				infra.TxnBucket: "p1/1/100", // fail to list txn by prefix
 			},
 			FailDeleteKeys: map[string]bool{
 				"p1/1/10/100/2025-06-12": true, // fail to delete an acct
 			},
 		})
 
-		result := IngestAcctsRefreshes(appCtx, "p1", []yodlee.DataExtractsAccount{
+		result := IngestAcctsRefreshes(stateCtx, "p1", []yodlee.DataExtractsAccount{
 			{
 				IsDeleted:         true,
 				ProviderAccountId: 10,
@@ -820,8 +819,8 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 		})
 
 		want := []DeleteResult{
-			{Bucket: app.AWS.Buckets.Transactions, Prefix: "p1/1/100"},
-			{Bucket: app.AWS.Buckets.Accounts, Keys: []string{"p1/1/10/100/2025-06-12"}},
+			{Bucket: infra.TxnBucket, Prefix: "p1/1/100"},
+			{Bucket: infra.AcctBucket, Keys: []string{"p1/1/10/100/2025-06-12"}},
 		}
 		testutil.Equal(t, want, result.DeleteErrors, deleteResultOpts...)
 	})

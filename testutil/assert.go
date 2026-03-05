@@ -83,10 +83,10 @@ func GetAllKeys(t *testing.T, a infra.AWS) []WantKey {
 	var keys []WantKey
 
 	for _, bucket := range []infra.Bucket{
-		a.Buckets.Connections,
-		a.Buckets.Accounts,
-		a.Buckets.Transactions,
-		a.Buckets.Holdings,
+		infra.CnctBucket,
+		infra.AcctBucket,
+		infra.TxnBucket,
+		infra.HoldBucket,
 	} {
 		paginator := s3.NewListObjectsV2Paginator(a.S3, &s3.ListObjectsV2Input{Bucket: bucket.String()})
 

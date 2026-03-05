@@ -41,10 +41,10 @@ func RootMiddleware(allowedOrigins string, next http.Handler) http.Handler {
 	})
 }
 
-func MakeServeMux(app *App, allowOrigins string) *http.ServeMux {
+func MakeServeMux(app *State, allowOrigins string) *http.ServeMux {
 	mux := http.NewServeMux()
 
-	oGenServer, err := openapi.NewServer(&FiOpsAPIHandler{App: app}, &FiOpsSecurityHandler{App: app})
+	oGenServer, err := openapi.NewServer(&FiOpsAPIHandler{State: app}, &FiOpsSecurityHandler{State: app})
 	if err != nil {
 		panic(fmt.Sprintf("failed to make root: %v", err))
 	}
@@ -71,13 +71,13 @@ func MakeServeMux(app *App, allowOrigins string) *http.ServeMux {
 	return mux
 }
 
-func (app *App) AuthorizeToken(ctx context.Context, token string) (context.Context, error) {
+func (state *State) AuthorizeToken(ctx context.Context, token string) (context.Context, error) {
 	// todo: implement token validation here. in this implementation, Authorization allows all users.
 	return ctx, nil
 }
 
 type FiOpsSecurityHandler struct {
-	*App
+	*State
 }
 
 func (h *FiOpsSecurityHandler) HandleBearerAuth(ctx context.Context, _ openapi.OperationName, t openapi.BearerAuth) (context.Context, error) {
@@ -88,9 +88,9 @@ func FFormatEvent(w io.Writer, topic string, msg string) {
 	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", topic, msg)
 }
 
-func (app *App) StreamFiObjectLogs(w http.ResponseWriter, r *http.Request) {
+func (state *State) StreamFiObjectLogs(w http.ResponseWriter, r *http.Request) {
 	authorization := r.Header.Get("Authorization")
-	ctx, err := app.AuthorizeToken(r.Context(), authorization)
+	ctx, err := state.AuthorizeToken(r.Context(), authorization)
 	if err != nil {
 		http.Error(w, "access denied", http.StatusUnauthorized)
 		return
@@ -129,10 +129,10 @@ func (app *App) StreamFiObjectLogs(w http.ResponseWriter, r *http.Request) {
 	FFormatEvent(w, "meta", "init")
 	f.Flush()
 
-	subChan := app.FiMessageBroadcaster.Subscribe(SubscriberFilter{Topics: topics, ProfileIDs: profileIDs})
+	subChan := state.FiMessageBroadcaster.Subscribe(SubscriberFilter{Topics: topics, ProfileIDs: profileIDs})
 
 	go func() {
-		defer app.FiMessageBroadcaster.Unsubscribe(subChan)
+		defer state.FiMessageBroadcaster.Unsubscribe(subChan)
 		<-ctx.Done()
 	}()
 
@@ -151,19 +151,19 @@ func (app *App) StreamFiObjectLogs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func BucketFromSubject(buckets infra.Buckets, subject openapi.FiSubject) infra.Bucket {
+func BucketFromSubject(subject openapi.FiSubject) infra.Bucket {
 	var bucket infra.Bucket
 	switch subject {
 	case openapi.FiSubjectConnections:
-		bucket = buckets.Connections
+		bucket = infra.CnctBucket
 	case openapi.FiSubjectAccounts:
-		bucket = buckets.Accounts
+		bucket = infra.AcctBucket
 	case openapi.FiSubjectTransactions:
-		bucket = buckets.Transactions
+		bucket = infra.TxnBucket
 	case openapi.FiSubjectHoldings:
-		bucket = buckets.Holdings
+		bucket = infra.HoldBucket
 	default:
-		bucket = buckets.Connections
+		bucket = infra.CnctBucket
 	}
 	return bucket
 }
@@ -187,7 +187,7 @@ func mapOpsFiMetadata(opsFiMetadata []OpsFiMetadata, subject openapi.FiSubject) 
 }
 
 type FiOpsAPIHandler struct {
-	*App
+	*State
 }
 
 var _ openapi.Handler = (*FiOpsAPIHandler)(nil)
@@ -195,14 +195,14 @@ var _ openapi.Handler = (*FiOpsAPIHandler)(nil)
 const InternalServerErrorMessage = "internal server error"
 
 func (h *FiOpsAPIHandler) GetFiMetadataByPrefix(ctx context.Context, params openapi.GetFiMetadataByPrefixParams) (openapi.GetFiMetadataByPrefixRes, error) {
-	appCtx := Context{Context: ctx, App: h.App}
+	appCtx := Context{Context: ctx, State: h.State}
 
 	internalServerError := func(err error) *openapi.GetFiMetadataByPrefixInternalServerError {
 		slog.ErrorContext(ctx, "failed to list fi metadata by prefix", "err", err, "params", params)
 		return &openapi.GetFiMetadataByPrefixInternalServerError{ErrorCode: openapi.ErrorCodeFATALERROR, ErrorDesc: InternalServerErrorMessage}
 	}
 
-	bucket := BucketFromSubject(h.AWS.Buckets, params.Subject)
+	bucket := BucketFromSubject(params.Subject)
 
 	opsFiMetadata, nextCursor, err := ListFiMetadataByPrefix(appCtx, bucket, params.Prefix, params.Cursor.Value)
 	if err != nil {
@@ -216,7 +216,7 @@ func (h *FiOpsAPIHandler) GetFiMetadataByPrefix(ctx context.Context, params open
 }
 
 func (h *FiOpsAPIHandler) GetFiMetadataByProfiles(ctx context.Context, params openapi.GetFiMetadataByProfilesParams) (openapi.GetFiMetadataByProfilesRes, error) {
-	appCtx := Context{Context: ctx, App: h.App}
+	appCtx := Context{Context: ctx, State: h.State}
 
 	internalServerError := func(err error) *openapi.GetFiMetadataByProfilesInternalServerError {
 		slog.ErrorContext(ctx, "failed to list fi metadata by profiles", "err", err, "params", params)
@@ -224,7 +224,7 @@ func (h *FiOpsAPIHandler) GetFiMetadataByProfiles(ctx context.Context, params op
 	}
 
 	profileIDs := strings.Split(params.ProfileIDs, ",")
-	bucket := BucketFromSubject(h.AWS.Buckets, params.Subject)
+	bucket := BucketFromSubject(params.Subject)
 
 	var arrayCursor []string
 	if params.Cursor == "" {
@@ -257,7 +257,7 @@ func (h *FiOpsAPIHandler) GetFiMetadataByProfiles(ctx context.Context, params op
 }
 
 func (h *FiOpsAPIHandler) GetFiObject(ctx context.Context, params openapi.GetFiObjectParams) (openapi.GetFiObjectRes, error) {
-	appCtx := Context{Context: ctx, App: h.App}
+	appCtx := Context{Context: ctx, State: h.State}
 
 	internalServerError := func(err error) *openapi.GetFiObjectInternalServerError {
 		slog.ErrorContext(ctx, "failed to get fi object", "err", err)
@@ -265,7 +265,7 @@ func (h *FiOpsAPIHandler) GetFiObject(ctx context.Context, params openapi.GetFiO
 	}
 
 	keyInput := params.Key
-	bucketInput := BucketFromSubject(h.AWS.Buckets, params.Subject)
+	bucketInput := BucketFromSubject(params.Subject)
 
 	opsFiObject, err := GetFiObject(appCtx, bucketInput, keyInput)
 	if errors.Is(err, ErrKeyNotFound) {

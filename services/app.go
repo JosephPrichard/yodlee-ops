@@ -7,7 +7,7 @@ import (
 	"yodleeops/infra"
 )
 
-type App struct {
+type State struct {
 	AWS                  infra.AWS
 	Producer             sarama.AsyncProducer
 	FiMessageBroadcaster *FiMessageBroadcaster
@@ -15,5 +15,5 @@ type App struct {
 
 type Context struct {
 	context.Context
-	*App
+	*State
 }

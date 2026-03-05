@@ -10,34 +10,21 @@ import (
 	"time"
 )
 
-type JSONConsumer[Value any] struct {
-	App       *App
-	OnMessage func(ctx Context, key string, value Value)
+type ConsumerHandler[Value any] struct {
+	OnMessage func(ctx context.Context, key string, value Value)
 }
 
-func MakeJSONConsumer[Value any](app *App, onMessage func(ctx Context, key string, value Value)) *JSONConsumer[Value] {
-	return &JSONConsumer[Value]{
-		App:       app,
-		OnMessage: onMessage,
-	}
-}
-
-func (*JSONConsumer[Value]) Setup(sarama.ConsumerGroupSession) error {
+func (*ConsumerHandler[Value]) Setup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
-func (*JSONConsumer[Value]) Cleanup(sarama.ConsumerGroupSession) error {
+func (*ConsumerHandler[Value]) Cleanup(sarama.ConsumerGroupSession) error {
 	return nil
 }
 
-func (consumer *JSONConsumer[Value]) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+func (consumer *ConsumerHandler[Value]) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	for message := range claim.Messages() {
-		session.MarkMessage(message, "")
-
-		ctx := Context{
-			Context: context.WithValue(context.Background(), "trace", uuid.NewString()),
-			App:     consumer.App,
-		}
+		ctx := context.WithValue(context.Background(), "trace", uuid.NewString())
 
 		start := time.Now()
 		slog.InfoContext(ctx, "read message from kafka topic", "message", message)
@@ -48,6 +35,8 @@ func (consumer *JSONConsumer[Value]) ConsumeClaim(session sarama.ConsumerGroupSe
 			continue
 		}
 		consumer.OnMessage(ctx, string(message.Key), data)
+
+		session.MarkMessage(message, "")
 
 		slog.InfoContext(ctx, "consumed message from kafka topic", "message", message, "elapsed", time.Since(start))
 	}

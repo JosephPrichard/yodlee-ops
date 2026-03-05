@@ -83,7 +83,7 @@ func ListFiMetadataByProfileIDs(appCtx Context, bucket infra.Bucket, queries []L
 	eg, egCtx := errgroup.WithContext(appCtx)
 	for i, pair := range queries {
 		eg.Go(func() error {
-			opsFiMetadata, nextCursor, err := ListFiMetadataByPrefix(Context{Context: egCtx, App: appCtx.App}, bucket, pair.ProfileID, pair.ContinuationToken)
+			opsFiMetadata, nextCursor, err := ListFiMetadataByPrefix(Context{Context: egCtx, State: appCtx.State}, bucket, pair.ProfileID, pair.ContinuationToken)
 			if err != nil {
 				return fmt.Errorf("list metadata job index=%d: %w", i, err)
 			}
@@ -134,7 +134,7 @@ func ListFiMetadataByPrefix(ctx Context, bucket infra.Bucket, prefix string, cur
 			Key:          *obj.Key,
 			LastModified: *obj.LastModified,
 		}
-		if err := metadataRecord.ParseOpsFiMetadata(ctx.AWS.Buckets, bucket, *obj.Key); err != nil {
+		if err := metadataRecord.ParseOpsFiMetadata(bucket, *obj.Key); err != nil {
 			slog.ErrorContext(ctx, "failed to parse ops fi metadata record", "Key", *obj.Key, "err", err)
 		} else {
 			opsFiMetadata = append(opsFiMetadata, metadataRecord)

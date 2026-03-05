@@ -11,77 +11,92 @@ import (
 	"yodleeops/yodlee"
 )
 
-func StartConsumers(ctx context.Context, kafkaBrokers []string, config *sarama.Config, app *App) error {
-	for _, group := range []struct {
-		ID      string
-		Topic   infra.Topic
-		Handler sarama.ConsumerGroupHandler
-	}{
+type Consumer struct {
+	GroupID string
+	Topic   infra.Topic
+	Handler sarama.ConsumerGroupHandler
+}
+
+func MakeConsumerHandler[Value any](state *State, onMessage func(ctx Context, key string, value Value)) *ConsumerHandler[Value] {
+	return &ConsumerHandler[Value]{
+		OnMessage: func(ctx context.Context, key string, value Value) {
+			onMessage(Context{Context: ctx, State: state}, key, value)
+		},
+	}
+}
+
+func MakeConsumers(state *State) []Consumer {
+	return []Consumer{
 		// fi message topics have a statically computed group id because only one node receives messages
 		{
-			ID:      infra.CnctRefreshTopicGroupID,
+			GroupID: infra.CnctRefreshTopicGroupID,
 			Topic:   infra.CnctRefreshTopic,
-			Handler: MakeJSONConsumer(app, ConsumeCnctRefreshMessage),
+			Handler: MakeConsumerHandler(state, ConsumeCnctRefreshMessage),
 		},
 		{
-			ID:      infra.AcctRefreshTopicGroupID,
+			GroupID: infra.AcctRefreshTopicGroupID,
 			Topic:   infra.AcctRefreshTopic,
-			Handler: MakeJSONConsumer(app, ConsumeAcctRefreshMessage),
+			Handler: MakeConsumerHandler(state, ConsumeAcctRefreshMessage),
 		},
 		{
-			ID:      infra.HoldRefreshTopicGroupID,
+			GroupID: infra.HoldRefreshTopicGroupID,
 			Topic:   infra.HoldRefreshTopic,
-			Handler: MakeJSONConsumer(app, ConsumeHoldRefreshMessage),
+			Handler: MakeConsumerHandler(state, ConsumeHoldRefreshMessage),
 		},
 		{
-			ID:      infra.TxnRefreshTopicGroupID,
+			GroupID: infra.TxnRefreshTopicGroupID,
 			Topic:   infra.TxnRefreshTopic,
-			Handler: MakeJSONConsumer(app, ConsumeTxnRefreshMessage),
+			Handler: MakeConsumerHandler(state, ConsumeTxnRefreshMessage),
 		},
 		{
-			ID:      infra.CnctResponseTopicGroupID,
+			GroupID: infra.CnctResponseTopicGroupID,
 			Topic:   infra.CnctResponseTopic,
-			Handler: MakeJSONConsumer(app, ConsumeCnctResponseMessage),
+			Handler: MakeConsumerHandler(state, ConsumeCnctResponseMessage),
 		},
 		{
-			ID:      infra.AcctResponseTopicGroupID,
+			GroupID: infra.AcctResponseTopicGroupID,
 			Topic:   infra.AcctResponseTopic,
-			Handler: MakeJSONConsumer(app, ConsumeAcctResponseMessage),
+			Handler: MakeConsumerHandler(state, ConsumeAcctResponseMessage),
 		},
 		{
-			ID:      infra.HoldResponseTopicGroupID,
+			GroupID: infra.HoldResponseTopicGroupID,
 			Topic:   infra.HoldResponseTopic,
-			Handler: MakeJSONConsumer(app, ConsumeHoldResponseMessage),
+			Handler: MakeConsumerHandler(state, ConsumeHoldResponseMessage),
 		},
 		{
-			ID:      infra.TxnResponseTopicGroupID,
+			GroupID: infra.TxnResponseTopicGroupID,
 			Topic:   infra.TxnResponseTopic,
-			Handler: MakeJSONConsumer(app, ConsumeTxnResponseMessage),
+			Handler: MakeConsumerHandler(state, ConsumeTxnResponseMessage),
 		},
 		{
-			ID:      infra.DeleteRetryTopicGroupID,
+			GroupID: infra.DeleteRetryTopicGroupID,
 			Topic:   infra.DeleteRetryTopic,
-			Handler: MakeJSONConsumer(app, ConsumeDeleteRetryMessage),
+			Handler: MakeConsumerHandler(state, ConsumeDeleteRetryMessage),
 		},
 		// the broadcast topic has a dynamically computed group id because each node receives the message
 		{
-			ID:      uuid.NewString(),
+			GroupID: uuid.NewString(),
 			Topic:   infra.BroadcastTopic,
-			Handler: MakeJSONConsumer(app, ConsumeBroadcastMessage),
+			Handler: MakeConsumerHandler(state, ConsumeBroadcastMessage),
 		},
-	} {
-		consumerGroup, err := sarama.NewConsumerGroup(kafkaBrokers, group.ID, config)
+	}
+}
+
+func StartConsumers(ctx context.Context, kafkaBrokers []string, config *sarama.Config, app *State) error {
+	consumers := MakeConsumers(app)
+	for _, consumer := range consumers {
+		consumerGroup, err := sarama.NewConsumerGroup(kafkaBrokers, consumer.GroupID, config)
 		if err != nil {
 			return fmt.Errorf("failed to create kafka consumer: %v", err)
 		}
-		// begin a comsumer group loop for each topic
-		topics := []string{string(group.Topic)}
+		// begin a comsumer consumer loop for each topic
+		topics := []string{string(consumer.Topic)}
 		go func() {
 			for {
-				if err := consumerGroup.Consume(ctx, topics, group.Handler); err != nil {
-					slog.ErrorContext(ctx, "failed to start consumer group", "group", group, "err", err)
+				if err := consumerGroup.Consume(ctx, topics, consumer.Handler); err != nil {
+					slog.ErrorContext(ctx, "failed to start consumer consumer", "consumer", consumer, "err", err)
 				}
-				// stop consumer group loop when context is canceled.
+				// stop consumer loop when context is canceled.
 				if ctx.Err() != nil {
 					return
 				}

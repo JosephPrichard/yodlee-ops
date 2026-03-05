@@ -154,11 +154,11 @@ func TimeParseLax(dateString string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("parse time with any known layout: %s", dateString)
 }
 
-func (o *OpsFiMetadata) ParseOpsFiMetadata(buckets infra.Buckets, bucket infra.Bucket, key string) error {
+func (o *OpsFiMetadata) ParseOpsFiMetadata(bucket infra.Bucket, key string) error {
 	tokens := strings.Split(key, "/")
 
 	switch bucket {
-	case buckets.Connections:
+	case infra.CnctBucket:
 		wantTokenCount := 4
 		if len(tokens) != wantTokenCount {
 			return ParseOpsFiMetadataError{Key: key, Bucket: bucket, WantTokenCount: wantTokenCount, ActualTokenCount: len(tokens)}
@@ -166,7 +166,7 @@ func (o *OpsFiMetadata) ParseOpsFiMetadata(buckets infra.Buckets, bucket infra.B
 		o.ProfileID = tokens[0]
 		o.ProviderAccountID = tokens[1]
 		o.PartyIDTypeCd = tokens[2]
-	case buckets.Accounts:
+	case infra.AcctBucket:
 		wantTokenCount := 5
 		if len(tokens) != wantTokenCount {
 			return ParseOpsFiMetadataError{Key: key, Bucket: bucket, WantTokenCount: wantTokenCount, ActualTokenCount: len(tokens)}
@@ -175,7 +175,7 @@ func (o *OpsFiMetadata) ParseOpsFiMetadata(buckets infra.Buckets, bucket infra.B
 		o.ProviderAccountID = tokens[1]
 		o.PartyIDTypeCd = tokens[2]
 		o.AccountID = tokens[3]
-	case buckets.Holdings, buckets.Transactions:
+	case infra.HoldBucket, infra.TxnBucket:
 		wantTokenCount := 5
 		if len(tokens) != wantTokenCount {
 			return ParseOpsFiMetadataError{Key: key, Bucket: bucket, WantTokenCount: wantTokenCount, ActualTokenCount: len(tokens)}

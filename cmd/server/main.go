@@ -26,13 +26,13 @@ func main() {
 	config := infra.MakeConfig()
 
 	kafkaConfig := sarama.NewConfig()
+	kafkaConfig.Version = sarama.V3_6_0_0
 	kafkaConfig.Producer.Return.Errors = true
 
 	producer, err := sarama.NewAsyncProducer(config.KafkaBrokers, kafkaConfig)
 	if err != nil {
 		log.Fatalf("failed to create kafka producer: %v", err)
 	}
-
 	go func() {
 		for err := range producer.Errors() {
 			slog.Error("failed to produce message", "err", err)
@@ -40,14 +40,14 @@ func main() {
 	}()
 
 	s3Client := infra.MakeS3Client(config)
-	app := &svc.App{
+	state := &svc.State{
 		AWS:                  infra.MakeAWS(s3Client),
 		Producer:             producer,
 		FiMessageBroadcaster: &svc.FiMessageBroadcaster{},
 	}
 
 	rootCtx, cancel := context.WithCancel(context.Background())
-	if err := svc.StartConsumers(rootCtx, config.KafkaBrokers, kafkaConfig, app); err != nil {
+	if err := svc.StartConsumers(rootCtx, config.KafkaBrokers, kafkaConfig, state); err != nil {
 		log.Fatalf("failed to start consumers: %v", err)
 	}
 
@@ -63,7 +63,7 @@ func main() {
 		os.Exit(0)
 	}()
 
-	mux := svc.MakeServeMux(app, config.AllowOrigins)
+	mux := svc.MakeServeMux(state, config.AllowOrigins)
 	if err := http.ListenAndServe(":8080", mux); err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}

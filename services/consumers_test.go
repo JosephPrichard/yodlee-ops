@@ -14,13 +14,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func setupConsumersTest(t *testing.T) *App {
-	awsClient := testutil.SetupAwsITest(t)
-
-	app := &App{AWS: awsClient}
-
-	testutil.SeedS3Buckets(t, app.AWS)
-	return app
+func setupConsumersTest(t *testing.T) *State {
+	awsClient := testutil.SetupITest(t)
+	state := &State{AWS: awsClient}
+	return state
 }
 
 func mockConsumeFiMessage(ctx Context, key string, value any) {
@@ -46,16 +43,16 @@ func mockConsumeFiMessage(ctx Context, key string, value any) {
 	}
 }
 
-func TestFiMessageConsumers(t *testing.T) {
+func TestConsumers(t *testing.T) {
 	// given
-	app := setupConsumersTest(t)
+	state := setupConsumersTest(t)
 
 	config := sarama.NewConfig()
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 
 	mockProducer := saramaMocks.NewAsyncProducer(t, config)
-	app.Producer = mockProducer
+	state.Producer = mockProducer
 
 	providerAccountRefresh := yodlee.DataExtractsProviderAccount{
 		Id:          99,
@@ -126,25 +123,25 @@ func TestFiMessageConsumers(t *testing.T) {
 				value: []DeleteRetry{
 					{
 						Kind:   ListKind,
-						Bucket: app.AWS.Buckets.Transactions,
+						Bucket: infra.TxnBucket,
 						Prefix: "p1/1/100/3000",
 					},
 					{
 						Kind:   DeleteKind,
-						Bucket: app.AWS.Buckets.Connections,
+						Bucket: infra.CnctBucket,
 						Keys:   []string{"p1/1/30/2025-06-15"},
 					},
 				},
 			},
 		} {
-			appCtx := Context{Context: t.Context(), App: app}
+			stateCtx := Context{Context: t.Context(), State: state}
 
 			// expect one message to be produced per `PutResult` except DeleteRetries
 			if _, ok := test.value.([]DeleteRetry); !ok {
 				mockProducer.ExpectInputAndSucceed()
 			}
 
-			mockConsumeFiMessage(appCtx, "p1", test.value)
+			mockConsumeFiMessage(stateCtx, "p1", test.value)
 		}
 	}()
 
@@ -228,51 +225,51 @@ func TestFiMessageConsumers(t *testing.T) {
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/10/2025-06-12"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/10/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/20/2025-06-14"},
-		//{Bucket: App.S3.Buckets.Connections, Key: "p1/1/30/2025-06-15"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/99/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Connections, Key: "p1/1/77/2025-06-13"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/10/2025-06-12"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/10/2025-06-13"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		//{Bucket: infra.CnctBucket, Key: "p1/1/30/2025-06-15"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/99/2025-06-13"},
+		{Bucket: infra.CnctBucket, Key: "p1/1/77/2025-06-13"},
 
 		// Accounts
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p1/1/10/100/2025-06-12"},
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p1/1/10/100/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/20/200/2025-06-14"},
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p2/1/30/400/2025-06-15"},
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p1/1/99/999/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Accounts, Key: "p1/1/77/777/2025-06-13"},
+		{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
+		{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
+		{Bucket: infra.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: infra.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
+		{Bucket: infra.AcctBucket, Key: "p1/1/99/999/2025-06-13"},
+		{Bucket: infra.AcctBucket, Key: "p1/1/77/777/2025-06-13"},
 
 		// Holdings
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-12"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p1/1/100/1000/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/100/1000/2025-06-14"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p2/1/200/2000/2025-06-15"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p1/1/999/9999/2025-06-13"},
-		{Bucket: app.AWS.Buckets.Holdings, Key: "p1/1/777/7777/2025-06-13"},
+		{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
+		{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
+		{Bucket: infra.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: infra.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
+		{Bucket: infra.HoldBucket, Key: "p1/1/999/9999/2025-06-13"},
+		{Bucket: infra.HoldBucket, Key: "p1/1/777/7777/2025-06-13"},
 
 		// Transactions
-		//{Bucket: App.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
-		//{Bucket: App.S3.Buckets.Transactions, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
-		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
-		{Bucket: app.AWS.Buckets.Transactions, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
-		{Bucket: app.AWS.Buckets.Transactions, Key: "p1/1/999/9999/2025-06-13T07:06:18Z"},
-		{Bucket: app.AWS.Buckets.Transactions, Key: "p1/1/777/7777/2025-06-13T07:06:18Z"},
+		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		{Bucket: infra.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: infra.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
+		{Bucket: infra.TxnBucket, Key: "p1/1/999/9999/2025-06-13T07:06:18Z"},
+		{Bucket: infra.TxnBucket, Key: "p1/1/777/7777/2025-06-13T07:06:18Z"},
 	}
 
-	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, app.AWS))
+	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, state.AWS))
 }
 
-func TestFiMessageConsumers_S3Errors(t *testing.T) {
+func TestConsumers_S3Errors(t *testing.T) {
 	// given
-	app := setupConsumersTest(t)
+	state := setupConsumersTest(t)
 
 	config := sarama.NewConfig()
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
 
 	mockProducer := saramaMocks.NewAsyncProducer(t, config)
-	app.Producer = mockProducer
+	state.Producer = mockProducer
 
 	key := "p1" // all messages for same profileId.
 
@@ -390,15 +387,15 @@ func TestFiMessageConsumers_S3Errors(t *testing.T) {
 				value:      transactionResponse,
 			},
 		} {
-			fakes.MakeBadS3Client(&app.AWS, fakes.BadS3Config{
+			fakes.MakeBadS3Client(&state.AWS, fakes.BadS3Config{
 				FailPutKey: test.failPutKey,
 			})
-			appCtx := Context{Context: t.Context(), App: app}
+			stateCtx := Context{Context: t.Context(), State: state}
 
 			// expect one message to be produced per `PutResult`
 			mockProducer.ExpectInputAndSucceed()
 
-			mockConsumeFiMessage(appCtx, key, test.value)
+			mockConsumeFiMessage(stateCtx, key, test.value)
 		}
 	}()
 

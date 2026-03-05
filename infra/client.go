@@ -16,7 +16,7 @@ import (
 type Config struct {
 	AwsEndpoint      string
 	AwsDefaultRegion string
-	IsLocal          bool // a special flag to tell the app to use hardcoded credentials when connecting to local infra.
+	IsLocal          bool // a special flag to tell the app to use hardcoded credentials when connecting to local
 	KafkaBrokers     []string
 	AllowOrigins     string
 }
@@ -42,7 +42,6 @@ func MakeConfig() Config {
 type AWS struct {
 	S3            S3
 	PaginationLen *int32
-	Buckets       Buckets
 }
 
 type S3 interface {
@@ -80,14 +79,5 @@ func MakeS3Client(cfg Config) *s3.Client {
 }
 
 func MakeAWS(s3Client *s3.Client) AWS {
-	return AWS{
-		S3:            s3Client,
-		PaginationLen: nil,
-		Buckets: Buckets{
-			Connections:  CnctBucket,
-			Accounts:     AcctBucket,
-			Holdings:     HoldBucket,
-			Transactions: TxnBucket,
-		},
-	}
+	return AWS{S3: s3Client, PaginationLen: nil}
 }

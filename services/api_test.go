@@ -60,11 +60,11 @@ func scanEvents(resp *http.Response, wantEvents int) []string {
 }
 
 func TestStreamFiObjectLogs(t *testing.T) {
-	app := &App{
+	state := &State{
 		FiMessageBroadcaster: &FiMessageBroadcaster{},
 	}
 
-	testServer := httptest.NewServer(MakeServeMux(app, ""))
+	testServer := httptest.NewServer(MakeServeMux(state, ""))
 	defer testServer.Close()
 
 	// optimistic timeout in case of a deadlock.
@@ -83,11 +83,11 @@ func TestStreamFiObjectLogs(t *testing.T) {
 	defer resp.Body.Close()
 
 	go func() {
-		app.FiMessageBroadcaster.Broadcast("profile1", infra.HoldRefreshTopic, "event1")
-		app.FiMessageBroadcaster.Broadcast("profile2", infra.HoldResponseTopic, "event2")
-		app.FiMessageBroadcaster.Broadcast("profile3", infra.TxnRefreshTopic, "event3")
-		app.FiMessageBroadcaster.Broadcast("profile1", infra.TxnResponseTopic, "event4")
-		app.FiMessageBroadcaster.Broadcast("profile4", infra.CnctRefreshTopic, "event5")
+		state.FiMessageBroadcaster.Broadcast("profile1", infra.HoldRefreshTopic, "event1")
+		state.FiMessageBroadcaster.Broadcast("profile2", infra.HoldResponseTopic, "event2")
+		state.FiMessageBroadcaster.Broadcast("profile3", infra.TxnRefreshTopic, "event3")
+		state.FiMessageBroadcaster.Broadcast("profile1", infra.TxnResponseTopic, "event4")
+		state.FiMessageBroadcaster.Broadcast("profile4", infra.CnctRefreshTopic, "event5")
 	}()
 
 	// then
@@ -109,23 +109,21 @@ var opsGenericsCmpOpts = []cmp.Option{
 
 func TestHandleListFiMessages(t *testing.T) {
 	// given
-	awsClient := testutil.SetupAwsITest(t)
+	awsClient := testutil.SetupITest(t)
 
-	goodApp := &App{AWS: awsClient}
-	goodApp.AWS.PaginationLen = aws.Int32(1) // testing ListObjectsV2 pagination.
+	goodState := &State{AWS: awsClient}
+	goodState.AWS.PaginationLen = aws.Int32(1) // testing ListObjectsV2 pagination.
 
-	badApp := &App{AWS: awsClient}
-	fakes.MakeBadS3Client(&badApp.AWS, fakes.BadS3Config{
+	badState := &State{AWS: awsClient}
+	fakes.MakeBadS3Client(&badState.AWS, fakes.BadS3Config{
 		FailListPrefix: map[infra.Bucket]string{
-			awsClient.Buckets.Accounts:    "p1/1/10",
-			awsClient.Buckets.Connections: "p1",
+			infra.AcctBucket: "p1/1/10",
+			infra.CnctBucket: "p1",
 		},
 	})
 
-	testutil.SeedS3Buckets(t, awsClient)
-
 	for _, test := range []struct {
-		app            *App
+		state          *State
 		name           string
 		url            string
 		wantOpsGeneric openapi.ListFiMetadataResponse
@@ -133,9 +131,9 @@ func TestHandleListFiMessages(t *testing.T) {
 		wantStatusCode int
 	}{
 		{
-			app:  goodApp,
-			name: "selecting without cursor",
-			url:  fmt.Sprintf("prefix?prefix=%s&subject=%s", url.QueryEscape("p1/1/10"), string(openapi.FiSubjectAccounts)),
+			state: goodState,
+			name:  "selecting without cursor",
+			url:   fmt.Sprintf("prefix?prefix=%s&subject=%s", url.QueryEscape("p1/1/10"), string(openapi.FiSubjectAccounts)),
 			wantOpsGeneric: openapi.ListFiMetadataResponse{OpsFiMetadata: []openapi.OpsFiMetadata{
 				{
 					Subject:           "accounts",
@@ -151,18 +149,18 @@ func TestHandleListFiMessages(t *testing.T) {
 			wantStatusCode: http.StatusOK,
 		},
 		{
-			app:  badApp,
-			name: "failed to list fi metadata by prefix",
-			url:  fmt.Sprintf("prefix?prefix=%s&subject=%s", url.QueryEscape("p1/1/10"), string(openapi.FiSubjectAccounts)),
+			state: badState,
+			name:  "failed to list fi metadata by prefix",
+			url:   fmt.Sprintf("prefix?prefix=%s&subject=%s", url.QueryEscape("p1/1/10"), string(openapi.FiSubjectAccounts)),
 			wantErrorResp: openapi.ErrorResp{
 				ErrorCode: openapi.ErrorCodeFATALERROR,
 			},
 			wantStatusCode: http.StatusInternalServerError,
 		},
 		{
-			app:  goodApp,
-			name: "selecting without cursor",
-			url:  fmt.Sprintf("profiles?profileIDs=%s&subject=%s&cursor=", url.QueryEscape("p1,p2"), string(openapi.FiSubjectAccounts)),
+			state: goodState,
+			name:  "selecting without cursor",
+			url:   fmt.Sprintf("profiles?profileIDs=%s&subject=%s&cursor=", url.QueryEscape("p1,p2"), string(openapi.FiSubjectAccounts)),
 			wantOpsGeneric: openapi.ListFiMetadataResponse{OpsFiMetadata: []openapi.OpsFiMetadata{
 				{
 					Subject:           openapi.FiSubjectAccounts,
@@ -186,18 +184,18 @@ func TestHandleListFiMessages(t *testing.T) {
 			wantStatusCode: http.StatusOK,
 		},
 		{
-			app:  goodApp,
-			name: "prefix length != cursor length",
-			url:  fmt.Sprintf("profiles?profileIDs=%s&subject=%s&cursor=cursor1", url.QueryEscape("p1,p2"), string(openapi.FiSubjectAccounts)),
+			state: goodState,
+			name:  "prefix length != cursor length",
+			url:   fmt.Sprintf("profiles?profileIDs=%s&subject=%s&cursor=cursor1", url.QueryEscape("p1,p2"), string(openapi.FiSubjectAccounts)),
 			wantErrorResp: openapi.ErrorResp{
 				ErrorCode: openapi.ErrorCodePROFILEIDCURSORLENGTH,
 			},
 			wantStatusCode: http.StatusBadRequest,
 		},
 		{
-			app:  badApp,
-			name: "failed to list fi metadata by profile",
-			url:  fmt.Sprintf("profiles?profileIDs=%s&subject=%s&cursor=", url.QueryEscape("p1,p2"), string(openapi.FiSubjectConnections)),
+			state: badState,
+			name:  "failed to list fi metadata by profile",
+			url:   fmt.Sprintf("profiles?profileIDs=%s&subject=%s&cursor=", url.QueryEscape("p1,p2"), string(openapi.FiSubjectConnections)),
 			wantErrorResp: openapi.ErrorResp{
 				ErrorCode: openapi.ErrorCodeFATALERROR,
 			},
@@ -211,7 +209,7 @@ func TestHandleListFiMessages(t *testing.T) {
 			r.Header.Set("Authorization", TestAuthorizationToken)
 			w := httptest.NewRecorder()
 
-			hander := MakeServeMux(test.app, "")
+			hander := MakeServeMux(test.state, "")
 			hander.ServeHTTP(w, r)
 
 			// then
@@ -227,12 +225,10 @@ func TestHandleListFiMessages(t *testing.T) {
 
 func TestHandleListFiMessages_Pagination(t *testing.T) {
 	// given
-	awsClient := testutil.SetupAwsITest(t)
+	awsClient := testutil.SetupITest(t)
 
-	app := &App{AWS: awsClient}
-	app.AWS.PaginationLen = aws.Int32(1) // testing ListObjectsV2 pagination.
-
-	testutil.SeedS3Buckets(t, awsClient)
+	state := &State{AWS: awsClient}
+	state.AWS.PaginationLen = aws.Int32(1) // testing ListObjectsV2 pagination.
 
 	MaxPages := 10 // hard cap to prevent infinite loops for logic errors.
 	cursor := ""
@@ -251,7 +247,7 @@ func TestHandleListFiMessages_Pagination(t *testing.T) {
 		r.Header.Set("Authorization", TestAuthorizationToken)
 		w := httptest.NewRecorder()
 
-		hander := MakeServeMux(app, "")
+		hander := MakeServeMux(state, "")
 		hander.ServeHTTP(w, r)
 
 		listFiMetadataResponse := testutil.GetRespBody[openapi.ListFiMetadataResponse](t, w)
@@ -330,23 +326,23 @@ func TestHandleGetFiObject(t *testing.T) {
 		},
 	}
 
-	awsClient := testutil.SetupAwsITest(t)
+	awsClient := testutil.SetupITest(t)
 
-	goodApp := &App{AWS: awsClient}
-	badApp := &App{AWS: awsClient}
-	fakes.MakeBadS3Client(&badApp.AWS, fakes.BadS3Config{
+	goodState := &State{AWS: awsClient}
+	badState := &State{AWS: awsClient}
+	fakes.MakeBadS3Client(&badState.AWS, fakes.BadS3Config{
 		FailGetKey: testKey,
 	})
 
 	_, err := awsClient.S3.PutObject(t.Context(), &s3.PutObjectInput{
-		Bucket: awsClient.Buckets.Transactions.String(),
+		Bucket: infra.TxnBucket.String(),
 		Key:    aws.String(testKey),
 		Body:   bytes.NewReader(MustEncodeJson(t, testBody)),
 	})
 	require.NoError(t, err)
 
 	for _, test := range []struct {
-		app            *App
+		state          *State
 		name           string
 		key            string
 		subject        string
@@ -355,7 +351,7 @@ func TestHandleGetFiObject(t *testing.T) {
 		wantStatusCode int
 	}{
 		{
-			app:     goodApp,
+			state:   goodState,
 			name:    "valid key",
 			key:     testKey,
 			subject: string(openapi.FiSubjectTransactions),
@@ -368,7 +364,7 @@ func TestHandleGetFiObject(t *testing.T) {
 			wantStatusCode: http.StatusOK,
 		},
 		{
-			app:            goodApp,
+			state:          goodState,
 			name:           "invalid key",
 			key:            "p1/invalid-key",
 			subject:        string(openapi.FiSubjectTransactions),
@@ -376,7 +372,7 @@ func TestHandleGetFiObject(t *testing.T) {
 			wantStatusCode: http.StatusNotFound,
 		},
 		{
-			app:            badApp,
+			state:          badState,
 			name:           "failed to get fi object",
 			key:            testKey,
 			subject:        string(openapi.FiSubjectTransactions),
@@ -396,7 +392,7 @@ func TestHandleGetFiObject(t *testing.T) {
 			r.Header.Set("Authorization", TestAuthorizationToken)
 			w := httptest.NewRecorder()
 
-			hander := MakeServeMux(test.app, "")
+			hander := MakeServeMux(test.state, "")
 			hander.ServeHTTP(w, r)
 
 			// then

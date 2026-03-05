@@ -76,7 +76,7 @@ func TestParseOpsFiMetadata(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			meta := &OpsFiMetadata{}
-			err := meta.ParseOpsFiMetadata(buckets, test.bucket, test.key)
+			err := meta.ParseOpsFiMetadata(test.bucket, test.key)
 
 			if test.expectError {
 				assert.Error(t, err)

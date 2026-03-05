@@ -63,7 +63,7 @@ func TestProducePutResults(t *testing.T) {
 	config.Producer.Return.Errors = true
 
 	mockProducer := saramaMocks.NewAsyncProducer(t, config)
-	appCtx := Context{Context: t.Context(), App: &App{Producer: mockProducer}}
+	ctx := Context{Context: t.Context(), State: &State{Producer: mockProducer}}
 
 	putResults := []PutResult[OpsProviderAccountRefresh]{
 		{
@@ -98,7 +98,7 @@ func TestProducePutResults(t *testing.T) {
 	}
 	go func() {
 		defer mockProducer.Close()
-		ProducePutResults(appCtx, infra.CnctRefreshTopic, "p1", putResults, nil)
+		ProducePutResults(ctx, infra.CnctRefreshTopic, "p1", putResults, nil)
 	}()
 
 	// then

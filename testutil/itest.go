@@ -3,17 +3,12 @@ package testutil
 import (
 	"context"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
 	"yodleeops/infra"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/google/uuid"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -23,21 +18,25 @@ const (
 	LocalStackContPort = "4566/tcp"
 )
 
-var setupAppMu sync.Mutex
-
 var localstackCont testcontainers.Container
 
-func SetupAwsITest(t *testing.T) infra.AWS {
-	// global lock for the entire initialization phase.
-	// this prevents multiple containers for the same infra from being spawned
-	setupAppMu.Lock()
-	defer setupAppMu.Unlock()
-
+func SetupITest(t *testing.T) infra.AWS {
 	ctx := context.Background()
 
+	config := infra.Config{
+		AwsDefaultRegion: "us-east-1",
+		IsLocal:          true,
+	}
+	config.AwsEndpoint = startLocalstackCont(ctx, t)
+
+	return initTestAWS(t, config)
+}
+
+func startLocalstackCont(ctx context.Context, t *testing.T) string {
 	if localstackCont == nil {
 		start := time.Now()
-		cont, err := testcontainers.GenericContainer(t.Context(), testcontainers.GenericContainerRequest{
+
+		cont, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
 			Started: true,
 			ContainerRequest: testcontainers.ContainerRequest{
 				Image:        LocalstackContTag,
@@ -46,58 +45,37 @@ func SetupAwsITest(t *testing.T) infra.AWS {
 			},
 		})
 		if err != nil {
-			t.Fatalf("failed to start localstack container: %v", err)
+			t.Fatalf("failed to start localstack: %v", err)
 		}
+
 		localstackCont = cont
-		t.Logf("finished starting localstack container in %v", time.Since(start))
+		t.Logf("started localstack in %v", time.Since(start))
 	}
 
 	host, _ := localstackCont.Host(ctx)
 	port, _ := localstackCont.MappedPort(ctx, LocalStackContPort)
-	awsEndpoint := fmt.Sprintf("http://%s:%s", host, port.Port())
 
-	cfg := infra.Config{
-		AwsDefaultRegion: "us-east-1",
-		IsLocal:          true,
-		AwsEndpoint:      awsEndpoint,
-	}
-
-	client := infra.MakeAWS(infra.MakeS3Client(cfg))
-
-	// mock the bucket data for each itest.
-	client.Buckets.Connections = unique(client.Buckets.Connections)
-	client.Buckets.Accounts = unique(client.Buckets.Accounts)
-	client.Buckets.Holdings = unique(client.Buckets.Holdings)
-	client.Buckets.Transactions = unique(client.Buckets.Transactions)
-
-	createBuckets(ctx, t, cfg, client)
-	return client
+	return fmt.Sprintf("http://%s:%s", host, port.Port())
 }
 
-func createBuckets(ctx context.Context, t *testing.T, cfg infra.Config, client infra.AWS) {
-	awsCfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion(cfg.AwsDefaultRegion),
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider("testing", "testing", "")),
-	)
-	if err != nil {
-		t.Fatalf("failed to load S3 config: %s", err)
-	}
-	s3Client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
-		o.BaseEndpoint = aws.String(cfg.AwsEndpoint)
-		o.UsePathStyle = true
-	})
+func initTestAWS(t *testing.T, config infra.Config) infra.AWS {
+	s3Client := infra.MakeS3Client(config)
+	aws := infra.MakeAWS(s3Client)
+
 	for _, bucket := range []infra.Bucket{
-		client.Buckets.Connections,
-		client.Buckets.Accounts,
-		client.Buckets.Holdings,
-		client.Buckets.Transactions,
+		infra.CnctBucket,
+		infra.AcctBucket,
+		infra.HoldBucket,
+		infra.TxnBucket,
 	} {
-		if _, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: bucket.String()}); err != nil {
-			t.Fatalf("failed to create bucket %s: %s", bucket, err)
+		if _, err := s3Client.CreateBucket(context.Background(), &s3.CreateBucketInput{
+			Bucket: bucket.String(),
+		}); err != nil {
+			t.Fatalf("failed to create bucket %s: %v", bucket, err)
 		}
 	}
-}
 
-func unique(bucket infra.Bucket) infra.Bucket {
-	return infra.Bucket(string(bucket) + "-" + uuid.NewString())
+	SeedS3Buckets(t, s3Client)
+
+	return aws
 }
