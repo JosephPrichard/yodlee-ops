@@ -47,7 +47,9 @@ func main() {
 	}
 
 	rootCtx, cancel := context.WithCancel(context.Background())
-	svc.StartConsumers(rootCtx, app, config.KafkaBrokers)
+	if err := svc.StartConsumers(rootCtx, config.KafkaBrokers, kafkaConfig, app); err != nil {
+		log.Fatalf("failed to start consumers: %v", err)
+	}
 
 	go func() {
 		sigChan := make(chan os.Signal, 1)

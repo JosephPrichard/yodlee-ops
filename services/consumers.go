@@ -6,137 +6,87 @@ import (
 	"fmt"
 	"github.com/IBM/sarama"
 	"github.com/google/uuid"
-	"log"
 	"log/slog"
-	"time"
-
 	"yodleeops/infra"
 	"yodleeops/yodlee"
 )
 
-func StartConsumers(ctx context.Context, app *App, kafkaBrokers []string) {
-	consumerGroupID := func(t infra.Topic) string {
-		return string(t) + "_group"
-	}
-
-	groups := []struct {
+func StartConsumers(ctx context.Context, kafkaBrokers []string, config *sarama.Config, app *App) error {
+	for _, group := range []struct {
 		ID      string
 		Topic   infra.Topic
 		Handler sarama.ConsumerGroupHandler
 	}{
-		// fi message topics have a staticly computed group id because only one node receives mesages
+		// fi message topics have a statically computed group id because only one node receives messages
 		{
-			ID:      consumerGroupID(infra.CnctRefreshTopic),
+			ID:      infra.CnctRefreshTopicGroupID,
 			Topic:   infra.CnctRefreshTopic,
-			Handler: MakeConsumer(app, ConsumeCnctRefreshMessage),
+			Handler: MakeJSONConsumer(app, ConsumeCnctRefreshMessage),
 		},
 		{
-			ID:      consumerGroupID(infra.AcctRefreshTopic),
+			ID:      infra.AcctRefreshTopicGroupID,
 			Topic:   infra.AcctRefreshTopic,
-			Handler: MakeConsumer(app, ConsumeAcctRefreshMessage),
+			Handler: MakeJSONConsumer(app, ConsumeAcctRefreshMessage),
 		},
 		{
-			ID:      consumerGroupID(infra.HoldRefreshTopic),
+			ID:      infra.HoldRefreshTopicGroupID,
 			Topic:   infra.HoldRefreshTopic,
-			Handler: MakeConsumer(app, ConsumeHoldRefreshMessage),
+			Handler: MakeJSONConsumer(app, ConsumeHoldRefreshMessage),
 		},
 		{
-			ID:      consumerGroupID(infra.TxnRefreshTopic),
+			ID:      infra.TxnRefreshTopicGroupID,
 			Topic:   infra.TxnRefreshTopic,
-			Handler: MakeConsumer(app, ConsumeTxnRefreshMessage),
+			Handler: MakeJSONConsumer(app, ConsumeTxnRefreshMessage),
 		},
 		{
-			ID:      consumerGroupID(infra.CnctResponseTopic),
+			ID:      infra.CnctResponseTopicGroupID,
 			Topic:   infra.CnctResponseTopic,
-			Handler: MakeConsumer(app, ConsumeCnctResponseMessage),
+			Handler: MakeJSONConsumer(app, ConsumeCnctResponseMessage),
 		},
 		{
-			ID:      consumerGroupID(infra.AcctResponseTopic),
+			ID:      infra.AcctResponseTopicGroupID,
 			Topic:   infra.AcctResponseTopic,
-			Handler: MakeConsumer(app, ConsumeAcctResponseMessage),
+			Handler: MakeJSONConsumer(app, ConsumeAcctResponseMessage),
 		},
 		{
-			ID:      consumerGroupID(infra.HoldResponseTopic),
+			ID:      infra.HoldResponseTopicGroupID,
 			Topic:   infra.HoldResponseTopic,
-			Handler: MakeConsumer(app, ConsumeHoldResponseMessage),
+			Handler: MakeJSONConsumer(app, ConsumeHoldResponseMessage),
 		},
 		{
-			ID:      consumerGroupID(infra.TxnResponseTopic),
+			ID:      infra.TxnResponseTopicGroupID,
 			Topic:   infra.TxnResponseTopic,
-			Handler: MakeConsumer(app, ConsumeTxnResponseMessage),
+			Handler: MakeJSONConsumer(app, ConsumeTxnResponseMessage),
 		},
 		{
-			ID:      consumerGroupID(infra.DeleteRetryTopic),
+			ID:      infra.DeleteRetryTopicGroupID,
 			Topic:   infra.DeleteRetryTopic,
-			Handler: MakeConsumer(app, ConsumeDeleteRetryMessage),
+			Handler: MakeJSONConsumer(app, ConsumeDeleteRetryMessage),
 		},
 		// the broadcast topic has a dynamically computed group id because each node receives the message
 		{
 			ID:      uuid.NewString(),
 			Topic:   infra.BroadcastTopic,
-			Handler: MakeConsumer(app, ConsumeBroadcastMessage),
+			Handler: MakeJSONConsumer(app, ConsumeBroadcastMessage),
 		},
-	}
-	for _, group := range groups {
-		consumerGroup, err := sarama.NewConsumerGroup(kafkaBrokers, group.ID, nil)
+	} {
+		consumerGroup, err := sarama.NewConsumerGroup(kafkaBrokers, group.ID, config)
 		if err != nil {
-			log.Fatalf("failed to create kafka consumer: %v", err)
+			return fmt.Errorf("failed to create kafka consumer: %v", err)
 		}
-
+		// begin a comsumer group loop for each topic
 		topics := []string{string(group.Topic)}
 		go func() {
 			for {
 				if err := consumerGroup.Consume(ctx, topics, group.Handler); err != nil {
 					slog.ErrorContext(ctx, "failed to start consumer group", "group", group, "err", err)
 				}
+				// stop consumer group loop when context is canceled.
 				if ctx.Err() != nil {
 					return
 				}
 			}
 		}()
-	}
-}
-
-type JSONConsumer[Value any] struct {
-	App       *App
-	OnMessage func(ctx Context, key string, value Value)
-}
-
-func MakeConsumer[Value any](app *App, onMessage func(ctx Context, key string, value Value)) *JSONConsumer[Value] {
-	return &JSONConsumer[Value]{
-		App:       app,
-		OnMessage: onMessage,
-	}
-}
-
-func (*JSONConsumer[Value]) Setup(sarama.ConsumerGroupSession) error {
-	return nil
-}
-
-func (*JSONConsumer[Value]) Cleanup(sarama.ConsumerGroupSession) error {
-	return nil
-}
-
-func (consumer *JSONConsumer[Value]) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
-	for message := range claim.Messages() {
-		session.MarkMessage(message, "")
-
-		ctx := Context{
-			Context: context.WithValue(context.Background(), "trace", uuid.NewString()),
-			App:     consumer.App,
-		}
-
-		start := time.Now()
-		slog.InfoContext(ctx, "read message from kafka topic", "message", message)
-
-		var data Value
-		if err := json.Unmarshal(message.Value, &data); err != nil {
-			slog.ErrorContext(ctx, "failed to unmarshal message", "type", fmt.Sprintf("%T", data), "message", message)
-			continue
-		}
-		consumer.OnMessage(ctx, string(message.Key), data)
-
-		slog.InfoContext(ctx, "consumed message from kafka topic", "message", message, "elapsed", time.Since(start))
 	}
 	return nil
 }
