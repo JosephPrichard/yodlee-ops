@@ -25,9 +25,7 @@ func main() {
 	cmd.InitLoggers(nil)
 	config := infra.MakeConfig()
 
-	kafkaConfig := sarama.NewConfig()
-	kafkaConfig.Version = sarama.V3_6_0_0
-	kafkaConfig.Producer.Return.Errors = true
+	kafkaConfig := infra.MakeSaramaConfig(config)
 
 	producer, err := sarama.NewAsyncProducer(config.KafkaBrokers, kafkaConfig)
 	if err != nil {

@@ -2,10 +2,13 @@ package infra
 
 import (
 	"context"
+	"github.com/IBM/sarama"
 	"log"
 	"log/slog"
 	"os"
 	"strings"
+
+	mskiam "github.com/aws/aws-msk-iam-sasl-signer-go/signer"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -80,4 +83,31 @@ func MakeS3Client(cfg Config) *s3.Client {
 
 func MakeAWS(s3Client *s3.Client) AWS {
 	return AWS{S3: s3Client, PaginationLen: nil}
+}
+
+func MakeSaramaConfig(config Config) *sarama.Config {
+	kafkaConfig := sarama.NewConfig()
+	kafkaConfig.Version = sarama.V3_6_0_0
+	kafkaConfig.Producer.Return.Errors = true
+
+	if !config.IsLocal {
+		kafkaConfig.Net.SASL.Enable = true
+		kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypeOAuth
+		kafkaConfig.Net.SASL.TokenProvider = &IAMTokenProvider{config.AwsDefaultRegion}
+		kafkaConfig.Net.TLS.Enable = true
+	}
+
+	return kafkaConfig
+}
+
+type IAMTokenProvider struct {
+	region string
+}
+
+func (p *IAMTokenProvider) Token() (*sarama.AccessToken, error) {
+	token, _, err := mskiam.GenerateAuthToken(context.Background(), p.region)
+	if err != nil {
+		return nil, err
+	}
+	return &sarama.AccessToken{Token: token}, nil
 }
