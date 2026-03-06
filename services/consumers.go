@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/IBM/sarama"
-	"github.com/google/uuid"
 	"log/slog"
 	"yodleeops/infra"
 	"yodleeops/yodlee"
@@ -13,7 +12,6 @@ import (
 
 type Consumer struct {
 	GroupID string
-	Topic   infra.Topic
 	Handler sarama.ConsumerGroupHandler
 }
 
@@ -25,72 +23,58 @@ func MakeConsumerHandler[Value any](state *State, onMessage func(ctx Context, ke
 	}
 }
 
-func MakeConsumers(state *State) []Consumer {
-	return []Consumer{
+func MakeConsumers(state *State) map[infra.Topic]Consumer {
+	return map[infra.Topic]Consumer{
 		// fi message topics have a statically computed group id because only one node receives messages
-		{
+		infra.CnctRefreshTopic: {
 			GroupID: infra.CnctRefreshTopicGroupID,
-			Topic:   infra.CnctRefreshTopic,
 			Handler: MakeConsumerHandler(state, ConsumeCnctRefreshMessage),
 		},
-		{
+		infra.AcctRefreshTopic: {
 			GroupID: infra.AcctRefreshTopicGroupID,
-			Topic:   infra.AcctRefreshTopic,
 			Handler: MakeConsumerHandler(state, ConsumeAcctRefreshMessage),
 		},
-		{
+		infra.HoldRefreshTopic: {
 			GroupID: infra.HoldRefreshTopicGroupID,
-			Topic:   infra.HoldRefreshTopic,
 			Handler: MakeConsumerHandler(state, ConsumeHoldRefreshMessage),
 		},
-		{
+		infra.TxnRefreshTopic: {
 			GroupID: infra.TxnRefreshTopicGroupID,
-			Topic:   infra.TxnRefreshTopic,
 			Handler: MakeConsumerHandler(state, ConsumeTxnRefreshMessage),
 		},
-		{
+		infra.CnctResponseTopic: {
 			GroupID: infra.CnctResponseTopicGroupID,
-			Topic:   infra.CnctResponseTopic,
 			Handler: MakeConsumerHandler(state, ConsumeCnctResponseMessage),
 		},
-		{
+		infra.AcctResponseTopic: {
 			GroupID: infra.AcctResponseTopicGroupID,
-			Topic:   infra.AcctResponseTopic,
 			Handler: MakeConsumerHandler(state, ConsumeAcctResponseMessage),
 		},
-		{
+		infra.HoldResponseTopic: {
 			GroupID: infra.HoldResponseTopicGroupID,
-			Topic:   infra.HoldResponseTopic,
 			Handler: MakeConsumerHandler(state, ConsumeHoldResponseMessage),
 		},
-		{
+		infra.TxnResponseTopic: {
 			GroupID: infra.TxnResponseTopicGroupID,
-			Topic:   infra.TxnResponseTopic,
 			Handler: MakeConsumerHandler(state, ConsumeTxnResponseMessage),
 		},
-		{
-			GroupID: infra.DeleteRetryTopicGroupID,
-			Topic:   infra.DeleteRetryTopic,
-			Handler: MakeConsumerHandler(state, ConsumeDeleteRetryMessage),
-		},
 		// the broadcast topic has a dynamically computed group id because each node receives the message
-		{
-			GroupID: uuid.NewString(),
-			Topic:   infra.BroadcastTopic,
-			Handler: MakeConsumerHandler(state, ConsumeBroadcastMessage),
+		infra.DeleteRetryTopic: {
+			GroupID: infra.DeleteRetryTopicGroupID,
+			Handler: MakeConsumerHandler(state, ConsumeDeleteRetryMessage),
 		},
 	}
 }
 
 func StartConsumers(ctx context.Context, kafkaBrokers []string, config *sarama.Config, app *State) error {
 	consumers := MakeConsumers(app)
-	for _, consumer := range consumers {
+	for topic, consumer := range consumers {
 		consumerGroup, err := sarama.NewConsumerGroup(kafkaBrokers, consumer.GroupID, config)
 		if err != nil {
 			return fmt.Errorf("failed to create kafka consumer: %v", err)
 		}
 		// begin a comsumer consumer loop for each topic
-		topics := []string{string(consumer.Topic)}
+		topics := []string{string(topic)}
 		go func() {
 			for {
 				if err := consumerGroup.Consume(ctx, topics, consumer.Handler); err != nil {

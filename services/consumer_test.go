@@ -64,11 +64,9 @@ func TestConsumerHandler_ConsumeClaim(t *testing.T) {
 		Key:   []byte("key"),
 		Value: raw,
 	}
-
 	claim := &fakeClaim{
 		msgCh: make(chan *sarama.ConsumerMessage, 1),
 	}
-
 	session := &fakeSession{}
 
 	// when

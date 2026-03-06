@@ -1,8 +1,10 @@
 package svc
 
 import (
+	"encoding/json"
 	"github.com/IBM/sarama"
 	saramaMocks "github.com/IBM/sarama/mocks"
+	"github.com/stretchr/testify/require"
 	"testing"
 
 	"yodleeops/infra"
@@ -20,32 +22,36 @@ func setupConsumersTest(t *testing.T) *State {
 	return state
 }
 
-func mockConsumeFiMessage(ctx Context, key string, value any) {
-	switch v := value.(type) {
-	case []yodlee.DataExtractsProviderAccount:
-		ConsumeCnctRefreshMessage(ctx, key, v)
-	case []yodlee.DataExtractsAccount:
-		ConsumeAcctRefreshMessage(ctx, key, v)
-	case []yodlee.DataExtractsHolding:
-		ConsumeHoldRefreshMessage(ctx, key, v)
-	case []yodlee.DataExtractsTransaction:
-		ConsumeTxnRefreshMessage(ctx, key, v)
-	case yodlee.ProviderAccountResponse:
-		ConsumeCnctResponseMessage(ctx, key, v)
-	case yodlee.AccountResponse:
-		ConsumeAcctResponseMessage(ctx, key, v)
-	case yodlee.HoldingResponse:
-		ConsumeHoldResponseMessage(ctx, key, v)
-	case yodlee.TransactionResponse:
-		ConsumeTxnResponseMessage(ctx, key, v)
-	case []DeleteRetry:
-		ConsumeDeleteRetryMessage(ctx, key, v)
+type MockConsumer struct {
+	t         *testing.T
+	consumers map[infra.Topic]Consumer
+}
+
+func (p *MockConsumer) ConsumeClaim(topic infra.Topic, key string, value any) {
+	v, err := json.Marshal(value)
+	require.NoError(p.t, err)
+
+	session := &fakeSession{}
+	claim := &fakeClaim{
+		msgCh: make(chan *sarama.ConsumerMessage, 1),
 	}
+
+	msg := &sarama.ConsumerMessage{
+		Key:   []byte(key),
+		Value: v,
+	}
+	claim.msgCh <- msg
+	close(claim.msgCh)
+
+	err = p.consumers[topic].Handler.ConsumeClaim(session, claim)
+	require.NoError(p.t, err)
 }
 
 func TestConsumers(t *testing.T) {
 	// given
 	state := setupConsumersTest(t)
+
+	mockConsumer := MockConsumer{t: t, consumers: MakeConsumers(state)}
 
 	config := sarama.NewConfig()
 	config.Producer.Return.Successes = true
@@ -106,20 +112,45 @@ func TestConsumers(t *testing.T) {
 		defer mockProducer.Close()
 
 		for _, test := range []struct {
+			topic infra.Topic
 			value any
 		}{
 			// Refreshes
-			{value: []yodlee.DataExtractsProviderAccount{providerAccountRefresh}},
-			{value: []yodlee.DataExtractsAccount{accountRefresh}},
-			{value: []yodlee.DataExtractsHolding{holdingRefresh}},
-			{value: []yodlee.DataExtractsTransaction{transactionRefresh}},
-
-			// Responses
-			{value: yodlee.ProviderAccountResponse{ProviderAccount: []yodlee.ProviderAccount{providerAccountResponse}}},
-			{value: yodlee.AccountResponse{Account: []yodlee.Account{accountResponse}}},
-			{value: yodlee.HoldingResponse{Holding: []yodlee.Holding{holdingResponse}}},
-			{value: yodlee.TransactionResponse{Transaction: []yodlee.TransactionWithDateTime{transactionResponse}}},
 			{
+				topic: infra.CnctRefreshTopic,
+				value: []yodlee.DataExtractsProviderAccount{providerAccountRefresh},
+			},
+			{
+				topic: infra.AcctRefreshTopic,
+				value: []yodlee.DataExtractsAccount{accountRefresh},
+			},
+			{
+				topic: infra.HoldRefreshTopic,
+				value: []yodlee.DataExtractsHolding{holdingRefresh},
+			},
+			{
+				topic: infra.TxnRefreshTopic,
+				value: []yodlee.DataExtractsTransaction{transactionRefresh},
+			},
+			// Responses
+			{
+				topic: infra.CnctResponseTopic,
+				value: yodlee.ProviderAccountResponse{ProviderAccount: []yodlee.ProviderAccount{providerAccountResponse}},
+			},
+			{
+				topic: infra.AcctResponseTopic,
+				value: yodlee.AccountResponse{Account: []yodlee.Account{accountResponse}},
+			},
+			{
+				topic: infra.HoldResponseTopic,
+				value: yodlee.HoldingResponse{Holding: []yodlee.Holding{holdingResponse}},
+			},
+			{
+				topic: infra.TxnResponseTopic,
+				value: yodlee.TransactionResponse{Transaction: []yodlee.TransactionWithDateTime{transactionResponse}},
+			},
+			{
+				topic: infra.DeleteRetryTopic,
 				value: []DeleteRetry{
 					{
 						Kind:   ListKind,
@@ -134,14 +165,11 @@ func TestConsumers(t *testing.T) {
 				},
 			},
 		} {
-			stateCtx := Context{Context: t.Context(), State: state}
-
 			// expect one message to be produced per `PutResult` except DeleteRetries
 			if _, ok := test.value.([]DeleteRetry); !ok {
 				mockProducer.ExpectInputAndSucceed()
 			}
-
-			mockConsumeFiMessage(stateCtx, "p1", test.value)
+			mockConsumer.ConsumeClaim(test.topic, "p1", test.value)
 		}
 	}()
 
@@ -264,6 +292,8 @@ func TestConsumers_S3Errors(t *testing.T) {
 	// given
 	state := setupConsumersTest(t)
 
+	mockConsumer := MockConsumer{t: t, consumers: MakeConsumers(state)}
+
 	config := sarama.NewConfig()
 	config.Producer.Return.Successes = true
 	config.Producer.Return.Errors = true
@@ -349,40 +379,49 @@ func TestConsumers_S3Errors(t *testing.T) {
 		defer mockProducer.Close()
 
 		for _, test := range []struct {
+			topic      infra.Topic
 			failPutKey string
 			value      any
 		}{
 			// Refreshes
 			{
+				topic:      infra.CnctRefreshTopic,
 				failPutKey: "p1/1/99/2025-06-13",
 				value:      providerAccountRefresh,
 			},
 			{
+				topic:      infra.AcctRefreshTopic,
 				failPutKey: "p1/1/99/999/2025-06-13",
 				value:      accountRefresh,
 			},
 			{
+				topic:      infra.HoldRefreshTopic,
 				failPutKey: "p1/1/999/9999/2025-06-13",
 				value:      holdingRefresh,
 			},
 			{
+				topic:      infra.TxnRefreshTopic,
 				failPutKey: "p1/1/999/9999/2025-06-13T07:06:18Z",
 				value:      transactionRefresh,
 			},
 			// Responses
 			{
+				topic:      infra.CnctResponseTopic,
 				failPutKey: "p1/1/77/2025-06-13",
 				value:      providerAccountResponse,
 			},
 			{
+				topic:      infra.AcctResponseTopic,
 				failPutKey: "p1/1/77/777/2025-06-13",
 				value:      accountResponse,
 			},
 			{
+				topic:      infra.HoldResponseTopic,
 				failPutKey: "p1/1/777/7777/2025-06-13",
 				value:      holdingResponse,
 			},
 			{
+				topic:      infra.TxnResponseTopic,
 				failPutKey: "p1/1/777/7777/2025-06-13T07:06:18Z",
 				value:      transactionResponse,
 			},
@@ -390,12 +429,11 @@ func TestConsumers_S3Errors(t *testing.T) {
 			fakes.MakeBadS3Client(&state.AWS, fakes.BadS3Config{
 				FailPutKey: test.failPutKey,
 			})
-			stateCtx := Context{Context: t.Context(), State: state}
 
 			// expect one message to be produced per `PutResult`
 			mockProducer.ExpectInputAndSucceed()
 
-			mockConsumeFiMessage(stateCtx, key, test.value)
+			mockConsumer.ConsumeClaim(test.topic, key, test.value)
 		}
 	}()
 
