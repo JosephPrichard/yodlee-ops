@@ -16,6 +16,62 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var (
+	ProviderAccountRefresh = yodlee.DataExtractsProviderAccount{
+		Id:          99,
+		LastUpdated: "2025-06-13",
+		RequestId:   "REQUEST",
+	}
+
+	AccountRefresh = yodlee.DataExtractsAccount{
+		ProviderAccountId: 99,
+		Id:                999,
+		LastUpdated:       "2025-06-13",
+		AccountName:       "Savings Data",
+	}
+
+	HoldingRefresh = yodlee.DataExtractsHolding{
+		AccountId:   999,
+		Id:          9999,
+		LastUpdated: "2025-06-13",
+		HoldingType: "Stock",
+	}
+
+	TransactionRefresh = yodlee.DataExtractsTransaction{
+		AccountId:   999,
+		Id:          9999,
+		Date:        "2025-06-13T07:06:18Z",
+		CheckNumber: "1299",
+	}
+
+	ProviderAccountResponse = yodlee.ProviderAccount{
+		Id:          77,
+		LastUpdated: "2025-06-13",
+		RequestId:   "REQUEST",
+	}
+
+	AccountResponse = yodlee.Account{
+		ProviderAccountId: 77,
+		Id:                777,
+		LastUpdated:       "2025-06-13",
+		AccountName:       "Savings Data",
+	}
+
+	HoldingResponse = yodlee.Holding{
+		AccountId:   777,
+		Id:          7777,
+		LastUpdated: "2025-06-13",
+		HoldingType: "Stock",
+	}
+
+	TransactionResponse = yodlee.TransactionWithDateTime{
+		AccountId:   777,
+		Id:          7777,
+		Date:        "2025-06-13T07:06:18Z",
+		CheckNumber: "1299",
+	}
+)
+
 func setupConsumersTest(t *testing.T) *State {
 	awsClient := testutil.SetupITest(t)
 	state := &State{AWS: awsClient}
@@ -47,6 +103,114 @@ func (p *MockConsumer) ConsumeClaim(topic infra.Topic, key string, value any) {
 	require.NoError(p.t, err)
 }
 
+var WantBroadcastMsgs = []any{
+	BroadcastInput[OpsProviderAccountRefresh, yodlee.DataExtractsProviderAccount]{
+		OriginTopic: infra.CnctRefreshTopic,
+		FiMessages: []OpsProviderAccountRefresh{
+			{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.CnctRefreshTopic},
+				Data:         ProviderAccountRefresh,
+			},
+		},
+	},
+	BroadcastInput[OpsAccountRefresh, yodlee.DataExtractsAccount]{
+		OriginTopic: infra.AcctRefreshTopic,
+		FiMessages: []OpsAccountRefresh{
+			{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.AcctRefreshTopic},
+				Data:         AccountRefresh,
+			},
+		},
+	},
+	BroadcastInput[OpsHoldingRefresh, yodlee.DataExtractsHolding]{
+		OriginTopic: infra.HoldRefreshTopic,
+		FiMessages: []OpsHoldingRefresh{
+			{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.HoldRefreshTopic},
+				Data:         HoldingRefresh,
+			},
+		},
+	},
+	BroadcastInput[OpsTransactionRefresh, yodlee.DataExtractsTransaction]{
+		OriginTopic: infra.TxnRefreshTopic,
+		FiMessages: []OpsTransactionRefresh{
+			{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.TxnRefreshTopic},
+				Data:         TransactionRefresh,
+			},
+		},
+	},
+	BroadcastInput[OpsProviderAccount, yodlee.ProviderAccount]{
+		OriginTopic: infra.CnctResponseTopic,
+		FiMessages: []OpsProviderAccount{
+			{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.CnctResponseTopic},
+				Data:         ProviderAccountResponse,
+			},
+		},
+	},
+	BroadcastInput[OpsAccount, yodlee.Account]{
+		OriginTopic: infra.AcctResponseTopic,
+		FiMessages: []OpsAccount{
+			{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.AcctResponseTopic},
+				Data:         AccountResponse,
+			},
+		},
+	},
+	BroadcastInput[OpsHolding, yodlee.Holding]{
+		OriginTopic: infra.HoldResponseTopic,
+		FiMessages: []OpsHolding{
+			{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.HoldResponseTopic},
+				Data:         HoldingResponse,
+			},
+		},
+	},
+	BroadcastInput[OpsTransaction, yodlee.TransactionWithDateTime]{
+		OriginTopic: infra.TxnResponseTopic,
+		FiMessages: []OpsTransaction{
+			{
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.TxnResponseTopic},
+				Data:         TransactionResponse,
+			},
+		},
+	},
+}
+
+var WantIngestedKeys = []testutil.WantKey{
+	{Bucket: infra.CnctBucket, Key: "p1/1/10/2025-06-12"},
+	{Bucket: infra.CnctBucket, Key: "p1/1/10/2025-06-13"},
+	{Bucket: infra.CnctBucket, Key: "p1/1/20/2025-06-14"},
+	//{Bucket: infra.CnctBucket, Key: "p1/1/30/2025-06-15"},
+	{Bucket: infra.CnctBucket, Key: "p1/1/99/2025-06-13"},
+	{Bucket: infra.CnctBucket, Key: "p1/1/77/2025-06-13"},
+
+	// Accounts
+	{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
+	{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
+	{Bucket: infra.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+	{Bucket: infra.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
+	{Bucket: infra.AcctBucket, Key: "p1/1/99/999/2025-06-13"},
+	{Bucket: infra.AcctBucket, Key: "p1/1/77/777/2025-06-13"},
+
+	// Holdings
+	{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
+	{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
+	{Bucket: infra.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+	{Bucket: infra.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
+	{Bucket: infra.HoldBucket, Key: "p1/1/999/9999/2025-06-13"},
+	{Bucket: infra.HoldBucket, Key: "p1/1/777/7777/2025-06-13"},
+
+	// Transactions
+	//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+	//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+	{Bucket: infra.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+	{Bucket: infra.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
+	{Bucket: infra.TxnBucket, Key: "p1/1/999/9999/2025-06-13T07:06:18Z"},
+	{Bucket: infra.TxnBucket, Key: "p1/1/777/7777/2025-06-13T07:06:18Z"},
+}
+
 func TestConsumers(t *testing.T) {
 	// given
 	state := setupConsumersTest(t)
@@ -60,111 +224,65 @@ func TestConsumers(t *testing.T) {
 	mockProducer := saramaMocks.NewAsyncProducer(t, config)
 	state.Producer = mockProducer
 
-	providerAccountRefresh := yodlee.DataExtractsProviderAccount{
-		Id:          99,
-		LastUpdated: "2025-06-13",
-		RequestId:   "REQUEST",
-	}
-	accountRefresh := yodlee.DataExtractsAccount{
-		ProviderAccountId: 99,
-		Id:                999,
-		LastUpdated:       "2025-06-13",
-		AccountName:       "Savings Data",
-	}
-	holdingRefresh := yodlee.DataExtractsHolding{
-		AccountId:   999,
-		Id:          9999,
-		LastUpdated: "2025-06-13",
-		HoldingType: "Stock",
-	}
-	transactionRefresh := yodlee.DataExtractsTransaction{
-		AccountId:   999,
-		Id:          9999,
-		Date:        "2025-06-13T07:06:18Z",
-		CheckNumber: "1299",
-	}
-	providerAccountResponse := yodlee.ProviderAccount{
-		Id:          77,
-		LastUpdated: "2025-06-13",
-		RequestId:   "REQUEST",
-	}
-	accountResponse := yodlee.Account{
-		ProviderAccountId: 77,
-		Id:                777,
-		LastUpdated:       "2025-06-13",
-		AccountName:       "Savings Data",
-	}
-	holdingResponse := yodlee.Holding{
-		AccountId:   777,
-		Id:          7777,
-		LastUpdated: "2025-06-13",
-		HoldingType: "Stock",
-	}
-	transactionResponse := yodlee.TransactionWithDateTime{
-		AccountId:   777,
-		Id:          7777,
-		Date:        "2025-06-13T07:06:18Z",
-		CheckNumber: "1299",
-	}
-
 	// when
+	tests := []struct {
+		topic infra.Topic
+		value any
+	}{
+		// Refreshes
+		{
+			topic: infra.CnctRefreshTopic,
+			value: []yodlee.DataExtractsProviderAccount{ProviderAccountRefresh},
+		},
+		{
+			topic: infra.AcctRefreshTopic,
+			value: []yodlee.DataExtractsAccount{AccountRefresh},
+		},
+		{
+			topic: infra.HoldRefreshTopic,
+			value: []yodlee.DataExtractsHolding{HoldingRefresh},
+		},
+		{
+			topic: infra.TxnRefreshTopic,
+			value: []yodlee.DataExtractsTransaction{TransactionRefresh},
+		},
+		// Responses
+		{
+			topic: infra.CnctResponseTopic,
+			value: yodlee.ProviderAccountResponse{ProviderAccount: []yodlee.ProviderAccount{ProviderAccountResponse}},
+		},
+		{
+			topic: infra.AcctResponseTopic,
+			value: yodlee.AccountResponse{Account: []yodlee.Account{AccountResponse}},
+		},
+		{
+			topic: infra.HoldResponseTopic,
+			value: yodlee.HoldingResponse{Holding: []yodlee.Holding{HoldingResponse}},
+		},
+		{
+			topic: infra.TxnResponseTopic,
+			value: yodlee.TransactionResponse{Transaction: []yodlee.TransactionWithDateTime{TransactionResponse}},
+		},
+		{
+			topic: infra.DeleteRetryTopic,
+			value: []DeleteRetry{
+				{
+					Kind:   ListKind,
+					Bucket: infra.TxnBucket,
+					Prefix: "p1/1/100/3000",
+				},
+				{
+					Kind:   DeleteKind,
+					Bucket: infra.CnctBucket,
+					Keys:   []string{"p1/1/30/2025-06-15"},
+				},
+			},
+		},
+	}
 	go func() {
 		defer mockProducer.Close()
 
-		for _, test := range []struct {
-			topic infra.Topic
-			value any
-		}{
-			// Refreshes
-			{
-				topic: infra.CnctRefreshTopic,
-				value: []yodlee.DataExtractsProviderAccount{providerAccountRefresh},
-			},
-			{
-				topic: infra.AcctRefreshTopic,
-				value: []yodlee.DataExtractsAccount{accountRefresh},
-			},
-			{
-				topic: infra.HoldRefreshTopic,
-				value: []yodlee.DataExtractsHolding{holdingRefresh},
-			},
-			{
-				topic: infra.TxnRefreshTopic,
-				value: []yodlee.DataExtractsTransaction{transactionRefresh},
-			},
-			// Responses
-			{
-				topic: infra.CnctResponseTopic,
-				value: yodlee.ProviderAccountResponse{ProviderAccount: []yodlee.ProviderAccount{providerAccountResponse}},
-			},
-			{
-				topic: infra.AcctResponseTopic,
-				value: yodlee.AccountResponse{Account: []yodlee.Account{accountResponse}},
-			},
-			{
-				topic: infra.HoldResponseTopic,
-				value: yodlee.HoldingResponse{Holding: []yodlee.Holding{holdingResponse}},
-			},
-			{
-				topic: infra.TxnResponseTopic,
-				value: yodlee.TransactionResponse{Transaction: []yodlee.TransactionWithDateTime{transactionResponse}},
-			},
-			{
-				topic: infra.DeleteRetryTopic,
-				value: []DeleteRetry{
-					{
-						Kind:   ListKind,
-						Bucket: infra.TxnBucket,
-						Prefix: "p1/1/100/3000",
-					},
-					{
-						Kind:   DeleteKind,
-						Bucket: infra.CnctBucket,
-						Keys:   []string{"p1/1/30/2025-06-15"},
-					},
-				},
-			},
-		} {
+		for _, test := range tests {
 			// expect one message to be produced per `PutResult` except DeleteRetries
 			if _, ok := test.value.([]DeleteRetry); !ok {
 				mockProducer.ExpectInputAndSucceed()
@@ -174,118 +292,28 @@ func TestConsumers(t *testing.T) {
 	}()
 
 	// then
-	wantBroadcastMsgs := []any{
-		BroadcastInput[OpsProviderAccountRefresh, yodlee.DataExtractsProviderAccount]{
-			OriginTopic: infra.CnctRefreshTopic,
-			FiMessages: []OpsProviderAccountRefresh{
-				{
-					OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.CnctRefreshTopic},
-					Data:         providerAccountRefresh,
-				},
-			},
-		},
-		BroadcastInput[OpsAccountRefresh, yodlee.DataExtractsAccount]{
-			OriginTopic: infra.AcctRefreshTopic,
-			FiMessages: []OpsAccountRefresh{
-				{
-					OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.AcctRefreshTopic},
-					Data:         accountRefresh,
-				},
-			},
-		},
-		BroadcastInput[OpsHoldingRefresh, yodlee.DataExtractsHolding]{
-			OriginTopic: infra.HoldRefreshTopic,
-			FiMessages: []OpsHoldingRefresh{
-				{
-					OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.HoldRefreshTopic},
-					Data:         holdingRefresh,
-				},
-			},
-		},
-		BroadcastInput[OpsTransactionRefresh, yodlee.DataExtractsTransaction]{
-			OriginTopic: infra.TxnRefreshTopic,
-			FiMessages: []OpsTransactionRefresh{
-				{
-					OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.TxnRefreshTopic},
-					Data:         transactionRefresh,
-				},
-			},
-		},
-		BroadcastInput[OpsProviderAccount, yodlee.ProviderAccount]{
-			OriginTopic: infra.CnctResponseTopic,
-			FiMessages: []OpsProviderAccount{
-				{
-					OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.CnctResponseTopic},
-					Data:         providerAccountResponse,
-				},
-			},
-		},
-		BroadcastInput[OpsAccount, yodlee.Account]{
-			OriginTopic: infra.AcctResponseTopic,
-			FiMessages: []OpsAccount{
-				{
-					OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.AcctResponseTopic},
-					Data:         accountResponse,
-				},
-			},
-		},
-		BroadcastInput[OpsHolding, yodlee.Holding]{
-			OriginTopic: infra.HoldResponseTopic,
-			FiMessages: []OpsHolding{
-				{
-					OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.HoldResponseTopic},
-					Data:         holdingResponse,
-				},
-			},
-		},
-		BroadcastInput[OpsTransaction, yodlee.TransactionWithDateTime]{
-			OriginTopic: infra.TxnResponseTopic,
-			FiMessages: []OpsTransaction{
-				{
-					OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: infra.TxnResponseTopic},
-					Data:         transactionResponse,
-				},
-			},
-		},
-	}
 	broadcastMsgs := drainMockProducerMessages(mockProducer)
-	testutil.Equal(t, wantBroadcastMsgs, broadcastMsgs, cmpopts.IgnoreFields(OpsFiMessage{}, "Timestamp"))
+	testutil.Equal(t, WantBroadcastMsgs, broadcastMsgs, cmpopts.IgnoreFields(OpsFiMessage{}, "Timestamp"))
 
 	// removed keys are commented.
-	wantKeys := []testutil.WantKey{
-		{Bucket: infra.CnctBucket, Key: "p1/1/10/2025-06-12"},
-		{Bucket: infra.CnctBucket, Key: "p1/1/10/2025-06-13"},
-		{Bucket: infra.CnctBucket, Key: "p1/1/20/2025-06-14"},
-		//{Bucket: infra.CnctBucket, Key: "p1/1/30/2025-06-15"},
-		{Bucket: infra.CnctBucket, Key: "p1/1/99/2025-06-13"},
-		{Bucket: infra.CnctBucket, Key: "p1/1/77/2025-06-13"},
+	assert.ElementsMatch(t, WantIngestedKeys, testutil.GetAllKeys(t, state.AWS))
+}
 
-		// Accounts
-		{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
-		{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
-		{Bucket: infra.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
-		{Bucket: infra.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
-		{Bucket: infra.AcctBucket, Key: "p1/1/99/999/2025-06-13"},
-		{Bucket: infra.AcctBucket, Key: "p1/1/77/777/2025-06-13"},
+var (
+	ProviderAccountRefreshSlice = []yodlee.DataExtractsProviderAccount{ProviderAccountRefresh}
+	AccountRefreshSlice         = []yodlee.DataExtractsAccount{AccountRefresh}
+	HoldingRefreshSlice         = []yodlee.DataExtractsHolding{HoldingRefresh}
+	TransactionRefreshSlice     = []yodlee.DataExtractsTransaction{TransactionRefresh}
 
-		// Holdings
-		{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
-		{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
-		{Bucket: infra.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
-		{Bucket: infra.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
-		{Bucket: infra.HoldBucket, Key: "p1/1/999/9999/2025-06-13"},
-		{Bucket: infra.HoldBucket, Key: "p1/1/777/7777/2025-06-13"},
+	ProviderAccountResponseSlice = yodlee.ProviderAccountResponse{ProviderAccount: []yodlee.ProviderAccount{ProviderAccountResponse}}
+	AccountResponseSlice         = yodlee.AccountResponse{Account: []yodlee.Account{AccountResponse}}
+	HoldingResponseSlice         = yodlee.HoldingResponse{Holding: []yodlee.Holding{HoldingResponse}}
+	TransactionResponseSlice     = yodlee.TransactionResponse{Transaction: []yodlee.TransactionWithDateTime{TransactionResponse}}
+)
 
-		// Transactions
-		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
-		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
-		{Bucket: infra.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
-		{Bucket: infra.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
-		{Bucket: infra.TxnBucket, Key: "p1/1/999/9999/2025-06-13T07:06:18Z"},
-		{Bucket: infra.TxnBucket, Key: "p1/1/777/7777/2025-06-13T07:06:18Z"},
-	}
-
-	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, state.AWS))
+var WantPutRetryMsgs = []any{
+	ProviderAccountResponseSlice, AccountResponseSlice, HoldingResponseSlice, TransactionResponseSlice,
+	ProviderAccountRefreshSlice, AccountRefreshSlice, HoldingRefreshSlice, TransactionRefreshSlice,
 }
 
 func TestConsumers_S3Errors(t *testing.T) {
@@ -303,129 +331,59 @@ func TestConsumers_S3Errors(t *testing.T) {
 
 	key := "p1" // all messages for same profileId.
 
-	providerAccountRefresh := []yodlee.DataExtractsProviderAccount{
-		{
-			Id:          99,
-			LastUpdated: "2025-06-13",
-			RequestId:   "REQUEST",
-		},
-	}
-	accountRefresh := []yodlee.DataExtractsAccount{
-		{
-			ProviderAccountId: 99,
-			Id:                999,
-			LastUpdated:       "2025-06-13",
-			AccountName:       "Savings Data",
-		},
-	}
-	holdingRefresh := []yodlee.DataExtractsHolding{
-		{
-			AccountId:   999,
-			Id:          9999,
-			LastUpdated: "2025-06-13",
-			HoldingType: "Stock",
-		},
-	}
-	transactionRefresh := []yodlee.DataExtractsTransaction{
-		{
-			AccountId:   999,
-			Id:          9999,
-			Date:        "2025-06-13T07:06:18Z",
-			CheckNumber: "1299",
-		},
-	}
-	providerAccountResponse := yodlee.ProviderAccountResponse{
-		ProviderAccount: []yodlee.ProviderAccount{
-			{
-				Id:          77,
-				LastUpdated: "2025-06-13",
-				RequestId:   "REQUEST",
-			},
-		},
-	}
-	accountResponse := yodlee.AccountResponse{
-		Account: []yodlee.Account{
-			{
-				ProviderAccountId: 77,
-				Id:                777,
-				LastUpdated:       "2025-06-13",
-				AccountName:       "Savings Data",
-			},
-		},
-	}
-	holdingResponse := yodlee.HoldingResponse{
-		Holding: []yodlee.Holding{
-			{
-				AccountId:   777,
-				Id:          7777,
-				LastUpdated: "2025-06-13",
-				HoldingType: "Stock",
-			},
-		},
-	}
-	transactionResponse := yodlee.TransactionResponse{
-		Transaction: []yodlee.TransactionWithDateTime{
-			{
-				AccountId:   777,
-				Id:          7777,
-				Date:        "2025-06-13T07:06:18Z",
-				CheckNumber: "1299",
-			},
-		},
-	}
-
 	// when
+	tests := []struct {
+		topic      infra.Topic
+		failPutKey string
+		value      any
+	}{
+		// Refreshes
+		{
+			topic:      infra.CnctRefreshTopic,
+			failPutKey: "p1/1/99/2025-06-13",
+			value:      ProviderAccountRefreshSlice,
+		},
+		{
+			topic:      infra.AcctRefreshTopic,
+			failPutKey: "p1/1/99/999/2025-06-13",
+			value:      AccountRefreshSlice,
+		},
+		{
+			topic:      infra.HoldRefreshTopic,
+			failPutKey: "p1/1/999/9999/2025-06-13",
+			value:      HoldingRefreshSlice,
+		},
+		{
+			topic:      infra.TxnRefreshTopic,
+			failPutKey: "p1/1/999/9999/2025-06-13T07:06:18Z",
+			value:      TransactionRefreshSlice,
+		},
+		// Responses
+		{
+			topic:      infra.CnctResponseTopic,
+			failPutKey: "p1/1/77/2025-06-13",
+			value:      ProviderAccountResponseSlice,
+		},
+		{
+			topic:      infra.AcctResponseTopic,
+			failPutKey: "p1/1/77/777/2025-06-13",
+			value:      AccountResponseSlice,
+		},
+		{
+			topic:      infra.HoldResponseTopic,
+			failPutKey: "p1/1/777/7777/2025-06-13",
+			value:      HoldingResponseSlice,
+		},
+		{
+			topic:      infra.TxnResponseTopic,
+			failPutKey: "p1/1/777/7777/2025-06-13T07:06:18Z",
+			value:      TransactionResponseSlice,
+		},
+	}
 	go func() {
 		defer mockProducer.Close()
 
-		for _, test := range []struct {
-			topic      infra.Topic
-			failPutKey string
-			value      any
-		}{
-			// Refreshes
-			{
-				topic:      infra.CnctRefreshTopic,
-				failPutKey: "p1/1/99/2025-06-13",
-				value:      providerAccountRefresh,
-			},
-			{
-				topic:      infra.AcctRefreshTopic,
-				failPutKey: "p1/1/99/999/2025-06-13",
-				value:      accountRefresh,
-			},
-			{
-				topic:      infra.HoldRefreshTopic,
-				failPutKey: "p1/1/999/9999/2025-06-13",
-				value:      holdingRefresh,
-			},
-			{
-				topic:      infra.TxnRefreshTopic,
-				failPutKey: "p1/1/999/9999/2025-06-13T07:06:18Z",
-				value:      transactionRefresh,
-			},
-			// Responses
-			{
-				topic:      infra.CnctResponseTopic,
-				failPutKey: "p1/1/77/2025-06-13",
-				value:      providerAccountResponse,
-			},
-			{
-				topic:      infra.AcctResponseTopic,
-				failPutKey: "p1/1/77/777/2025-06-13",
-				value:      accountResponse,
-			},
-			{
-				topic:      infra.HoldResponseTopic,
-				failPutKey: "p1/1/777/7777/2025-06-13",
-				value:      holdingResponse,
-			},
-			{
-				topic:      infra.TxnResponseTopic,
-				failPutKey: "p1/1/777/7777/2025-06-13T07:06:18Z",
-				value:      transactionResponse,
-			},
-		} {
+		for _, test := range tests {
 			fakes.MakeBadS3Client(&state.AWS, fakes.BadS3Config{
 				FailPutKey: test.failPutKey,
 			})
@@ -439,9 +397,5 @@ func TestConsumers_S3Errors(t *testing.T) {
 
 	// then
 	msgs := drainMockProducerMessages(mockProducer)
-
-	wantPutRetryMsgs := []any{
-		providerAccountResponse, accountResponse, holdingResponse, transactionResponse, providerAccountRefresh, accountRefresh, holdingRefresh, transactionRefresh,
-	}
-	assert.ElementsMatch(t, wantPutRetryMsgs, msgs)
+	assert.ElementsMatch(t, WantPutRetryMsgs, msgs)
 }
