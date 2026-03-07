@@ -4,7 +4,7 @@ on:
 
 jobs:
   deploy:
-    uses: ./.github/workflows/tf-deploy.yml
+    uses: ./.github/workflows/deploy.yml
     with:
       environment: uat
       tf_working_dir: infra/environments/uat
