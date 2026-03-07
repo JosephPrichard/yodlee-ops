@@ -6,7 +6,7 @@ module "vpc" {
   name = "${var.project}-${var.environment}-vpc"
   cidr = var.vpc_cidr
 
-  azs             = slice(data.aws_availability_zones.available.names, 0, 2)
+  azs             = ["us-east-1a", "us-east-1b"]
   public_subnets  = var.public_subnet_cidrs
   private_subnets = var.private_subnet_cidrs
 
@@ -16,25 +16,18 @@ module "vpc" {
 }
 
 # S3
-resource "aws_s3_bucket" "main" {
+resource "aws_s3_bucket" "yodlee-ops-buckets" {
   for_each = toset(var.buckets)
   bucket   = each.key
 }
 
-resource "aws_s3_bucket_public_access_block" "main" {
+resource "aws_s3_bucket_public_access_block" "yodlee-ops-buckets" {
   for_each                = toset(var.buckets)
-  bucket                  = aws_s3_bucket.main[each.key].id
+  bucket                  = yodlee-ops-buckets.main[each.key].id
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_versioning" "main" {
-  bucket = aws_s3_bucket.main.id
-  versioning_configuration {
-    status = "Enabled"
-  }
 }
 
 # ALB
@@ -140,7 +133,7 @@ resource "aws_iam_role" "ecs_task" {
   })
 }
 
-# Allow the task to access the S3 bucket
+# Allow the task to access all S3 buckets
 resource "aws_iam_role_policy" "ecs_task_s3" {
   name = "s3-access"
   role = aws_iam_role.ecs_task.id
@@ -150,7 +143,7 @@ resource "aws_iam_role_policy" "ecs_task_s3" {
     Statement = [{
       Effect   = "Allow"
       Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"]
-      Resource = [aws_s3_bucket.main.arn, "${aws_s3_bucket.main.arn}/*"]
+      Resource = ["arn:aws:s3:::*", "arn:aws:s3:::*/*"]
     }]
   })
 }
