@@ -44,6 +44,19 @@ const (
 
 var BucketList = []Bucket{CnctBucket, AcctBucket, HoldBucket, TxnBucket}
 
+var TopicList = []Topic{
+	CnctRefreshTopic,
+	AcctRefreshTopic,
+	HoldRefreshTopic,
+	TxnRefreshTopic,
+	CnctResponseTopic,
+	AcctResponseTopic,
+	HoldResponseTopic,
+	TxnResponseTopic,
+	DeleteRetryTopic,
+	BroadcastTopic,
+}
+
 type Buckets struct {
 	Connections  Bucket
 	Accounts     Bucket

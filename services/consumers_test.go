@@ -78,29 +78,33 @@ func setupConsumersTest(t *testing.T) *State {
 	return state
 }
 
-type MockConsumer struct {
+type MockConsumers struct {
 	t         *testing.T
 	consumers map[infra.Topic]Consumer
 }
 
-func (p *MockConsumer) ConsumeClaim(topic infra.Topic, key string, value any) {
+func (p *MockConsumers) ConsumeClaim(topic infra.Topic, key string, value any) {
 	v, err := json.Marshal(value)
 	require.NoError(p.t, err)
 
-	session := &fakeSession{}
+	session := &fakeSession{
+		syncChan: make(chan bool, 1),
+	}
 	claim := &fakeClaim{
-		msgCh: make(chan *sarama.ConsumerMessage, 1),
+		msgChan: make(chan *sarama.ConsumerMessage, 1),
 	}
 
 	msg := &sarama.ConsumerMessage{
 		Key:   []byte(key),
 		Value: v,
 	}
-	claim.msgCh <- msg
-	close(claim.msgCh)
+	claim.msgChan <- msg
+	close(claim.msgChan)
 
 	err = p.consumers[topic].Handler.ConsumeClaim(session, claim)
 	require.NoError(p.t, err)
+
+	<-session.syncChan
 }
 
 var WantBroadcastMsgs = []any{
@@ -215,7 +219,7 @@ func TestConsumers(t *testing.T) {
 	// given
 	state := setupConsumersTest(t)
 
-	mockConsumer := MockConsumer{t: t, consumers: MakeConsumers(state)}
+	mockConsumer := MockConsumers{t: t, consumers: MakeConsumers(state)}
 
 	config := sarama.NewConfig()
 	config.Producer.Return.Successes = true
@@ -320,7 +324,7 @@ func TestConsumers_S3Errors(t *testing.T) {
 	// given
 	state := setupConsumersTest(t)
 
-	mockConsumer := MockConsumer{t: t, consumers: MakeConsumers(state)}
+	mockConsumer := MockConsumers{t: t, consumers: MakeConsumers(state)}
 
 	config := sarama.NewConfig()
 	config.Producer.Return.Successes = true

@@ -12,13 +12,15 @@ import (
 	"yodleeops/infra"
 	svc "yodleeops/services"
 
+	_ "net/http/pprof"
+
 	"github.com/joho/godotenv"
 )
 
 func main() {
 	err := godotenv.Load()
 	if err != nil {
-		slog.Error("failed to load .env file", "err", err)
+		slog.Warn("failed to load .env file", "err", err)
 	}
 
 	cmd.InitLoggers(nil)
@@ -28,6 +30,8 @@ func main() {
 	kafkaConfig := infra.MakeSaramaConfig(config)
 	producer := infra.MakeSaramaProducer(config.KafkaBrokers, kafkaConfig)
 	s3Client := infra.MakeS3Client(config)
+
+	infra.CreateKafkaTopics(config.KafkaBrokers, kafkaConfig)
 
 	state := &svc.State{
 		AWS:                  infra.MakeAWS(s3Client),
@@ -49,6 +53,12 @@ func main() {
 
 		cancel()
 		os.Exit(0)
+	}()
+
+	go func() {
+		if err := http.ListenAndServe(":6060", nil); err != nil {
+			log.Fatalf("failed to start pprof server: %v", err)
+		}
 	}()
 
 	mux := svc.MakeServeMux(state)

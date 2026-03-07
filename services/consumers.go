@@ -15,53 +15,45 @@ type Consumer struct {
 	Handler sarama.ConsumerGroupHandler
 }
 
-func MakeConsumerHandler[Value any](state *State, onMessage func(ctx Context, key string, value Value)) *ConsumerHandler[Value] {
-	return &ConsumerHandler[Value]{
-		OnMessage: func(ctx context.Context, key string, value Value) {
-			onMessage(Context{Context: ctx, State: state}, key, value)
-		},
-	}
-}
-
 func MakeConsumers(state *State) map[infra.Topic]Consumer {
 	return map[infra.Topic]Consumer{
 		// fi message topics have a statically computed group id because only one node receives messages
 		infra.CnctRefreshTopic: {
 			GroupID: infra.CnctRefreshTopicGroupID,
-			Handler: MakeConsumerHandler(state, ConsumeCnctRefreshMessage),
+			Handler: MakeStateConsumerHandler(state, ConsumeCnctRefreshMessage),
 		},
 		infra.AcctRefreshTopic: {
 			GroupID: infra.AcctRefreshTopicGroupID,
-			Handler: MakeConsumerHandler(state, ConsumeAcctRefreshMessage),
+			Handler: MakeStateConsumerHandler(state, ConsumeAcctRefreshMessage),
 		},
 		infra.HoldRefreshTopic: {
 			GroupID: infra.HoldRefreshTopicGroupID,
-			Handler: MakeConsumerHandler(state, ConsumeHoldRefreshMessage),
+			Handler: MakeStateConsumerHandler(state, ConsumeHoldRefreshMessage),
 		},
 		infra.TxnRefreshTopic: {
 			GroupID: infra.TxnRefreshTopicGroupID,
-			Handler: MakeConsumerHandler(state, ConsumeTxnRefreshMessage),
+			Handler: MakeStateConsumerHandler(state, ConsumeTxnRefreshMessage),
 		},
 		infra.CnctResponseTopic: {
 			GroupID: infra.CnctResponseTopicGroupID,
-			Handler: MakeConsumerHandler(state, ConsumeCnctResponseMessage),
+			Handler: MakeStateConsumerHandler(state, ConsumeCnctResponseMessage),
 		},
 		infra.AcctResponseTopic: {
 			GroupID: infra.AcctResponseTopicGroupID,
-			Handler: MakeConsumerHandler(state, ConsumeAcctResponseMessage),
+			Handler: MakeStateConsumerHandler(state, ConsumeAcctResponseMessage),
 		},
 		infra.HoldResponseTopic: {
 			GroupID: infra.HoldResponseTopicGroupID,
-			Handler: MakeConsumerHandler(state, ConsumeHoldResponseMessage),
+			Handler: MakeStateConsumerHandler(state, ConsumeHoldResponseMessage),
 		},
 		infra.TxnResponseTopic: {
 			GroupID: infra.TxnResponseTopicGroupID,
-			Handler: MakeConsumerHandler(state, ConsumeTxnResponseMessage),
+			Handler: MakeStateConsumerHandler(state, ConsumeTxnResponseMessage),
 		},
 		// the broadcast topic has a dynamically computed group id because each node receives the message
 		infra.DeleteRetryTopic: {
 			GroupID: infra.DeleteRetryTopicGroupID,
-			Handler: MakeConsumerHandler(state, ConsumeDeleteRetryMessage),
+			Handler: MakeStateConsumerHandler(state, ConsumeDeleteRetryMessage),
 		},
 	}
 }

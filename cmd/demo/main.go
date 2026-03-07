@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"github.com/IBM/sarama"
-	"log"
 	"log/slog"
 	"math/rand"
 	"strconv"
@@ -66,11 +65,7 @@ func makeAmount() float64 {
 	return float64(1000 + rand.Intn(10000))
 }
 
-func makeBusDt() string {
-	return time.Now().UTC().Format("2006-01-02")
-}
-
-func makeTxnDt() string {
+func makeDate() string {
 	return time.Now().UTC().Format(time.RFC3339)
 }
 
@@ -80,7 +75,7 @@ func makeCnctRefreshes(n int) []yodlee.DataExtractsProviderAccount {
 	for range n {
 		arr = append(arr, yodlee.DataExtractsProviderAccount{
 			Id:          makeProviderAccountId(),
-			LastUpdated: makeBusDt(),
+			LastUpdated: makeDate(),
 			RequestId:   gofakeit.UUID(),
 		})
 	}
@@ -97,7 +92,7 @@ func makeAcctRefreshes(n int) []yodlee.DataExtractsAccount {
 		arr = append(arr, yodlee.DataExtractsAccount{
 			ProviderAccountId: providerId,
 			Id:                makeAccountId(),
-			LastUpdated:       makeBusDt(),
+			LastUpdated:       makeDate(),
 			AccountName:       makeAccountName(),
 		})
 	}
@@ -114,7 +109,7 @@ func makeTxnRefreshes(n int) []yodlee.DataExtractsTransaction {
 		arr = append(arr, yodlee.DataExtractsTransaction{
 			AccountId: accountId,
 			Id:        makeTransactionId(),
-			Date:      makeTxnDt(),
+			Date:      makeDate(),
 			Quantity:  makeAmount(),
 		})
 	}
@@ -131,7 +126,7 @@ func makeHoldRefreshes(n int) []yodlee.DataExtractsHolding {
 		arr = append(arr, yodlee.DataExtractsHolding{
 			AccountId:   accountId,
 			Id:          makeHoldingId(),
-			LastUpdated: makeBusDt(),
+			LastUpdated: makeDate(),
 			HoldingType: makeHoldingName(),
 		})
 	}
@@ -145,7 +140,7 @@ func makeCnctResponses(n int) yodlee.ProviderAccountResponse {
 	for range n {
 		arr = append(arr, yodlee.ProviderAccount{
 			Id:          makeProviderAccountId(),
-			LastUpdated: makeBusDt(),
+			LastUpdated: makeDate(),
 			RequestId:   gofakeit.UUID(),
 		})
 	}
@@ -162,7 +157,7 @@ func makeAcctResponses(n int) yodlee.AccountResponse {
 		arr = append(arr, yodlee.Account{
 			ProviderAccountId: providerId,
 			Id:                makeAccountId(),
-			LastUpdated:       makeBusDt(),
+			LastUpdated:       makeDate(),
 			AccountName:       makeAccountName(),
 		})
 	}
@@ -179,7 +174,7 @@ func makeTxnResponses(n int) yodlee.TransactionResponse {
 		arr = append(arr, yodlee.TransactionWithDateTime{
 			AccountId: accountId,
 			Id:        makeTransactionId(),
-			Date:      makeTxnDt(),
+			Date:      makeDate(),
 			Quantity:  makeAmount(),
 		})
 	}
@@ -196,7 +191,7 @@ func makeHoldResponses(n int) yodlee.HoldingResponse {
 		arr = append(arr, yodlee.Holding{
 			AccountId:   accountId,
 			Id:          makeHoldingId(),
-			LastUpdated: makeBusDt(),
+			LastUpdated: makeDate(),
 			HoldingType: makeHoldingName(),
 		})
 	}
@@ -207,7 +202,7 @@ func makeHoldResponses(n int) yodlee.HoldingResponse {
 func main() {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatalf("failed to load .env file: %v", err)
+		slog.Warn("failed to load .env file", "err", err)
 	}
 
 	cmd.InitLoggers(nil)
