@@ -93,7 +93,7 @@ resource "aws_lb_listener" "http" {
 
 # ECS Cluster
 resource "aws_ecs_cluster" "main" {
-  name = "${var.project}-${var.environment}"
+  name = "${var.project}-${var.environment}-cluster"
 
   setting {
     name  = "containerInsights"
@@ -156,7 +156,7 @@ resource "aws_cloudwatch_log_group" "app" {
 
 # ECS Task Definition
 resource "aws_ecs_task_definition" "app" {
-  family                   = "${var.project}-${var.environment}"
+  family                   = "${var.project}-${var.environment}-task-definition"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = var.task_cpu
@@ -206,7 +206,7 @@ resource "aws_security_group" "ecs" {
 
 #  ECS Service
 resource "aws_ecs_service" "app" {
-  name            = "${var.project}-${var.environment}"
+  name            = "${var.project}-${var.environment}-service"
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.app.arn
   desired_count   = var.desired_count

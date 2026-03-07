@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/IBM/sarama"
 	"github.com/brianvoe/gofakeit/v6"
 	"log/slog"
@@ -198,7 +199,7 @@ func makeHoldResponses(n int) yodlee.HoldingResponse {
 func ExecuteDemoProducer(serverConfig client.Config, kafkaConfig *sarama.Config) {
 	producer := client.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
 
-	slog.Info("starting test producer", "serverConfig", serverConfig, "kafkaConfig", kafkaConfig)
+	slog.Info("starting test producer", "serverConfig", serverConfig, "kafkaConfig", fmt.Sprintf("%+v", kafkaConfig)) // fmt.Sprintf is needed to serialize closures.
 
 	ticker := time.NewTicker(500 * time.Millisecond)
 	for range ticker.C {

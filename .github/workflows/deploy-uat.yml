@@ -1,13 +1,13 @@
 on:
   push:
-    branches: [test]
+    branches: [main]
 
 jobs:
   deploy:
     uses: ./.github/workflows/tf-deploy.yml
     with:
-      environment: test
-      tf_working_dir: infra/environments/test
+      environment: uat
+      tf_working_dir: infra/environments/uat
     secrets:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}

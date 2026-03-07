@@ -80,7 +80,7 @@ func StartConsumers(ctx context.Context, kafkaBrokers []string, config *sarama.C
 		}()
 	}
 
-	slog.Info("started consumers", "consumers", fmt.Sprintf("%v", consumers)) // fmt.Sprintf is needed to serialize closures.
+	slog.Info("started consumers", "consumers", fmt.Sprintf("+%v", consumers)) // fmt.Sprintf is needed to serialize closures.
 	return nil
 }
 

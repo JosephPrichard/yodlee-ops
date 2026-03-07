@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -38,7 +39,7 @@ func main() {
 		FiMessageBroadcaster: &svc.FiMessageBroadcaster{},
 	}
 
-	slog.Info("starting consumer", "serverConfig", serverConfig, "kafkaConfig", kafkaConfig)
+	slog.Info("starting consumer", "serverConfig", serverConfig, "kafkaConfig", fmt.Sprintf("%+v", kafkaConfig)) // fmt.Sprintf is needed to serialize closures.
 
 	//if err := svc.StartConsumers(context.Background(), serverConfig.KafkaBrokers, kafkaConfig, state); err != nil {
 	//	log.Fatalf("failed to start consumers: %v", err)
