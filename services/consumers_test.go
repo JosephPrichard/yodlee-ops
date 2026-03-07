@@ -87,9 +87,7 @@ func (p *MockConsumers) ConsumeClaim(topic infra.Topic, key string, value any) {
 	v, err := json.Marshal(value)
 	require.NoError(p.t, err)
 
-	session := &fakeSession{
-		syncChan: make(chan bool, 1),
-	}
+	session := &fakeSession{}
 	claim := &fakeClaim{
 		msgChan: make(chan *sarama.ConsumerMessage, 1),
 	}
@@ -103,8 +101,6 @@ func (p *MockConsumers) ConsumeClaim(topic infra.Topic, key string, value any) {
 
 	err = p.consumers[topic].Handler.ConsumeClaim(session, claim)
 	require.NoError(p.t, err)
-
-	<-session.syncChan
 }
 
 var WantBroadcastMsgs = []any{
