@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"yodleeops/infra"
-	"yodleeops/infra/fakes"
+	"yodleeops/client"
+	"yodleeops/client/fakes"
 	openapi "yodleeops/openapi/sources"
 	"yodleeops/testutil"
 
@@ -83,11 +83,11 @@ func TestStreamFiObjectLogs(t *testing.T) {
 	defer resp.Body.Close()
 
 	go func() {
-		state.FiMessageBroadcaster.Broadcast("profile1", infra.HoldRefreshTopic, "event1")
-		state.FiMessageBroadcaster.Broadcast("profile2", infra.HoldResponseTopic, "event2")
-		state.FiMessageBroadcaster.Broadcast("profile3", infra.TxnRefreshTopic, "event3")
-		state.FiMessageBroadcaster.Broadcast("profile1", infra.TxnResponseTopic, "event4")
-		state.FiMessageBroadcaster.Broadcast("profile4", infra.CnctRefreshTopic, "event5")
+		state.FiMessageBroadcaster.Broadcast("profile1", client.HoldRefreshTopic, "event1")
+		state.FiMessageBroadcaster.Broadcast("profile2", client.HoldResponseTopic, "event2")
+		state.FiMessageBroadcaster.Broadcast("profile3", client.TxnRefreshTopic, "event3")
+		state.FiMessageBroadcaster.Broadcast("profile1", client.TxnResponseTopic, "event4")
+		state.FiMessageBroadcaster.Broadcast("profile4", client.CnctRefreshTopic, "event5")
 	}()
 
 	// then
@@ -116,9 +116,9 @@ func TestHandleListFiMessages(t *testing.T) {
 
 	badState := &State{AWS: awsClient}
 	fakes.MakeBadS3Client(&badState.AWS, fakes.BadS3Config{
-		FailListPrefix: map[infra.Bucket]string{
-			infra.AcctBucket: "p1/1/10",
-			infra.CnctBucket: "p1",
+		FailListPrefix: map[client.Bucket]string{
+			client.AcctBucket: "p1/1/10",
+			client.CnctBucket: "p1",
 		},
 	})
 
@@ -319,7 +319,7 @@ func TestHandleGetFiObject(t *testing.T) {
 		OpsFiMessage: OpsFiMessage{
 			ProfileId:   "p1",
 			Timestamp:   time.Date(2025, 6, 12, 0, 15, 00, 0, time.UTC),
-			OriginTopic: infra.TxnResponseTopic,
+			OriginTopic: client.TxnResponseTopic,
 		},
 		Data: map[string]json.RawMessage{
 			"key": json.RawMessage(`"value"`),
@@ -335,7 +335,7 @@ func TestHandleGetFiObject(t *testing.T) {
 	})
 
 	_, err := awsClient.S3.PutObject(t.Context(), &s3.PutObjectInput{
-		Bucket: infra.TxnBucket.String(),
+		Bucket: client.TxnBucket.String(),
 		Key:    aws.String(testKey),
 		Body:   bytes.NewReader(MustEncodeJson(t, testBody)),
 	})
@@ -358,7 +358,7 @@ func TestHandleGetFiObject(t *testing.T) {
 			wantOpsGeneric: openapi.FiObject{
 				ProfileId:   "p1",
 				Timestamp:   time.Date(2025, 6, 12, 0, 15, 00, 0, time.UTC),
-				OriginTopic: string(infra.TxnResponseTopic),
+				OriginTopic: string(client.TxnResponseTopic),
 				Data:        map[string]jx.Raw{"key": jx.Raw("\"value\"")},
 			},
 			wantStatusCode: http.StatusOK,

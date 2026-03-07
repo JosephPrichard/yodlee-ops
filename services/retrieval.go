@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"yodleeops/infra"
+	"yodleeops/client"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -74,7 +74,7 @@ type ListFiMetadataResult struct {
 	Cursor        string          `json:"cursor"`
 }
 
-func ListFiMetadataByProfileIDs(appCtx Context, bucket infra.Bucket, queries []ListFiMetadataQuery) (results ListFiMetadataResult, err error) {
+func ListFiMetadataByProfileIDs(appCtx Context, bucket client.Bucket, queries []ListFiMetadataQuery) (results ListFiMetadataResult, err error) {
 	nestedOpsFiMetadata := make([][]OpsFiMetadata, len(queries))
 
 	var cursorsLock sync.Mutex
@@ -108,7 +108,7 @@ func ListFiMetadataByProfileIDs(appCtx Context, bucket infra.Bucket, queries []L
 	return ListFiMetadataResult{OpsFiMetadata: opsFiMetadata, Cursor: cursor}, nil
 }
 
-func ListFiMetadataByPrefix(ctx Context, bucket infra.Bucket, prefix string, cursor string) ([]OpsFiMetadata, string, error) {
+func ListFiMetadataByPrefix(ctx Context, bucket client.Bucket, prefix string, cursor string) ([]OpsFiMetadata, string, error) {
 	var continuationToken *string
 	if cursor != "" {
 		continuationToken = aws.String(cursor)
@@ -153,7 +153,7 @@ func ListFiMetadataByPrefix(ctx Context, bucket infra.Bucket, prefix string, cur
 
 var ErrKeyNotFound = errors.New("key not found")
 
-func GetFiObject(ctx Context, bucket infra.Bucket, key string) (fiObject OpsFiGeneric, err error) {
+func GetFiObject(ctx Context, bucket client.Bucket, key string) (fiObject OpsFiGeneric, err error) {
 	object, err := ctx.AWS.S3.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: bucket.String(),
 		Key:    aws.String(key),

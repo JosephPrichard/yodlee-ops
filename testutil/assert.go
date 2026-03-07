@@ -11,7 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"yodleeops/infra"
+	"yodleeops/client"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -27,7 +27,7 @@ func Equal[T any](t *testing.T, expected, actual T, opts ...cmp.Option) {
 }
 
 type WantObject[JSON any] struct {
-	Bucket infra.Bucket
+	Bucket client.Bucket
 	Key    string
 	Value  JSON
 }
@@ -44,7 +44,7 @@ func DecodeGzipJSON[JSON any](r io.Reader, decoded *JSON) error {
 	return nil
 }
 
-func AssertObjects[JSON any](t *testing.T, awsClient *infra.AWS, objects []WantObject[JSON], opts ...cmp.Option) {
+func AssertObjects[JSON any](t *testing.T, awsClient *client.AWS, objects []WantObject[JSON], opts ...cmp.Option) {
 	opts = append([]cmp.Option{protocmp.Transform()}, opts...)
 
 	t.Helper()
@@ -75,18 +75,18 @@ func AssertObjects[JSON any](t *testing.T, awsClient *infra.AWS, objects []WantO
 }
 
 type WantKey struct {
-	Bucket infra.Bucket
+	Bucket client.Bucket
 	Key    string
 }
 
-func GetAllKeys(t *testing.T, a infra.AWS) []WantKey {
+func GetAllKeys(t *testing.T, a client.AWS) []WantKey {
 	var keys []WantKey
 
-	for _, bucket := range []infra.Bucket{
-		infra.CnctBucket,
-		infra.AcctBucket,
-		infra.TxnBucket,
-		infra.HoldBucket,
+	for _, bucket := range []client.Bucket{
+		client.CnctBucket,
+		client.AcctBucket,
+		client.TxnBucket,
+		client.HoldBucket,
 	} {
 		paginator := s3.NewListObjectsV2Paginator(a.S3, &s3.ListObjectsV2Input{Bucket: bucket.String()})
 

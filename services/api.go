@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"yodleeops/infra"
+	"yodleeops/client"
 	openapi "yodleeops/openapi/sources"
 
 	"github.com/go-faster/jx"
@@ -91,17 +91,17 @@ func (state *State) StreamFiObjectLogs(w http.ResponseWriter, r *http.Request) {
 	profileIDs := strings.Split(values.Get("prefix"), ",")
 	subjects := strings.Split(values.Get("subjects"), ",")
 
-	var topics []infra.Topic
+	var topics []client.Topic
 	for _, subject := range subjects {
 		switch openapi.FiSubject(subject) {
 		case openapi.FiSubjectConnections:
-			topics = append(topics, infra.CnctRefreshTopic, infra.CnctResponseTopic)
+			topics = append(topics, client.CnctRefreshTopic, client.CnctResponseTopic)
 		case openapi.FiSubjectAccounts:
-			topics = append(topics, infra.AcctRefreshTopic, infra.AcctResponseTopic)
+			topics = append(topics, client.AcctRefreshTopic, client.AcctResponseTopic)
 		case openapi.FiSubjectTransactions:
-			topics = append(topics, infra.TxnRefreshTopic, infra.TxnResponseTopic)
+			topics = append(topics, client.TxnRefreshTopic, client.TxnResponseTopic)
 		case openapi.FiSubjectHoldings:
-			topics = append(topics, infra.HoldRefreshTopic, infra.HoldResponseTopic)
+			topics = append(topics, client.HoldRefreshTopic, client.HoldResponseTopic)
 		}
 	}
 
@@ -142,19 +142,19 @@ func (state *State) StreamFiObjectLogs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func BucketFromSubject(subject openapi.FiSubject) infra.Bucket {
-	var bucket infra.Bucket
+func BucketFromSubject(subject openapi.FiSubject) client.Bucket {
+	var bucket client.Bucket
 	switch subject {
 	case openapi.FiSubjectConnections:
-		bucket = infra.CnctBucket
+		bucket = client.CnctBucket
 	case openapi.FiSubjectAccounts:
-		bucket = infra.AcctBucket
+		bucket = client.AcctBucket
 	case openapi.FiSubjectTransactions:
-		bucket = infra.TxnBucket
+		bucket = client.TxnBucket
 	case openapi.FiSubjectHoldings:
-		bucket = infra.HoldBucket
+		bucket = client.HoldBucket
 	default:
-		bucket = infra.CnctBucket
+		bucket = client.CnctBucket
 	}
 	return bucket
 }

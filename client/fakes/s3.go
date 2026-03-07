@@ -5,24 +5,24 @@ import (
 	"fmt"
 	"reflect"
 
-	"yodleeops/infra"
+	"yodleeops/client"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 type BadS3 struct {
-	infra.S3
+	client.S3
 	BadS3Config
 }
 
 type BadS3Config struct {
 	FailPutKey     string
 	FailGetKey     string
-	FailListPrefix map[infra.Bucket]string
+	FailListPrefix map[client.Bucket]string
 	FailDeleteKeys map[string]bool
 }
 
-func MakeBadS3Client(awsClient *infra.AWS, cfg BadS3Config) {
+func MakeBadS3Client(awsClient *client.AWS, cfg BadS3Config) {
 	goodS3Client := awsClient.S3
 	awsClient.S3 = &BadS3{S3: goodS3Client, BadS3Config: cfg}
 }
@@ -44,7 +44,7 @@ func (s *BadS3) GetObject(ctx context.Context, params *s3.GetObjectInput, optFns
 }
 
 func (s *BadS3) ListObjectsV2(ctx context.Context, params *s3.ListObjectsV2Input, optFns ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
-	prefixFailList := s.FailListPrefix[infra.Bucket(*params.Bucket)]
+	prefixFailList := s.FailListPrefix[client.Bucket(*params.Bucket)]
 	if prefixFailList == *params.Prefix {
 		return nil, fmt.Errorf("stub: failed to list objects: %s", *params.Prefix)
 	} else {

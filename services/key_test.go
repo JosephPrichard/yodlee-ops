@@ -3,28 +3,28 @@ package svc
 import (
 	"testing"
 
-	"yodleeops/infra"
+	"yodleeops/client"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestParseOpsFiMetadata(t *testing.T) {
-	buckets := infra.Buckets{
-		Connections:  infra.CnctBucket,
-		Accounts:     infra.AcctBucket,
-		Holdings:     infra.HoldBucket,
-		Transactions: infra.TxnBucket,
+	buckets := client.Buckets{
+		Connections:  client.CnctBucket,
+		Accounts:     client.AcctBucket,
+		Holdings:     client.HoldBucket,
+		Transactions: client.TxnBucket,
 	}
 	for _, test := range []struct {
 		name        string
-		bucket      infra.Bucket
+		bucket      client.Bucket
 		key         string
 		expectError bool
 		validateFn  func(t *testing.T, o *OpsFiMetadata)
 	}{
 		{
 			name:   "Connections key valid",
-			bucket: infra.CnctBucket,
+			bucket: client.CnctBucket,
 			key:    "profile1/provider1/party1/2024-01-01T00:00:00Z",
 			validateFn: func(t *testing.T, metadata *OpsFiMetadata) {
 				assert.Equal(t, "profile1", metadata.ProfileID)

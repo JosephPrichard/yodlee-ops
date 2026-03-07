@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/IBM/sarama"
 	"log/slog"
-	"yodleeops/infra"
+	"yodleeops/client"
 	"yodleeops/yodlee"
 )
 
@@ -15,44 +15,44 @@ type Consumer struct {
 	Handler sarama.ConsumerGroupHandler
 }
 
-func MakeConsumers(state *State) map[infra.Topic]Consumer {
-	return map[infra.Topic]Consumer{
+func MakeConsumers(state *State) map[client.Topic]Consumer {
+	return map[client.Topic]Consumer{
 		// fi message topics have a statically computed group id because only one node receives messages
-		infra.CnctRefreshTopic: {
-			GroupID: infra.CnctRefreshTopicGroupID,
+		client.CnctRefreshTopic: {
+			GroupID: client.CnctRefreshTopicGroupID,
 			Handler: MakeStateConsumerHandler(state, ConsumeCnctRefreshMessage),
 		},
-		infra.AcctRefreshTopic: {
-			GroupID: infra.AcctRefreshTopicGroupID,
+		client.AcctRefreshTopic: {
+			GroupID: client.AcctRefreshTopicGroupID,
 			Handler: MakeStateConsumerHandler(state, ConsumeAcctRefreshMessage),
 		},
-		infra.HoldRefreshTopic: {
-			GroupID: infra.HoldRefreshTopicGroupID,
+		client.HoldRefreshTopic: {
+			GroupID: client.HoldRefreshTopicGroupID,
 			Handler: MakeStateConsumerHandler(state, ConsumeHoldRefreshMessage),
 		},
-		infra.TxnRefreshTopic: {
-			GroupID: infra.TxnRefreshTopicGroupID,
+		client.TxnRefreshTopic: {
+			GroupID: client.TxnRefreshTopicGroupID,
 			Handler: MakeStateConsumerHandler(state, ConsumeTxnRefreshMessage),
 		},
-		infra.CnctResponseTopic: {
-			GroupID: infra.CnctResponseTopicGroupID,
+		client.CnctResponseTopic: {
+			GroupID: client.CnctResponseTopicGroupID,
 			Handler: MakeStateConsumerHandler(state, ConsumeCnctResponseMessage),
 		},
-		infra.AcctResponseTopic: {
-			GroupID: infra.AcctResponseTopicGroupID,
+		client.AcctResponseTopic: {
+			GroupID: client.AcctResponseTopicGroupID,
 			Handler: MakeStateConsumerHandler(state, ConsumeAcctResponseMessage),
 		},
-		infra.HoldResponseTopic: {
-			GroupID: infra.HoldResponseTopicGroupID,
+		client.HoldResponseTopic: {
+			GroupID: client.HoldResponseTopicGroupID,
 			Handler: MakeStateConsumerHandler(state, ConsumeHoldResponseMessage),
 		},
-		infra.TxnResponseTopic: {
-			GroupID: infra.TxnResponseTopicGroupID,
+		client.TxnResponseTopic: {
+			GroupID: client.TxnResponseTopicGroupID,
 			Handler: MakeStateConsumerHandler(state, ConsumeTxnResponseMessage),
 		},
 		// the broadcast topic has a dynamically computed group id because each node receives the message
-		infra.DeleteRetryTopic: {
-			GroupID: infra.DeleteRetryTopicGroupID,
+		client.DeleteRetryTopic: {
+			GroupID: client.DeleteRetryTopicGroupID,
 			Handler: MakeStateConsumerHandler(state, ConsumeDeleteRetryMessage),
 		},
 	}
@@ -70,7 +70,7 @@ func StartConsumers(ctx context.Context, kafkaBrokers []string, config *sarama.C
 		go func() {
 			for {
 				if err := consumerGroup.Consume(ctx, topics, consumer.Handler); err != nil {
-					slog.ErrorContext(ctx, "failed to start consumer consumer", "consumer", consumer, "err", err)
+					slog.ErrorContext(ctx, "failed to start consumer group", "consumer", consumer, "err", err)
 				}
 				// stop consumer loop when context is canceled.
 				if ctx.Err() != nil {
@@ -80,8 +80,7 @@ func StartConsumers(ctx context.Context, kafkaBrokers []string, config *sarama.C
 		}()
 	}
 
-	slog.Info("started consumers", "consumers", fmt.Sprintf("%v", consumers)) // fmt.Sprintf is neede to serialize closures.
-
+	slog.Info("started consumers", "consumers", fmt.Sprintf("%v", consumers)) // fmt.Sprintf is needed to serialize closures.
 	return nil
 }
 
@@ -91,7 +90,7 @@ func ConsumeCnctRefreshMessage(ctx Context, key string, cncts []yodlee.DataExtra
 	result := IngestCnctRefreshes(ctx, key, cncts)
 	slog.InfoContext(ctx, "completed cnct refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	ProducePutResults(ctx, infra.CnctRefreshTopic, key, result.PutResults, nil)
+	ProducePutResults(ctx, client.CnctRefreshTopic, key, result.PutResults, nil)
 	ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
@@ -101,7 +100,7 @@ func ConsumeAcctRefreshMessage(ctx Context, key string, accts []yodlee.DataExtra
 	result := IngestAcctsRefreshes(ctx, key, accts)
 	slog.InfoContext(ctx, "completed acct refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	ProducePutResults(ctx, infra.AcctRefreshTopic, key, result.PutResults, nil)
+	ProducePutResults(ctx, client.AcctRefreshTopic, key, result.PutResults, nil)
 	ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
@@ -111,7 +110,7 @@ func ConsumeTxnRefreshMessage(ctx Context, key string, txns []yodlee.DataExtract
 	result := IngestTxnRefreshes(ctx, key, txns)
 	slog.InfoContext(ctx, "completed txn refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	ProducePutResults(ctx, infra.TxnRefreshTopic, key, result.PutResults, nil)
+	ProducePutResults(ctx, client.TxnRefreshTopic, key, result.PutResults, nil)
 	ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
@@ -121,7 +120,7 @@ func ConsumeHoldRefreshMessage(ctx Context, key string, holds []yodlee.DataExtra
 	result := IngestHoldRefreshes(ctx, key, holds)
 	slog.InfoContext(ctx, "completed hold refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	ProducePutResults(ctx, infra.HoldRefreshTopic, key, result.PutResults, nil)
+	ProducePutResults(ctx, client.HoldRefreshTopic, key, result.PutResults, nil)
 	ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
@@ -130,7 +129,7 @@ func ConsumeCnctResponseMessage(ctx Context, key string, cncts yodlee.ProviderAc
 
 	putResults := IngestCnctResponses(ctx, key, cncts)
 
-	ProducePutResults(ctx, infra.CnctResponseTopic, key, putResults, func(errInputs []yodlee.ProviderAccount) any {
+	ProducePutResults(ctx, client.CnctResponseTopic, key, putResults, func(errInputs []yodlee.ProviderAccount) any {
 		return yodlee.ProviderAccountResponse{ProviderAccount: errInputs}
 	})
 }
@@ -140,7 +139,7 @@ func ConsumeAcctResponseMessage(ctx Context, key string, accts yodlee.AccountRes
 
 	putResults := IngestAcctResponses(ctx, key, accts)
 
-	ProducePutResults(ctx, infra.AcctResponseTopic, key, putResults, func(errInputs []yodlee.Account) any {
+	ProducePutResults(ctx, client.AcctResponseTopic, key, putResults, func(errInputs []yodlee.Account) any {
 		return yodlee.AccountResponse{Account: errInputs}
 	})
 }
@@ -150,7 +149,7 @@ func ConsumeTxnResponseMessage(ctx Context, key string, txns yodlee.TransactionR
 
 	putResults := IngestTxnResponses(ctx, key, txns)
 
-	ProducePutResults(ctx, infra.TxnResponseTopic, key, putResults, func(errInputs []yodlee.TransactionWithDateTime) any {
+	ProducePutResults(ctx, client.TxnResponseTopic, key, putResults, func(errInputs []yodlee.TransactionWithDateTime) any {
 		return yodlee.TransactionResponse{Transaction: errInputs}
 	})
 }
@@ -160,7 +159,7 @@ func ConsumeHoldResponseMessage(ctx Context, key string, holds yodlee.HoldingRes
 
 	putResults := IngestHoldResponses(ctx, key, holds)
 
-	ProducePutResults(ctx, infra.HoldResponseTopic, key, putResults, func(errInputs []yodlee.Holding) any {
+	ProducePutResults(ctx, client.HoldResponseTopic, key, putResults, func(errInputs []yodlee.Holding) any {
 		return yodlee.HoldingResponse{Holding: errInputs}
 	})
 }

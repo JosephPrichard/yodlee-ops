@@ -1,15 +1,11 @@
 package main
 
 import (
-	"context"
 	"log"
 	"log/slog"
 	"net/http"
-	"os"
-	"os/signal"
-	"time"
+	"yodleeops/client"
 	"yodleeops/cmd"
-	"yodleeops/infra"
 	svc "yodleeops/services"
 
 	_ "net/http/pprof"
@@ -25,35 +21,28 @@ func main() {
 
 	cmd.InitLoggers(nil)
 
-	config := infra.MakeConfig()
-	//config.IsLocal = true
-	kafkaConfig := infra.MakeSaramaConfig(config)
-	producer := infra.MakeSaramaProducer(config.KafkaBrokers, kafkaConfig)
-	s3Client := infra.MakeS3Client(config)
+	serverConfig := client.MakeConfig()
+	//serverConfig.IsLocal = true
 
-	infra.CreateKafkaTopics(config.KafkaBrokers, kafkaConfig)
+	s3Client := client.MakeS3Client(serverConfig)
+
+	kafkaConfig := client.MakeSaramaConfig(serverConfig)
+	producer := client.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
+
+	// produces messages to topics to easily test that producer/consumers are working without an external producer. comment out in prod.
+	//go cmd.ExecuteDemoProducer(serverConfig, kafkaConfig)
 
 	state := &svc.State{
-		AWS:                  infra.MakeAWS(s3Client),
+		AWS:                  client.MakeAWS(s3Client),
 		Producer:             producer,
 		FiMessageBroadcaster: &svc.FiMessageBroadcaster{},
 	}
 
-	rootCtx, cancel := context.WithCancel(context.Background())
-	if err := svc.StartConsumers(rootCtx, config.KafkaBrokers, kafkaConfig, state); err != nil {
-		log.Fatalf("failed to start consumers: %v", err)
-	}
+	slog.Info("starting consumer", "serverConfig", serverConfig, "kafkaConfig", kafkaConfig)
 
-	go func() {
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, os.Interrupt, os.Kill)
-		<-sigChan
-
-		slog.Info("shutting down server")
-
-		cancel()
-		os.Exit(0)
-	}()
+	//if err := svc.StartConsumers(context.Background(), serverConfig.KafkaBrokers, kafkaConfig, state); err != nil {
+	//	log.Fatalf("failed to start consumers: %v", err)
+	//}
 
 	go func() {
 		if err := http.ListenAndServe(":6060", nil); err != nil {
@@ -64,13 +53,5 @@ func main() {
 	mux := svc.MakeServeMux(state)
 	if err := http.ListenAndServe(":8080", mux); err != nil {
 		log.Fatalf("failed to start server: %v", err)
-	}
-
-	for {
-		select {
-		case <-rootCtx.Done():
-			return
-		case <-time.After(time.Millisecond * 50):
-		}
 	}
 }

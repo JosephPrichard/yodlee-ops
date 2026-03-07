@@ -1,19 +1,15 @@
-package main
+package cmd
 
 import (
 	"encoding/json"
 	"github.com/IBM/sarama"
+	"github.com/brianvoe/gofakeit/v6"
 	"log/slog"
 	"math/rand"
 	"strconv"
 	"time"
-
-	"yodleeops/cmd"
-	"yodleeops/infra"
+	"yodleeops/client"
 	"yodleeops/yodlee"
-
-	"github.com/brianvoe/gofakeit/v6"
-	"github.com/joho/godotenv"
 )
 
 // generates random ids with a tight finite range so we can get a random spread of data
@@ -199,54 +195,44 @@ func makeHoldResponses(n int) yodlee.HoldingResponse {
 	return yodlee.HoldingResponse{Holding: arr}
 }
 
-func main() {
-	err := godotenv.Load()
-	if err != nil {
-		slog.Warn("failed to load .env file", "err", err)
-	}
+func ExecuteDemoProducer(serverConfig client.Config, kafkaConfig *sarama.Config) {
+	producer := client.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
 
-	cmd.InitLoggers(nil)
-
-	config := infra.MakeConfig()
-	//config.IsLocal = true
-	kafkaConfig := infra.MakeSaramaConfig(config)
-	producer := infra.MakeSaramaProducer(config.KafkaBrokers, kafkaConfig)
-
-	slog.Info("starting test producer", "config", config)
+	slog.Info("starting test producer", "serverConfig", serverConfig, "kafkaConfig", kafkaConfig)
 
 	ticker := time.NewTicker(500 * time.Millisecond)
 	for range ticker.C {
 		topicKind := rand.Intn(8)
 
-		var topic infra.Topic
+		var topic client.Topic
 		var value any
 
 		n := rand.Intn(10)
 
 		switch topicKind {
 		case 0:
-			topic = infra.CnctRefreshTopic
+			topic = client.CnctRefreshTopic
 			value = makeCnctRefreshes(n)
 		case 1:
-			topic = infra.AcctRefreshTopic
+			topic = client.AcctRefreshTopic
 			value = makeAcctRefreshes(n)
 		case 2:
-			topic = infra.TxnRefreshTopic
+			topic = client.TxnRefreshTopic
 			value = makeTxnRefreshes(n)
 		case 3:
-			topic = infra.HoldRefreshTopic
+			topic = client.HoldRefreshTopic
 			value = makeHoldRefreshes(n)
 		case 4:
-			topic = infra.CnctResponseTopic
+			topic = client.CnctResponseTopic
 			value = makeCnctResponses(n)
 		case 5:
-			topic = infra.AcctResponseTopic
+			topic = client.AcctResponseTopic
 			value = makeAcctResponses(n)
 		case 6:
-			topic = infra.TxnResponseTopic
+			topic = client.TxnResponseTopic
 			value = makeTxnResponses(n)
 		case 7:
-			topic = infra.HoldResponseTopic
+			topic = client.HoldResponseTopic
 			value = makeHoldResponses(n)
 		default:
 			continue
