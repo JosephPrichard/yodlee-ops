@@ -10,5 +10,5 @@ module "infra" {
   task_memory       = 512
   health_check_path = "/ping"
   container_image   = "938864279852.dkr.ecr.us-east-1.amazonaws.com/development/yodlee-ops"
-  image_tag         =  "" # overriden in deploy-*.yml
+  image_tag         =  var.image_tag
 }
