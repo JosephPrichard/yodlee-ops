@@ -27,14 +27,14 @@ func main() {
 	s3Client := client.MakeS3Client(serverConfig)
 
 	kafkaConfig := client.MakeSaramaConfig(serverConfig)
-	producer := client.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
+	//producer := client.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
 
 	// produces messages to topics to easily test that producer/consumers are working without an external producer. comment out in prod.
 	//go cmd.ExecuteDemoProducer(serverConfig, kafkaConfig)
 
 	state := &svc.State{
-		AWS:                  client.MakeAWS(s3Client),
-		Producer:             producer,
+		AWS: client.MakeAWS(s3Client),
+		//Producer:             producer,
 		FiMessageBroadcaster: &svc.FiMessageBroadcaster{},
 	}
 

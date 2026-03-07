@@ -65,7 +65,7 @@ jobs:
       run:
         working-directory: ${{ env.TF_WORKING_DIR }}
     env:
-      TF_VAR_image_tag: ${{ github.sha }}
+      TF_VAR_commit_sha: ${{ github.sha }}
 
     steps:
       - name: Checkout
@@ -86,11 +86,6 @@ jobs:
       - name: Terraform Init
         id: init
         run: terraform init -input=false
-
-      - name: Terraform Format
-        id: fmt
-        run: terraform fmt -check -recursive
-        continue-on-error: true   # Warn but don't block on formatting
 
       - name: Terraform Validate
         id: validate
