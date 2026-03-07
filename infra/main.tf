@@ -23,7 +23,7 @@ resource "aws_s3_bucket" "yodlee-ops-buckets" {
 
 resource "aws_s3_bucket_public_access_block" "yodlee-ops-buckets" {
   for_each                = toset(var.buckets)
-  bucket                  = yodlee-ops-buckets.main[each.key].id
+  bucket                  = aws_s3_bucket.yodlee-ops-buckets[each.key].id
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
