@@ -21,7 +21,6 @@ type Config struct {
 	AwsDefaultRegion string
 	IsLocal          bool // a special flag to tell the app to use hardcoded credentials when connecting to local
 	KafkaBrokers     []string
-	AllowOrigins     string
 }
 
 func MakeConfig() Config {
@@ -38,7 +37,6 @@ func MakeConfig() Config {
 		AwsEndpoint:      envMap["AWS_ENDPOINT"],
 		AwsDefaultRegion: envMap["AWS_DEFAULT_REGION"],
 		KafkaBrokers:     strings.Split(envMap["KAFKA_BROKERS"], ","),
-		AllowOrigins:     envMap["ALLOW_ORIGINS"],
 	}
 }
 
@@ -61,7 +59,9 @@ func MakeS3Client(cfg Config) *s3.Client {
 	if cfg.IsLocal {
 		staticCreds := credentials.NewStaticCredentialsProvider("testing", "testing", "")
 		awsOpts = append(awsOpts, config.WithCredentialsProvider(staticCreds))
-		slog.Warn("using static localstack credentials provider", "credentials", staticCreds)
+		slog.Info("configured static localstack credentials provider", "credentials", staticCreds)
+	} else {
+		slog.Info("configured AWS IAM auth provider for s3 client")
 	}
 
 	awsCfg, err := config.LoadDefaultConfig(context.Background(), awsOpts...)
@@ -90,14 +90,30 @@ func MakeSaramaConfig(config Config) *sarama.Config {
 	kafkaConfig.Version = sarama.V3_6_0_0
 	kafkaConfig.Producer.Return.Errors = true
 
-	if !config.IsLocal {
+	if config.IsLocal {
+		slog.Info("configured kafka client without credentials")
+	} else {
 		kafkaConfig.Net.SASL.Enable = true
 		kafkaConfig.Net.SASL.Mechanism = sarama.SASLTypeOAuth
 		kafkaConfig.Net.SASL.TokenProvider = &IAMTokenProvider{config.AwsDefaultRegion}
 		kafkaConfig.Net.TLS.Enable = true
+		slog.Info("configured kafka client with AWS OAUTH IAM token provider")
 	}
 
 	return kafkaConfig
+}
+
+func MakeSaramaProducer(kafkaBrokers []string, kafkaConfig *sarama.Config) sarama.AsyncProducer {
+	producer, err := sarama.NewAsyncProducer(kafkaBrokers, kafkaConfig)
+	if err != nil {
+		log.Fatalf("failed to create kafka producer: %v", err)
+	}
+	go func() {
+		for err := range producer.Errors() {
+			slog.Error("failed to produce message", "err", err)
+		}
+	}()
+	return producer
 }
 
 type IAMTokenProvider struct {

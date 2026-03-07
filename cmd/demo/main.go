@@ -211,23 +211,13 @@ func main() {
 	}
 
 	cmd.InitLoggers(nil)
+
 	config := infra.MakeConfig()
+	//config.IsLocal = true
+	kafkaConfig := infra.MakeSaramaConfig(config)
+	producer := infra.MakeSaramaProducer(config.KafkaBrokers, kafkaConfig)
 
 	slog.Info("starting test producer", "config", config)
-
-	kafkaConfig := sarama.NewConfig()
-	kafkaConfig.Producer.Return.Errors = true
-
-	producer, err := sarama.NewAsyncProducer(config.KafkaBrokers, kafkaConfig)
-	if err != nil {
-		log.Fatalf("failed to create kafka producer: %v", err)
-	}
-
-	go func() {
-		for err := range producer.Errors() {
-			slog.Error("failed to produce message", "err", err)
-		}
-	}()
 
 	ticker := time.NewTicker(500 * time.Millisecond)
 	for range ticker.C {

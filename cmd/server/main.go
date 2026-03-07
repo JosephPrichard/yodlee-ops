@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"github.com/IBM/sarama"
 	"log"
 	"log/slog"
 	"net/http"
@@ -23,21 +22,13 @@ func main() {
 	}
 
 	cmd.InitLoggers(nil)
+
 	config := infra.MakeConfig()
-
+	//config.IsLocal = true
 	kafkaConfig := infra.MakeSaramaConfig(config)
-
-	producer, err := sarama.NewAsyncProducer(config.KafkaBrokers, kafkaConfig)
-	if err != nil {
-		log.Fatalf("failed to create kafka producer: %v", err)
-	}
-	go func() {
-		for err := range producer.Errors() {
-			slog.Error("failed to produce message", "err", err)
-		}
-	}()
-
+	producer := infra.MakeSaramaProducer(config.KafkaBrokers, kafkaConfig)
 	s3Client := infra.MakeS3Client(config)
+
 	state := &svc.State{
 		AWS:                  infra.MakeAWS(s3Client),
 		Producer:             producer,
@@ -57,11 +48,10 @@ func main() {
 		slog.Info("shutting down server")
 
 		cancel()
-
 		os.Exit(0)
 	}()
 
-	mux := svc.MakeServeMux(state, config.AllowOrigins)
+	mux := svc.MakeServeMux(state)
 	if err := http.ListenAndServe(":8080", mux); err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}

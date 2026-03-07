@@ -64,7 +64,7 @@ func TestStreamFiObjectLogs(t *testing.T) {
 		FiMessageBroadcaster: &FiMessageBroadcaster{},
 	}
 
-	testServer := httptest.NewServer(MakeServeMux(state, ""))
+	testServer := httptest.NewServer(MakeServeMux(state))
 	defer testServer.Close()
 
 	// optimistic timeout in case of a deadlock.
@@ -209,7 +209,7 @@ func TestHandleListFiMessages(t *testing.T) {
 			r.Header.Set("Authorization", TestAuthorizationToken)
 			w := httptest.NewRecorder()
 
-			hander := MakeServeMux(test.state, "")
+			hander := MakeServeMux(test.state)
 			hander.ServeHTTP(w, r)
 
 			// then
@@ -247,7 +247,7 @@ func TestHandleListFiMessages_Pagination(t *testing.T) {
 		r.Header.Set("Authorization", TestAuthorizationToken)
 		w := httptest.NewRecorder()
 
-		hander := MakeServeMux(state, "")
+		hander := MakeServeMux(state)
 		hander.ServeHTTP(w, r)
 
 		listFiMetadataResponse := testutil.GetRespBody[openapi.ListFiMetadataResponse](t, w)
@@ -392,7 +392,7 @@ func TestHandleGetFiObject(t *testing.T) {
 			r.Header.Set("Authorization", TestAuthorizationToken)
 			w := httptest.NewRecorder()
 
-			hander := MakeServeMux(test.state, "")
+			hander := MakeServeMux(test.state)
 			hander.ServeHTTP(w, r)
 
 			// then

@@ -10,7 +10,7 @@ env:
   ECR_REPOSITORY: development/yodlee-ops
   ECS_SERVICE: yodlee-ops-app-task-service-fq929xve
   ECS_CLUSTER: yodlee-ops-cluster
-  ECS_TASK_DEFINITION: .aws/task-definition.json
+  ECS_TASK_DEFINITION: .aws/task-definition-test.json
   CONTAINER_NAME: yodlee-ops-container
 
 jobs:
