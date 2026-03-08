@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    # kafka = {
+    #   source  = "Mongey/kafka"
+    #   version = "~> 0.7"
+    # }
   }
 
   backend "s3" {
@@ -28,6 +32,12 @@ provider "aws" {
     }
   }
 }
+
+# provider "kafka" {
+#   bootstrap_servers = [aws_msk_cluster.main.bootstrap_brokers_sasl_iam]
+#   tls_enabled       = true
+#   sasl_mechanism    = "aws-iam"
+# }
 
 data "aws_availability_zones" "available" {
   state = "available"

@@ -107,13 +107,12 @@ resource "aws_msk_configuration" "main" {
   PROPS
 }
 
-resource "aws_msk_topic" "main" {
-  for_each             = toset(var.kafka_topics)
-  cluster_arn          = aws_msk_cluster.main.arn
-  topic_name           = each.key
-  replication_factor   = 3
-  partition_count      = 64
-}
+# resource "kafka_topic" "main" {
+#   for_each           = toset(var.kafka_topics)
+#   name               = each.key
+#   replication_factor = 2
+#   partitions         = 3
+# }
 
 # ALB
 resource "aws_security_group" "alb" {
