@@ -34,9 +34,6 @@ func main() {
 	model.CreateKafkaTopics(serverConfig.KafkaBrokers, kafkaConfig)
 	producer := model.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
 
-	// produces messages to topics to easily test that producer/consumers are working without an external producer. comment out in prod.
-	go cmd.ExecuteDemoProducer(serverConfig, kafkaConfig)
-
 	state := &svc.State{
 		AWS:                  model.MakeAWS(serverConfig, s3Client),
 		Producer:             producer,
@@ -48,6 +45,9 @@ func main() {
 	if err := svc.StartConsumers(context.Background(), serverConfig.KafkaBrokers, kafkaConfig, state); err != nil {
 		log.Fatalf("starting yodlee ops, failed to start consumers: %v", err)
 	}
+
+	// produces messages to topics to easily test that producer/consumers are working without an external producer. comment out in prod.
+	go cmd.ExecuteDemoProducer(serverConfig, kafkaConfig)
 
 	go func() {
 		if err := http.ListenAndServe(":6060", nil); err != nil {
