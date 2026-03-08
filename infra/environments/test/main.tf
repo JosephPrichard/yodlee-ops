@@ -5,7 +5,7 @@ module "infra" {
   environment       = "test"
   aws_region        = "us-east-1"
   container_port    = 8080
-  desired_count     = 4
+  desired_count     = 1
   task_cpu          = 256
   task_memory       = 512
   health_check_path = "/ping"

@@ -18,7 +18,7 @@ import (
 func main() {
 	err := godotenv.Load()
 	if err != nil {
-		slog.Warn("starting yodlee ops: failed to load .env file", "err", err)
+		slog.Warn("starting yodlee ops, failed to load .env file", "err", err)
 	}
 
 	cmd.InitLoggers(nil)
@@ -26,7 +26,7 @@ func main() {
 	serverConfig := model.MakeConfig()
 	serverConfig.IsLocal = true
 
-	slog.Info("starting yodlee ops: starting server", "serverConfig", serverConfig)
+	slog.Info("starting yodlee ops, starting server", "serverConfig", serverConfig)
 
 	s3Client := model.MakeS3Client(serverConfig)
 
@@ -43,20 +43,20 @@ func main() {
 		FiMessageBroadcaster: &svc.FiMessageBroadcaster{},
 	}
 
-	slog.Info("starting yodlee ops: starting consumer", "serverConfig", serverConfig, "kafkaConfig", fmt.Sprintf("%+v", kafkaConfig))
+	slog.Info("starting yodlee ops, starting consumer", "serverConfig", serverConfig, "kafkaConfig", fmt.Sprintf("%+v", kafkaConfig))
 
 	if err := svc.StartConsumers(context.Background(), serverConfig.KafkaBrokers, kafkaConfig, state); err != nil {
-		log.Fatalf("starting yodlee ops: failed to start consumers: %v", err)
+		log.Fatalf("starting yodlee ops, failed to start consumers: %v", err)
 	}
 
 	go func() {
 		if err := http.ListenAndServe(":6060", nil); err != nil {
-			log.Fatalf("starting yodlee ops: failed to start pprof server: %v", err)
+			log.Fatalf("starting yodlee ops, failed to start pprof server: %v", err)
 		}
 	}()
 
 	mux := svc.MakeServeMux(state)
 	if err := http.ListenAndServe(":8080", mux); err != nil {
-		log.Fatalf("starting yodlee ops: failed to start server: %v", err)
+		log.Fatalf("starting yodlee ops, failed to start server: %v", err)
 	}
 }

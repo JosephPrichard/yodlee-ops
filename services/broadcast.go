@@ -7,7 +7,7 @@ import (
 	"yodleeops/model"
 )
 
-const MaxSubscribeMessages = 10
+const MaxSubscribeMessages = 8
 
 type FiMessageBroadcaster struct {
 	lock        sync.Mutex

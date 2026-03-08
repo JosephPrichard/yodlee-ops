@@ -21,7 +21,7 @@ func ProduceJsonMessage(ctx Context, message JsonMessage) {
 		slog.ErrorContext(ctx, "failed to republish json messages", "err", err)
 		return
 	}
-	slog.InfoContext(ctx, "producing json messages", "Topic", message.Topic, "size", len(inputBytes), "json", string(inputBytes))
+	slog.InfoContext(ctx, "producing json messages", "topic", message.Topic, "size", len(inputBytes), "json", string(inputBytes))
 
 	messages := &sarama.ProducerMessage{
 		Key:   sarama.ByteEncoder(message.Key),

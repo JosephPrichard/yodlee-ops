@@ -777,12 +777,12 @@ func makeHoldResponses(n int) yodlee.HoldingResponse {
 	return yodlee.HoldingResponse{Holding: arr}
 }
 
-var Period = time.Millisecond * 500
+var Period = time.Second * 1
 
 func ExecuteDemoProducer(serverConfig model.Config, kafkaConfig *sarama.Config) {
 	producer := model.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
 
-	slog.Info("starting yodlee ops: starting test producer", "serverConfig", serverConfig, "kafkaConfig", fmt.Sprintf("%+v", kafkaConfig))
+	slog.Info("starting yodlee ops, starting test producer", "serverConfig", serverConfig, "kafkaConfig", fmt.Sprintf("%+v", kafkaConfig))
 
 	ticker := time.NewTicker(Period)
 	for range ticker.C {

@@ -45,7 +45,7 @@ func IngestCnctResponses(ctx Context, profileId string, response yodlee.Provider
 
 	joinPuts := PutObjects(ctx, ctx.AWS.CnctBucket, putList)
 
-	slog.InfoContext(ctx, "finished ingest cnct responses", "elapsed", time.Since(start))
+	slog.InfoContext(ctx, "finished ingest cnct responses", "elapsed", time.Since(start).String())
 	return joinPuts()
 }
 
@@ -70,7 +70,7 @@ func IngestAcctResponses(ctx Context, profileId string, response yodlee.AccountR
 
 	joinPuts := PutObjects(ctx, ctx.AWS.AcctBucket, putList)
 
-	slog.InfoContext(ctx, "finished ingest acct responses", "elapsed", time.Since(start))
+	slog.InfoContext(ctx, "finished ingest acct responses", "elapsed", time.Since(start).String())
 	return joinPuts()
 }
 
@@ -95,7 +95,7 @@ func IngestHoldResponses(ctx Context, profileId string, response yodlee.HoldingR
 
 	joinPuts := PutObjects(ctx, ctx.AWS.HoldBucket, putList)
 
-	slog.InfoContext(ctx, "finished ingest hold responses", "elapsed", time.Since(start))
+	slog.InfoContext(ctx, "finished ingest hold responses", "elapsed", time.Since(start).String())
 	return joinPuts()
 }
 
@@ -120,7 +120,7 @@ func IngestTxnResponses(ctx Context, profileId string, response yodlee.Transacti
 
 	joinPuts := PutObjects(ctx, ctx.AWS.TxnBucket, putList)
 
-	slog.InfoContext(ctx, "finished ingest txn responses", "elapsed", time.Since(start))
+	slog.InfoContext(ctx, "finished ingest txn responses", "elapsed", time.Since(start).String())
 	return joinPuts()
 }
 
@@ -161,7 +161,7 @@ func IngestCnctRefreshes(ctx Context, profileId string, cncts []yodlee.DataExtra
 	joinPuts := PutObjects(ctx, ctx.AWS.CnctBucket, putList)
 	deleteErrs := DeleteCncts(ctx, removeCnctKeys)
 
-	slog.InfoContext(ctx, "finished ingest cnct refreshes", "elapsed", time.Since(start))
+	slog.InfoContext(ctx, "finished ingest cnct refreshes", "elapsed", time.Since(start).String())
 
 	return CnctRefreshResult{PutResults: joinPuts(), DeleteErrors: deleteErrs}
 }
@@ -194,7 +194,7 @@ func IngestAcctsRefreshes(ctx Context, profileId string, accts []yodlee.DataExtr
 	joinPuts := PutObjects(ctx, ctx.AWS.AcctBucket, putList)
 	deleteErrs := DeleteAccts(ctx, removeAcctKeys)
 
-	slog.InfoContext(ctx, "finished ingest accts refreshes", "elapsed", time.Since(start))
+	slog.InfoContext(ctx, "finished ingest accts refreshes", "elapsed", time.Since(start).String())
 
 	return AcctRefreshResult{PutResults: joinPuts(), DeleteErrors: deleteErrs}
 }
@@ -220,7 +220,7 @@ func IngestHoldRefreshes(ctx Context, profileId string, holds []yodlee.DataExtra
 
 	joinPuts := PutObjects(ctx, ctx.AWS.HoldBucket, putList)
 
-	slog.InfoContext(ctx, "finished ingest hold refreshes", "elapsed", time.Since(start))
+	slog.InfoContext(ctx, "finished ingest hold refreshes", "elapsed", time.Since(start).String())
 
 	return HoldRefreshResult{PutResults: joinPuts()}
 }
@@ -258,7 +258,7 @@ func IngestTxnRefreshes(ctx Context, profileId string, txns []yodlee.DataExtract
 	joinPuts := PutObjects(ctx, ctx.AWS.TxnBucket, putList)
 	deleteErrs := DeletePrefixes(ctx, txnPrefixes)
 
-	slog.InfoContext(ctx, "finished ingest txn refreshes", "elapsed", time.Since(start))
+	slog.InfoContext(ctx, "finished ingest txn refreshes", "elapsed", time.Since(start).String())
 
 	return TxnRefreshResult{PutResults: joinPuts(), DeleteErrors: deleteErrs}
 }
@@ -322,9 +322,9 @@ func PutObjects[Input any](ctx Context, bucket model.Bucket, inputObjects []PutI
 				Body:   bytes.NewReader(body),
 			})
 			if err != nil {
-				slog.ErrorContext(ctx, "failed to upload object to s3", "Key", object.Key, "Bucket", bucket, "err", err)
+				slog.ErrorContext(ctx, "failed to upload object to s3", "Key", object.Key, "bucket", bucket, "err", err)
 			} else {
-				slog.InfoContext(ctx, "uploaded object to s3", "Bucket", bucket, "Key", object.Key, "bytes", len(body))
+				slog.InfoContext(ctx, "uploaded object to s3", "bucket", bucket, "key", object.Key, "bytes", len(body))
 			}
 
 			results[i] = PutResult[Input]{Key: object.Key, Input: object.Input, Err: err}
@@ -388,7 +388,7 @@ func (ls *ListAcctsTable) InterceptListedPrefixes(listIDsChan chan ListResult) c
 			for _, acctObjectID := range listResult.Keys {
 				acctKey, err := ParseAcctKey(acctObjectID)
 				if err != nil {
-					slog.ErrorContext(ls.context, "failed to parse acct Key from s3 object Key", "acctKeyStr", acctObjectID, "err", err)
+					slog.ErrorContext(ls.context, "failed to parse acct Key from s3 object key", "acctKeyStr", acctObjectID, "err", err)
 					continue
 				}
 				acctPrefixStr := AcctMemberPrefix{ProfileId: acctKey.ProfileId, AcctID: acctKey.AcctID}.String()
@@ -436,7 +436,7 @@ func (ds *DeleteSupervisor) AddResult(deleteResult DeleteResult) {
 func (ds *DeleteSupervisor) DeleteList(bucket model.Bucket, listIDsChan chan ListResult) {
 	ds.Go(func() {
 		for listResult := range listIDsChan {
-			slog.InfoContext(ds.context, "deleting listed ids", "Bucket", bucket, "listResult", listResult)
+			slog.InfoContext(ds.context, "deleting listed ids", "bucket", bucket, "listResult", listResult)
 
 			var deleteResult DeleteResult
 
@@ -602,19 +602,19 @@ func ListObjectsByPrefix(ctx Context, bucket model.Bucket, prefix string) chan L
 		})
 		page := 0
 
-		slog.InfoContext(ctx, "begin list objects by prefix pagination", "Bucket", bucket, "prefix", prefix)
+		slog.InfoContext(ctx, "begin list objects by prefix pagination", "bucket", bucket, "prefix", prefix)
 
 		for paginator.HasMorePages() {
 			page++
 			listObjects, err := paginator.NextPage(ctx)
 			if err != nil {
-				slog.ErrorContext(ctx, "failed to list objects from s3", "Bucket", bucket, "prefix", prefix, "page", page, "err", err)
+				slog.ErrorContext(ctx, "failed to list objects from s3", "bucket", bucket, "prefix", prefix, "page", page, "err", err)
 				resultsChan <- ListResult{Bucket: bucket, Prefix: prefix, Err: err}
 				return
 			}
 
 			if len(listObjects.Contents) == 0 {
-				slog.WarnContext(ctx, "no objects found for prefix", "Bucket", bucket, "prefix", prefix, "page", page)
+				slog.WarnContext(ctx, "no objects found for prefix", "bucket", bucket, "prefix", prefix, "page", page)
 				continue
 			}
 
@@ -626,11 +626,11 @@ func ListObjectsByPrefix(ctx Context, bucket model.Bucket, prefix string) chan L
 				keys = append(keys, *obj.Key)
 			}
 
-			slog.InfoContext(ctx, "list objects", "Bucket", bucket, "prefix", prefix, "page", page, "objectCount", len(listObjects.Contents), "objects", keys)
+			slog.InfoContext(ctx, "list objects", "bucket", bucket, "prefix", prefix, "page", page, "objectCount", len(listObjects.Contents), "objects", keys)
 			resultsChan <- ListResult{Bucket: bucket, Prefix: prefix, Keys: keys}
 		}
 
-		slog.InfoContext(ctx, "finished list objects by prefix pagination", "Bucket", bucket, "prefix", prefix, "totalPages", page)
+		slog.InfoContext(ctx, "finished list objects by prefix pagination", "bucket", bucket, "prefix", prefix, "totalPages", page)
 	}()
 
 	return resultsChan
@@ -654,9 +654,9 @@ func DeleteObjects(ctx Context, bucket model.Bucket, keys []string) DeleteResult
 		Delete: &s3types.Delete{Objects: objectIDs},
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to delete objects from s3", "Bucket", bucket, "keys", keys, "err", err)
+		slog.ErrorContext(ctx, "failed to delete objects from s3", "bucket", bucket, "keys", keys, "err", err)
 	} else {
-		slog.InfoContext(ctx, "deleted objects from s3", "Bucket", bucket, "keys", keys)
+		slog.InfoContext(ctx, "deleted objects from s3", "bucket", bucket, "keys", keys)
 	}
 
 	return DeleteResult{Keys: keys, Bucket: bucket, Err: err}

@@ -135,7 +135,7 @@ func ListFiMetadataByPrefix(ctx Context, bucket model.Bucket, prefix string, cur
 			LastModified: *obj.LastModified,
 		}
 		if err := metadataRecord.ParseOpsFiMetadata(ctx.AWS.Buckets, bucket, *obj.Key); err != nil {
-			slog.ErrorContext(ctx, "failed to parse ops fi metadata record", "Key", *obj.Key, "err", err)
+			slog.ErrorContext(ctx, "failed to parse ops fi metadata record", "key", *obj.Key, "err", err)
 		} else {
 			opsFiMetadata = append(opsFiMetadata, metadataRecord)
 		}

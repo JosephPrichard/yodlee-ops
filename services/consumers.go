@@ -12,55 +12,104 @@ import (
 )
 
 type Consumer struct {
+	Topic   model.Topic
 	GroupID string
 	Handler sarama.ConsumerGroupHandler
 }
 
-func MakeConsumers(state *State) map[model.Topic]Consumer {
-	return map[model.Topic]Consumer{
-		// fi message topics have a statically computed group id because only one node receives messages
-		model.CnctRefreshTopic: {
-			GroupID: model.CnctRefreshTopicGroupID,
-			Handler: MakeStateConsumerHandler(state, ConsumeCnctRefreshMessage),
-		},
-		model.AcctRefreshTopic: {
-			GroupID: model.AcctRefreshTopicGroupID,
-			Handler: MakeStateConsumerHandler(state, ConsumeAcctRefreshMessage),
-		},
-		model.HoldRefreshTopic: {
-			GroupID: model.HoldRefreshTopicGroupID,
-			Handler: MakeStateConsumerHandler(state, ConsumeHoldRefreshMessage),
-		},
-		model.TxnRefreshTopic: {
-			GroupID: model.TxnRefreshTopicGroupID,
-			Handler: MakeStateConsumerHandler(state, ConsumeTxnRefreshMessage),
-		},
-		model.CnctResponseTopic: {
-			GroupID: model.CnctResponseTopicGroupID,
-			Handler: MakeStateConsumerHandler(state, ConsumeCnctResponseMessage),
-		},
-		model.AcctResponseTopic: {
-			GroupID: model.AcctResponseTopicGroupID,
-			Handler: MakeStateConsumerHandler(state, ConsumeAcctResponseMessage),
-		},
-		model.HoldResponseTopic: {
-			GroupID: model.HoldResponseTopicGroupID,
-			Handler: MakeStateConsumerHandler(state, ConsumeHoldResponseMessage),
-		},
-		model.TxnResponseTopic: {
-			GroupID: model.TxnResponseTopicGroupID,
-			Handler: MakeStateConsumerHandler(state, ConsumeTxnResponseMessage),
-		},
-		model.DeleteRetryTopic: {
-			GroupID: model.DeleteRetryTopicGroupID,
-			Handler: MakeStateConsumerHandler(state, ConsumeDeleteRetryMessage),
-		},
-		// the broadcast topic has a dynamically computed group id because each node receives the message
-		model.BroadcastTopic: {
-			GroupID: uuid.NewString(),
-			Handler: MakeStateConsumerHandler(state, ConsumeBroadcastMessage),
+type ConsumerHandlerFunc[Value any] = func(Context, string, Value)
+
+type ConsumerConfig[Value any] struct {
+	State   *State
+	GroupID string
+	Topic   model.Topic
+	Handler ConsumerHandlerFunc[Value]
+}
+
+func MakeConsumer[Value any](cfg ConsumerConfig[Value]) Consumer {
+	return Consumer{
+		GroupID: cfg.GroupID,
+		Topic:   cfg.Topic,
+		Handler: &ConsumerHandler[Value]{
+			Topic: string(cfg.Topic),
+			OnMessage: func(ctx context.Context, key string, value Value) {
+				cfg.Handler(Context{Context: ctx, State: cfg.State}, key, value)
+			},
 		},
 	}
+}
+
+func MakeConsumers(state *State) map[model.Topic]Consumer {
+	consumerList := []Consumer{
+		// fi message topics have a statically computed group id because only one node receives messages
+		MakeConsumer(ConsumerConfig[[]yodlee.DataExtractsProviderAccount]{
+			Topic:   model.CnctRefreshTopic,
+			State:   state,
+			GroupID: model.CnctRefreshTopicGroupID,
+			Handler: ConsumeCnctRefreshMessage,
+		}),
+		MakeConsumer(ConsumerConfig[[]yodlee.DataExtractsAccount]{
+			Topic:   model.AcctRefreshTopic,
+			State:   state,
+			GroupID: model.AcctRefreshTopicGroupID,
+			Handler: ConsumeAcctRefreshMessage,
+		}),
+		MakeConsumer(ConsumerConfig[[]yodlee.DataExtractsHolding]{
+			Topic:   model.HoldRefreshTopic,
+			State:   state,
+			GroupID: model.HoldRefreshTopicGroupID,
+			Handler: ConsumeHoldRefreshMessage,
+		}),
+		MakeConsumer(ConsumerConfig[[]yodlee.DataExtractsTransaction]{
+			Topic:   model.TxnRefreshTopic,
+			State:   state,
+			GroupID: model.TxnRefreshTopicGroupID,
+			Handler: ConsumeTxnRefreshMessage,
+		}),
+		MakeConsumer(ConsumerConfig[yodlee.ProviderAccountResponse]{
+			Topic:   model.CnctResponseTopic,
+			State:   state,
+			GroupID: model.CnctResponseTopicGroupID,
+			Handler: ConsumeCnctResponseMessage,
+		}),
+		MakeConsumer(ConsumerConfig[yodlee.AccountResponse]{
+			Topic:   model.AcctResponseTopic,
+			State:   state,
+			GroupID: model.AcctResponseTopicGroupID,
+			Handler: ConsumeAcctResponseMessage,
+		}),
+		MakeConsumer(ConsumerConfig[yodlee.HoldingResponse]{
+			Topic:   model.HoldResponseTopic,
+			State:   state,
+			GroupID: model.HoldResponseTopicGroupID,
+			Handler: ConsumeHoldResponseMessage,
+		}),
+		MakeConsumer(ConsumerConfig[yodlee.TransactionResponse]{
+			Topic:   model.TxnResponseTopic,
+			State:   state,
+			GroupID: model.TxnResponseTopicGroupID,
+			Handler: ConsumeTxnResponseMessage,
+		}),
+		MakeConsumer(ConsumerConfig[[]DeleteRetry]{
+			Topic:   model.DeleteRetryTopic,
+			State:   state,
+			GroupID: model.DeleteRetryTopicGroupID,
+			Handler: ConsumeDeleteRetryMessage,
+		}),
+		// the broadcast topic has a dynamically computed group id because each node receives the message
+		MakeConsumer(ConsumerConfig[BroadcastOutput]{
+			Topic:   model.BroadcastTopic,
+			State:   state,
+			GroupID: uuid.NewString(),
+			Handler: ConsumeBroadcastMessage,
+		}),
+	}
+
+	consumerMap := make(map[model.Topic]Consumer, len(consumerList))
+	for _, c := range consumerList {
+		consumerMap[c.Topic] = c
+	}
+	return consumerMap
 }
 
 func StartConsumers(ctx context.Context, kafkaBrokers []string, config *sarama.Config, app *State) error {
@@ -68,7 +117,7 @@ func StartConsumers(ctx context.Context, kafkaBrokers []string, config *sarama.C
 	for topic, consumer := range consumers {
 		consumerGroup, err := sarama.NewConsumerGroup(kafkaBrokers, consumer.GroupID, config)
 		if err != nil {
-			return fmt.Errorf("starting yodlee ops: failed to create kafka consumer: %v", err)
+			return fmt.Errorf("starting yodlee ops, failed to create kafka consumer: %v", err)
 		}
 		// begin a comsumer consumer loop for each topic
 		topics := []string{string(topic)}
@@ -85,7 +134,7 @@ func StartConsumers(ctx context.Context, kafkaBrokers []string, config *sarama.C
 		}()
 	}
 
-	slog.Info("starting yodlee ops: started consumers", "consumers", fmt.Sprintf("+%v", consumers))
+	slog.Info("starting yodlee ops, started consumers", "consumers", fmt.Sprintf("+%v", consumers))
 	return nil
 }
 
