@@ -7,13 +7,11 @@ variable "project" {
 variable "environment" {
   description = "Environment name (e.g. test, staging, prod)"
   type        = string
-  default     = "test"
 }
 
 variable "aws_region" {
   description = "AWS region to deploy into"
   type        = string
-  default     = "us-east-1"
 }
 
 variable "vpc_cidr" {

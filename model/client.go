@@ -109,7 +109,7 @@ func MakeAWS(config Config, s3Client *s3.Client) AWS {
 
 func MakeSaramaConfig(config Config) *sarama.Config {
 	kafkaConfig := sarama.NewConfig()
-	kafkaConfig.Version = sarama.V3_6_0_0
+	kafkaConfig.Version = sarama.V3_0_0_0 // using 3.5.1 in infra, this value just needs to be older.
 	kafkaConfig.Producer.Return.Errors = true
 
 	if config.IsLocal {
