@@ -299,7 +299,7 @@ locals {
   container_env_vars = [
     for k, v in merge(
       local.buckets,
-      # { KAFKA_BROKERS = aws_msk_cluster.main.bootstrap_brokers_sasl_iam }
+      { KAFKA_BROKERS = aws_msk_cluster.main.bootstrap_brokers_sasl_iam }
     ) : {
       name = k, value = v
     }

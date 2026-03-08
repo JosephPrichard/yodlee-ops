@@ -26,6 +26,8 @@ func main() {
 	serverConfig := model.MakeConfig()
 	//serverConfig.IsLocal = true
 
+	slog.Info("starting server", "serverConfig", serverConfig)
+
 	s3Client := model.MakeS3Client(serverConfig)
 
 	kafkaConfig := model.MakeSaramaConfig(serverConfig)
