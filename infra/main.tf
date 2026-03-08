@@ -1,3 +1,11 @@
+terraform {
+  required_providers {
+    kafka = {
+      source  = "Mongey/kafka"
+      version = "0.8.3"
+    }
+  }
+}
 # ── VPC ─────────────────────────────────────────────────────────────────────
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
@@ -108,12 +116,12 @@ resource "aws_msk_configuration" "main" {
 }
 
 # you must comment this out the very first time `tfe deploy` is executed, it needs the msk cluster to be created on a previous deployment
-# resource "kafka_topic" "main" {
-#   for_each           = toset(var.kafka_topics)
-#   name               = each.key
-#   replication_factor = 2
-#   partitions         = 3
-# }
+resource "kafka_topic" "main" {
+  for_each           = toset(var.kafka_topics)
+  name               = each.key
+  replication_factor = var.topic_replication
+  partitions         = var.topic_partitions
+}
 
 # ALB
 resource "aws_security_group" "alb" {
@@ -241,53 +249,53 @@ resource "aws_iam_role_policy" "ecs_task_s3" {
 
 # Allow the task to access all MSK topics for project
 # you must comment this out the very first time `tfe deploy` is executed, topics cannot be created on first deployment and policy requires ARN for topics.
-# locals {
-#   kafka_topics_access = [
-#     for topic_name in var.kafka_topics : {
-#       Effect = "Allow"
-#       Action = [
-#         "kafka-cluster:*Topic*",
-#         "kafka-cluster:ReadData",
-#         "kafka-cluster:WriteData"
-#       ]
-#       # Dynamically construct the ARN from the kafka_topics list
-#       Resource = "arn:aws:kafka:${var.aws_region}:${data.aws_caller_identity.current.account_id}:topic/${local.msk_cluster_name}/*/${topic_name}"
-#     }
-#   ]
-# }
+locals {
+  kafka_topics_access = [
+    for topic_name in var.kafka_topics : {
+      Effect = "Allow"
+      Action = [
+        "kafka-cluster:*Topic*",
+        "kafka-cluster:ReadData",
+        "kafka-cluster:WriteData"
+      ]
+      # Dynamically construct the ARN from the kafka_topics list
+      Resource = "arn:aws:kafka:${var.aws_region}:${data.aws_caller_identity.current.account_id}:topic/${local.msk_cluster_name}/*/${topic_name}"
+    }
+  ]
+}
 
-# resource "aws_iam_role_policy" "ecs_task_msk" {
-#   name = "msk-access"
-#   role = aws_iam_role.ecs_task.id
-#
-#   policy = jsonencode({
-#     Version = "2012-10-17"
-#     Statement = concat(
-#       [
-#         # kafka-cluster access
-#         {
-#           Effect = "Allow"
-#           Action = [
-#             "kafka-cluster:Connect",
-#             "kafka-cluster:AlterCluster",
-#             "kafka-cluster:DescribeCluster"
-#           ]
-#           Resource = aws_msk_cluster.main.arn
-#         },
-#         # kafka group access
-#         {
-#           Effect = "Allow"
-#           Action = [
-#             "kafka-cluster:AlterGroup",
-#             "kafka-cluster:DescribeGroup"
-#           ]
-#           Resource = "arn:aws:kafka:${var.aws_region}:${data.aws_caller_identity.current.account_id}:group/${local.msk_cluster_name}/*/*"
-#         }
-#       ],
-#       local.kafka_topics_access
-#     )
-#   })
-# }
+resource "aws_iam_role_policy" "ecs_task_msk" {
+  name = "msk-access"
+  role = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      [
+        # kafka-cluster access
+        {
+          Effect = "Allow"
+          Action = [
+            "kafka-cluster:Connect",
+            "kafka-cluster:AlterCluster",
+            "kafka-cluster:DescribeCluster"
+          ]
+          Resource = aws_msk_cluster.main.arn
+        },
+        # kafka group access
+        {
+          Effect = "Allow"
+          Action = [
+            "kafka-cluster:AlterGroup",
+            "kafka-cluster:DescribeGroup"
+          ]
+          Resource = "arn:aws:kafka:${var.aws_region}:${data.aws_caller_identity.current.account_id}:group/${local.msk_cluster_name}/*/*"
+        }
+      ],
+      local.kafka_topics_access
+    )
+  })
+}
 
 # CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "app" {

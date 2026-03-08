@@ -8,6 +8,8 @@ module "infra" {
   desired_count     = 8
   task_cpu          = 256
   task_memory       = 512
+  topic_partitions  = 32
+  topic_replication = 3
   health_check_path = "/ping"
   container_image   = "938864279852.dkr.ecr.us-east-1.amazonaws.com/development/yodlee-ops"
   image_tag         =  var.commit_sha

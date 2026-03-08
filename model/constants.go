@@ -39,9 +39,4 @@ const (
 	HoldResponseTopicGroupID = "hold-responses-group"
 	TxnResponseTopicGroupID  = "txn-responses-group"
 	DeleteRetryTopicGroupID  = "delete-retry-group"
-
-	//CnctBucket Bucket = "yodlee-cncts"
-	//AcctBucket Bucket = "yodlee-accts"
-	//HoldBucket Bucket = "yodlee-holds"
-	//TxnBucket  Bucket = "yodlee-txns"
 )

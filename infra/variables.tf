@@ -62,6 +62,16 @@ variable "task_memory" {
   type        = number
 }
 
+variable "topic_partitions" {
+  description = "The number of partitions for each kafka topic"
+  type        = number
+}
+
+variable "topic_replication" {
+  description = "The replication factor for each kafka topic"
+  type        = number
+}
+
 variable "desired_count" {
   description = "Number of ECS tasks to run"
   type        = number
@@ -71,10 +81,10 @@ variable "buckets" {
   description = "Names of S3 buckets to create"
   type        = map(string)
   default     = {
-    CNCT_BUCKET = "yodlee-cncts"
-    ACCT_BUCKET = "yodlee-accts"
-    HOLD_BUCKET = "yodlee-holds"
-    TXN_BUCKET  = "yodlee-txns"
+    CNCT_BUCKET = "yodlee-cncts-bucket"
+    ACCT_BUCKET = "yodlee-accts-bucket"
+    HOLD_BUCKET = "yodlee-holds-bucket"
+    TXN_BUCKET  = "yodlee-txns-bucket"
   }
 }
 
