@@ -5,8 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"yodleeops/client"
+	"yodleeops/model"
 )
 
 type CnctKey struct {
@@ -132,7 +131,7 @@ type OpsFiMetadata struct {
 
 type ParseOpsFiMetadataError struct {
 	Key              string
-	Bucket           client.Bucket
+	Bucket           model.Bucket
 	WantTokenCount   int
 	ActualTokenCount int
 }
@@ -154,11 +153,11 @@ func TimeParseLax(dateString string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("parse time with any known layout: %s", dateString)
 }
 
-func (o *OpsFiMetadata) ParseOpsFiMetadata(bucket client.Bucket, key string) error {
+func (o *OpsFiMetadata) ParseOpsFiMetadata(buckets model.Buckets, bucket model.Bucket, key string) error {
 	tokens := strings.Split(key, "/")
 
 	switch bucket {
-	case client.CnctBucket:
+	case buckets.CnctBucket:
 		wantTokenCount := 4
 		if len(tokens) != wantTokenCount {
 			return ParseOpsFiMetadataError{Key: key, Bucket: bucket, WantTokenCount: wantTokenCount, ActualTokenCount: len(tokens)}
@@ -166,7 +165,7 @@ func (o *OpsFiMetadata) ParseOpsFiMetadata(bucket client.Bucket, key string) err
 		o.ProfileID = tokens[0]
 		o.ProviderAccountID = tokens[1]
 		o.PartyIDTypeCd = tokens[2]
-	case client.AcctBucket:
+	case buckets.AcctBucket:
 		wantTokenCount := 5
 		if len(tokens) != wantTokenCount {
 			return ParseOpsFiMetadataError{Key: key, Bucket: bucket, WantTokenCount: wantTokenCount, ActualTokenCount: len(tokens)}
@@ -175,7 +174,7 @@ func (o *OpsFiMetadata) ParseOpsFiMetadata(bucket client.Bucket, key string) err
 		o.ProviderAccountID = tokens[1]
 		o.PartyIDTypeCd = tokens[2]
 		o.AccountID = tokens[3]
-	case client.HoldBucket, client.TxnBucket:
+	case buckets.HoldBucket, buckets.TxnBucket:
 		wantTokenCount := 5
 		if len(tokens) != wantTokenCount {
 			return ParseOpsFiMetadataError{Key: key, Bucket: bucket, WantTokenCount: wantTokenCount, ActualTokenCount: len(tokens)}

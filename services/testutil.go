@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"github.com/IBM/sarama"
 	saramaMocks "github.com/IBM/sarama/mocks"
-	"yodleeops/client"
+	"yodleeops/model"
 	"yodleeops/yodlee"
 )
 
@@ -27,28 +27,28 @@ func decodeBroadcast(msg *sarama.ProducerMessage) any {
 		return err.Error()
 	}
 	var brdcast struct {
-		OriginTopic client.Topic `json:"origintopic"`
+		OriginTopic model.Topic `json:"origintopic"`
 	}
 	if err := json.Unmarshal(v, &brdcast); err != nil {
 		return fmt.Errorf("unmarshal broadcast message: %w", err)
 	}
 
 	switch brdcast.OriginTopic {
-	case client.CnctResponseTopic:
+	case model.CnctResponseTopic:
 		return decodeProduceMsg[BroadcastInput[OpsProviderAccount, yodlee.ProviderAccount]](msg)
-	case client.AcctResponseTopic:
+	case model.AcctResponseTopic:
 		return decodeProduceMsg[BroadcastInput[OpsAccount, yodlee.Account]](msg)
-	case client.HoldResponseTopic:
+	case model.HoldResponseTopic:
 		return decodeProduceMsg[BroadcastInput[OpsHolding, yodlee.Holding]](msg)
-	case client.TxnResponseTopic:
+	case model.TxnResponseTopic:
 		return decodeProduceMsg[BroadcastInput[OpsTransaction, yodlee.TransactionWithDateTime]](msg)
-	case client.CnctRefreshTopic:
+	case model.CnctRefreshTopic:
 		return decodeProduceMsg[BroadcastInput[OpsProviderAccountRefresh, yodlee.DataExtractsProviderAccount]](msg)
-	case client.AcctRefreshTopic:
+	case model.AcctRefreshTopic:
 		return decodeProduceMsg[BroadcastInput[OpsAccountRefresh, yodlee.DataExtractsAccount]](msg)
-	case client.HoldRefreshTopic:
+	case model.HoldRefreshTopic:
 		return decodeProduceMsg[BroadcastInput[OpsHoldingRefresh, yodlee.DataExtractsHolding]](msg)
-	case client.TxnRefreshTopic:
+	case model.TxnRefreshTopic:
 		return decodeProduceMsg[BroadcastInput[OpsTransactionRefresh, yodlee.DataExtractsTransaction]](msg)
 	default:
 		return fmt.Sprintf("unexpected broadcast origin Topic: %s", msg.Topic)
@@ -56,24 +56,24 @@ func decodeBroadcast(msg *sarama.ProducerMessage) any {
 }
 
 func decodeProducerMessage(msg *sarama.ProducerMessage) any {
-	switch client.Topic(msg.Topic) {
-	case client.CnctResponseTopic:
+	switch model.Topic(msg.Topic) {
+	case model.CnctResponseTopic:
 		return decodeProduceMsg[yodlee.ProviderAccountResponse](msg)
-	case client.AcctResponseTopic:
+	case model.AcctResponseTopic:
 		return decodeProduceMsg[yodlee.AccountResponse](msg)
-	case client.HoldResponseTopic:
+	case model.HoldResponseTopic:
 		return decodeProduceMsg[yodlee.HoldingResponse](msg)
-	case client.TxnResponseTopic:
+	case model.TxnResponseTopic:
 		return decodeProduceMsg[yodlee.TransactionResponse](msg)
-	case client.CnctRefreshTopic:
+	case model.CnctRefreshTopic:
 		return decodeProduceMsg[[]yodlee.DataExtractsProviderAccount](msg)
-	case client.AcctRefreshTopic:
+	case model.AcctRefreshTopic:
 		return decodeProduceMsg[[]yodlee.DataExtractsAccount](msg)
-	case client.HoldRefreshTopic:
+	case model.HoldRefreshTopic:
 		return decodeProduceMsg[[]yodlee.DataExtractsHolding](msg)
-	case client.TxnRefreshTopic:
+	case model.TxnRefreshTopic:
 		return decodeProduceMsg[[]yodlee.DataExtractsTransaction](msg)
-	case client.BroadcastTopic:
+	case model.BroadcastTopic:
 		return decodeBroadcast(msg)
 	default:
 		return fmt.Sprintf("unexpected Topic: %s", msg.Topic)

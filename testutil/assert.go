@@ -11,7 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"yodleeops/client"
+	"yodleeops/model"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -27,7 +27,7 @@ func Equal[T any](t *testing.T, expected, actual T, opts ...cmp.Option) {
 }
 
 type WantObject[JSON any] struct {
-	Bucket client.Bucket
+	Bucket model.Bucket
 	Key    string
 	Value  JSON
 }
@@ -44,7 +44,7 @@ func DecodeGzipJSON[JSON any](r io.Reader, decoded *JSON) error {
 	return nil
 }
 
-func AssertObjects[JSON any](t *testing.T, awsClient *client.AWS, objects []WantObject[JSON], opts ...cmp.Option) {
+func AssertObjects[JSON any](t *testing.T, awsClient *model.AWS, objects []WantObject[JSON], opts ...cmp.Option) {
 	opts = append([]cmp.Option{protocmp.Transform()}, opts...)
 
 	t.Helper()
@@ -75,20 +75,20 @@ func AssertObjects[JSON any](t *testing.T, awsClient *client.AWS, objects []Want
 }
 
 type WantKey struct {
-	Bucket client.Bucket
+	Bucket model.Bucket
 	Key    string
 }
 
-func GetAllKeys(t *testing.T, a client.AWS) []WantKey {
+func GetAllKeys(t *testing.T, aws model.AWS) []WantKey {
 	var keys []WantKey
 
-	for _, bucket := range []client.Bucket{
-		client.CnctBucket,
-		client.AcctBucket,
-		client.TxnBucket,
-		client.HoldBucket,
+	for _, bucket := range []model.Bucket{
+		aws.CnctBucket,
+		aws.AcctBucket,
+		aws.TxnBucket,
+		aws.HoldBucket,
 	} {
-		paginator := s3.NewListObjectsV2Paginator(a.S3, &s3.ListObjectsV2Input{Bucket: bucket.String()})
+		paginator := s3.NewListObjectsV2Paginator(aws.S3, &s3.ListObjectsV2Input{Bucket: bucket.String()})
 
 		for paginator.HasMorePages() {
 			page, err := paginator.NextPage(context.Background())

@@ -9,10 +9,10 @@ terraform {
   }
 
   backend "s3" {
-    bucket         = "yodlee-ops-tfstate-bucket"
+    bucket         = "yodlee-ops-tfstate-bucket-test"
     key            = "terraform.tfstate"
     region         = "us-east-1"
-    dynamodb_table = "yodlee-ops-tfstate-lock-table"
+    dynamodb_table = "yodlee-ops-tfstate-lock-table-test"
     encrypt        = true
   }
 }

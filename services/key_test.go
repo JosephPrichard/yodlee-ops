@@ -3,28 +3,28 @@ package svc
 import (
 	"testing"
 
-	"yodleeops/client"
+	"yodleeops/model"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestParseOpsFiMetadata(t *testing.T) {
-	buckets := client.Buckets{
-		Connections:  client.CnctBucket,
-		Accounts:     client.AcctBucket,
-		Holdings:     client.HoldBucket,
-		Transactions: client.TxnBucket,
+	buckets := model.Buckets{
+		CnctBucket: "cnct-bucket",
+		AcctBucket: "acct-bucket",
+		HoldBucket: "hold-bucket",
+		TxnBucket:  "txn-bucket",
 	}
 	for _, test := range []struct {
 		name        string
-		bucket      client.Bucket
+		bucket      model.Bucket
 		key         string
 		expectError bool
 		validateFn  func(t *testing.T, o *OpsFiMetadata)
 	}{
 		{
-			name:   "Connections key valid",
-			bucket: client.CnctBucket,
+			name:   "CnctBucket key valid",
+			bucket: "cnct-bucket",
 			key:    "profile1/provider1/party1/2024-01-01T00:00:00Z",
 			validateFn: func(t *testing.T, metadata *OpsFiMetadata) {
 				assert.Equal(t, "profile1", metadata.ProfileID)
@@ -34,14 +34,14 @@ func TestParseOpsFiMetadata(t *testing.T) {
 			},
 		},
 		{
-			name:        "Connections invalid token count",
-			bucket:      buckets.Connections,
+			name:        "CnctBucket invalid token count",
+			bucket:      "acct-bucket",
 			key:         "too/few",
 			expectError: true,
 		},
 		{
-			name:   "Accounts key valid",
-			bucket: buckets.Accounts,
+			name:   "AcctBucket key valid",
+			bucket: "acct-bucket",
 			key:    "profile1/provider1/party1/account1/2024-01-01T00:00:00Z",
 			validateFn: func(t *testing.T, metadata *OpsFiMetadata) {
 				assert.Equal(t, "profile1", metadata.ProfileID)
@@ -58,13 +58,13 @@ func TestParseOpsFiMetadata(t *testing.T) {
 		},
 		{
 			name:        "Invalid timestamp",
-			bucket:      buckets.Connections,
+			bucket:      "cnct-bucket",
 			key:         "profile/provider/party/bad-timestamp",
 			expectError: true,
 		},
 		{
-			name:   "Holdings key valid",
-			bucket: buckets.Holdings,
+			name:   "HoldBucket key valid",
+			bucket: "hold-bucket",
 			key:    "profile1/party1/account1/element1/2024-01-01T00:00:00Z",
 			validateFn: func(t *testing.T, metadata *OpsFiMetadata) {
 				assert.Equal(t, "profile1", metadata.ProfileID)
@@ -76,7 +76,7 @@ func TestParseOpsFiMetadata(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			meta := &OpsFiMetadata{}
-			err := meta.ParseOpsFiMetadata(test.bucket, test.key)
+			err := meta.ParseOpsFiMetadata(buckets, test.bucket, test.key)
 
 			if test.expectError {
 				assert.Error(t, err)

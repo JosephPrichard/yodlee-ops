@@ -4,11 +4,11 @@ import (
 	"context"
 	"github.com/IBM/sarama"
 
-	"yodleeops/client"
+	"yodleeops/model"
 )
 
 type State struct {
-	AWS                  client.AWS
+	AWS                  model.AWS
 	Producer             sarama.AsyncProducer
 	FiMessageBroadcaster *FiMessageBroadcaster
 }

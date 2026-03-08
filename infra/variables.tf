@@ -71,6 +71,11 @@ variable "desired_count" {
 
 variable "buckets" {
   description = "Names of S3 buckets to create"
-  type        = list(string)
-  default     = ["yodlee-cncts", "yodlee-accts", "yodlee-txns", "yodlee-holds"]
+  type        = map(string)
+  default     = {
+    CNCT_BUCKET = "yodlee-cncts"
+    ACCT_BUCKET = "yodlee-accts"
+    HOLD_BUCKET = "yodlee-holds"
+    TXN_BUCKET  = "yodlee-txns"
+  }
 }

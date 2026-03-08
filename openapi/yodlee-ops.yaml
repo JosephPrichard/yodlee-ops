@@ -11,6 +11,8 @@ paths:
   # note: most code generators don't work with server-sent events, this is documentation only.
   /events/taillog:
     get:
+      tags:
+        - Events
       security:
         - bearerAuth: [ ]
       summary: Stream tail logs.
@@ -29,6 +31,8 @@ paths:
 
   /fimetadata/prefix:
     get:
+      tags:
+        - Fimetadata
       security:
         - bearerAuth: [ ]
       summary: Get FI metadata
@@ -78,6 +82,8 @@ paths:
 
   /fimetadata/profiles:
     get:
+      tags:
+        - Fimetadata
       security:
         - bearerAuth: [ ]
       summary: Get FI metadata
@@ -127,6 +133,8 @@ paths:
 
   /fiobject:
     get:
+      tags:
+        - Fimetadata
       security:
         - bearerAuth: [ ]
       summary: Get FI object

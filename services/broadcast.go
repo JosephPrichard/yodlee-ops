@@ -4,7 +4,7 @@ import (
 	"hash/fnv"
 	"slices"
 	"sync"
-	"yodleeops/client"
+	"yodleeops/model"
 )
 
 const MaxSubscribeMessages = 10
@@ -20,7 +20,7 @@ func hash(s string) uint64 {
 	return h.Sum64()
 }
 
-func (b *FiMessageBroadcaster) Broadcast(profileID string, topic client.Topic, msg string) {
+func (b *FiMessageBroadcaster) Broadcast(profileID string, topic model.Topic, msg string) {
 	profileIDHash := hash(profileID)
 	topicHash := hash(string(topic))
 
@@ -42,8 +42,8 @@ func (b *FiMessageBroadcaster) Broadcast(profileID string, topic client.Topic, m
 }
 
 type SubscriberFilter struct {
-	Topics     []client.Topic // allowlist for topics. receive all if empty.
-	ProfileIDs []string       // allowlist for profile ids.
+	Topics     []model.Topic // allowlist for topics. receive all if empty.
+	ProfileIDs []string      // allowlist for profile ids.
 }
 
 type Subscriber struct {

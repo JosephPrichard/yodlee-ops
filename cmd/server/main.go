@@ -5,8 +5,8 @@ import (
 	"log"
 	"log/slog"
 	"net/http"
-	"yodleeops/client"
 	"yodleeops/cmd"
+	"yodleeops/model"
 	svc "yodleeops/services"
 
 	_ "net/http/pprof"
@@ -22,19 +22,19 @@ func main() {
 
 	cmd.InitLoggers(nil)
 
-	serverConfig := client.MakeConfig()
-	//serverConfig.IsLocal = true
+	serverConfig := model.MakeConfig()
+	serverConfig.IsLocal = true
 
-	s3Client := client.MakeS3Client(serverConfig)
+	s3Client := model.MakeS3Client(serverConfig)
 
-	kafkaConfig := client.MakeSaramaConfig(serverConfig)
+	kafkaConfig := model.MakeSaramaConfig(serverConfig)
 	//producer := client.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
 
 	// produces messages to topics to easily test that producer/consumers are working without an external producer. comment out in prod.
 	//go cmd.ExecuteDemoProducer(serverConfig, kafkaConfig)
 
 	state := &svc.State{
-		AWS: client.MakeAWS(s3Client),
+		AWS: model.MakeAWS(serverConfig, s3Client),
 		//Producer:             producer,
 		FiMessageBroadcaster: &svc.FiMessageBroadcaster{},
 	}

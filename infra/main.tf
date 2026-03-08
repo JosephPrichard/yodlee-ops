@@ -16,13 +16,17 @@ module "vpc" {
 }
 
 # S3
+locals {
+  buckets = { for k, v in var.buckets : k => "${var.project}-${var.environment}-${v}" }
+}
+
 resource "aws_s3_bucket" "yodlee-ops-buckets" {
-  for_each = toset(var.buckets)
-  bucket   = each.key
+  for_each = local.buckets
+  bucket   = each.value
 }
 
 resource "aws_s3_bucket_public_access_block" "yodlee-ops-buckets" {
-  for_each                = toset(var.buckets)
+  for_each                = local.buckets
   bucket                  = aws_s3_bucket.yodlee-ops-buckets[each.key].id
   block_public_acls       = true
   block_public_policy     = true
@@ -155,6 +159,18 @@ resource "aws_cloudwatch_log_group" "app" {
 }
 
 # ECS Task Definition
+locals {
+  container_env_vars = [
+    for k, v in merge(
+      local.buckets,
+      { KAFKA_BROKERS = "" }
+    ) : {
+      name = k,
+      value = v
+    }
+  ]
+}
+
 resource "aws_ecs_task_definition" "app" {
   family                   = "${var.project}-${var.environment}-task-definition"
   network_mode             = "awsvpc"
@@ -181,6 +197,8 @@ resource "aws_ecs_task_definition" "app" {
         awslogs-stream-prefix = "ecs"
       }
     }
+
+    environment = local.container_env_vars
   }])
 }
 

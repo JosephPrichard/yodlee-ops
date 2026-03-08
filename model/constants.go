@@ -1,4 +1,4 @@
-package client
+package model
 
 import (
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -36,30 +36,15 @@ const (
 	DeleteRetryTopicGroupID  = "delete-recovery_group"
 
 	// CnctBucket etc. buckets
-	CnctBucket Bucket = "yodlee-cncts"
-	AcctBucket Bucket = "yodlee-accts"
-	HoldBucket Bucket = "yodlee-holds"
-	TxnBucket  Bucket = "yodlee-txns"
+	//CnctBucket Bucket = "yodlee-cncts"
+	//AcctBucket Bucket = "yodlee-accts"
+	//HoldBucket Bucket = "yodlee-holds"
+	//TxnBucket  Bucket = "yodlee-txns"
 )
 
-var BucketList = []Bucket{CnctBucket, AcctBucket, HoldBucket, TxnBucket}
-
-var TopicList = []Topic{
-	CnctRefreshTopic,
-	AcctRefreshTopic,
-	HoldRefreshTopic,
-	TxnRefreshTopic,
-	CnctResponseTopic,
-	AcctResponseTopic,
-	HoldResponseTopic,
-	TxnResponseTopic,
-	DeleteRetryTopic,
-	BroadcastTopic,
-}
-
 type Buckets struct {
-	Connections  Bucket
-	Accounts     Bucket
-	Holdings     Bucket
-	Transactions Bucket
+	CnctBucket Bucket
+	AcctBucket Bucket
+	HoldBucket Bucket
+	TxnBucket  Bucket
 }

@@ -1,4 +1,4 @@
-package client
+package model
 
 import (
 	"context"
@@ -19,8 +19,16 @@ import (
 type Config struct {
 	AwsEndpoint      string
 	AwsDefaultRegion string
-	IsLocal          bool // a special flag to tell the app to use hardcoded credentials when connecting to local
-	KafkaBrokers     []string
+
+	// a special flag to tell the app to use hardcoded credentials when connecting to local
+	IsLocal bool
+
+	KafkaBrokers []string
+
+	CnctBucket string
+	AcctBucket string
+	HoldBucket string
+	TxnBucket  string
 }
 
 func MakeConfig() Config {
@@ -37,12 +45,17 @@ func MakeConfig() Config {
 		AwsEndpoint:      envMap["AWS_ENDPOINT"],
 		AwsDefaultRegion: envMap["AWS_DEFAULT_REGION"],
 		KafkaBrokers:     strings.Split(envMap["KAFKA_BROKERS"], ","),
+		CnctBucket:       envMap["CNCT_BUCKET"],
+		AcctBucket:       envMap["ACCT_BUCKET"],
+		HoldBucket:       envMap["HOLD_BUCKET"],
+		TxnBucket:        envMap["TXN_BUCKET"],
 	}
 }
 
 type AWS struct {
 	S3            S3
 	PaginationLen *int32
+	Buckets
 }
 
 type S3 interface {
@@ -81,8 +94,17 @@ func MakeS3Client(cfg Config) *s3.Client {
 	return s3.NewFromConfig(awsCfg, s3Opts...)
 }
 
-func MakeAWS(s3Client *s3.Client) AWS {
-	return AWS{S3: s3Client, PaginationLen: nil}
+func MakeAWS(config Config, s3Client *s3.Client) AWS {
+	return AWS{
+		S3:            s3Client,
+		PaginationLen: nil,
+		Buckets: Buckets{
+			CnctBucket: Bucket(config.CnctBucket),
+			AcctBucket: Bucket(config.AcctBucket),
+			HoldBucket: Bucket(config.HoldBucket),
+			TxnBucket:  Bucket(config.TxnBucket),
+		},
+	}
 }
 
 func MakeSaramaConfig(config Config) *sarama.Config {

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"yodleeops/client"
+	"yodleeops/model"
 	openapi "yodleeops/openapi/sources"
 
 	"github.com/go-faster/jx"
@@ -91,17 +91,17 @@ func (state *State) StreamFiObjectLogs(w http.ResponseWriter, r *http.Request) {
 	profileIDs := strings.Split(values.Get("prefix"), ",")
 	subjects := strings.Split(values.Get("subjects"), ",")
 
-	var topics []client.Topic
+	var topics []model.Topic
 	for _, subject := range subjects {
 		switch openapi.FiSubject(subject) {
 		case openapi.FiSubjectConnections:
-			topics = append(topics, client.CnctRefreshTopic, client.CnctResponseTopic)
+			topics = append(topics, model.CnctRefreshTopic, model.CnctResponseTopic)
 		case openapi.FiSubjectAccounts:
-			topics = append(topics, client.AcctRefreshTopic, client.AcctResponseTopic)
+			topics = append(topics, model.AcctRefreshTopic, model.AcctResponseTopic)
 		case openapi.FiSubjectTransactions:
-			topics = append(topics, client.TxnRefreshTopic, client.TxnResponseTopic)
+			topics = append(topics, model.TxnRefreshTopic, model.TxnResponseTopic)
 		case openapi.FiSubjectHoldings:
-			topics = append(topics, client.HoldRefreshTopic, client.HoldResponseTopic)
+			topics = append(topics, model.HoldRefreshTopic, model.HoldResponseTopic)
 		}
 	}
 
@@ -142,19 +142,19 @@ func (state *State) StreamFiObjectLogs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func BucketFromSubject(subject openapi.FiSubject) client.Bucket {
-	var bucket client.Bucket
+func BucketFromSubject(buckets model.Buckets, subject openapi.FiSubject) model.Bucket {
+	var bucket model.Bucket
 	switch subject {
 	case openapi.FiSubjectConnections:
-		bucket = client.CnctBucket
+		bucket = buckets.CnctBucket
 	case openapi.FiSubjectAccounts:
-		bucket = client.AcctBucket
+		bucket = buckets.AcctBucket
 	case openapi.FiSubjectTransactions:
-		bucket = client.TxnBucket
+		bucket = buckets.TxnBucket
 	case openapi.FiSubjectHoldings:
-		bucket = client.HoldBucket
+		bucket = buckets.HoldBucket
 	default:
-		bucket = client.CnctBucket
+		bucket = buckets.CnctBucket
 	}
 	return bucket
 }
@@ -193,7 +193,7 @@ func (h *FiOpsAPIHandler) GetFiMetadataByPrefix(ctx context.Context, params open
 		return &openapi.GetFiMetadataByPrefixInternalServerError{ErrorCode: openapi.ErrorCodeFATALERROR, ErrorDesc: InternalServerErrorMessage}
 	}
 
-	bucket := BucketFromSubject(params.Subject)
+	bucket := BucketFromSubject(h.AWS.Buckets, params.Subject)
 
 	opsFiMetadata, nextCursor, err := ListFiMetadataByPrefix(appCtx, bucket, params.Prefix, params.Cursor.Value)
 	if err != nil {
@@ -215,7 +215,7 @@ func (h *FiOpsAPIHandler) GetFiMetadataByProfiles(ctx context.Context, params op
 	}
 
 	profileIDs := strings.Split(params.ProfileIDs, ",")
-	bucket := BucketFromSubject(params.Subject)
+	bucket := BucketFromSubject(h.AWS.Buckets, params.Subject)
 
 	var arrayCursor []string
 	if params.Cursor == "" {
@@ -256,7 +256,7 @@ func (h *FiOpsAPIHandler) GetFiObject(ctx context.Context, params openapi.GetFiO
 	}
 
 	keyInput := params.Key
-	bucketInput := BucketFromSubject(params.Subject)
+	bucketInput := BucketFromSubject(h.AWS.Buckets, params.Subject)
 
 	opsFiObject, err := GetFiObject(appCtx, bucketInput, keyInput)
 	if errors.Is(err, ErrKeyNotFound) {

@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"testing"
 
-	"yodleeops/client"
-	"yodleeops/client/fakes"
+	"yodleeops/model"
+	"yodleeops/model/fakes"
 	"yodleeops/testutil"
 	"yodleeops/yodlee"
 
@@ -80,10 +80,10 @@ func setupConsumersTest(t *testing.T) *State {
 
 type MockConsumers struct {
 	t         *testing.T
-	consumers map[client.Topic]Consumer
+	consumers map[model.Topic]Consumer
 }
 
-func (p *MockConsumers) ConsumeClaim(topic client.Topic, key string, value any) {
+func (p *MockConsumers) ConsumeClaim(topic model.Topic, key string, value any) {
 	v, err := json.Marshal(value)
 	require.NoError(p.t, err)
 
@@ -105,110 +105,112 @@ func (p *MockConsumers) ConsumeClaim(topic client.Topic, key string, value any) 
 
 var WantBroadcastMsgs = []any{
 	BroadcastInput[OpsProviderAccountRefresh, yodlee.DataExtractsProviderAccount]{
-		OriginTopic: client.CnctRefreshTopic,
+		OriginTopic: model.CnctRefreshTopic,
 		FiMessages: []OpsProviderAccountRefresh{
 			{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: client.CnctRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.CnctRefreshTopic},
 				Data:         ProviderAccountRefresh,
 			},
 		},
 	},
 	BroadcastInput[OpsAccountRefresh, yodlee.DataExtractsAccount]{
-		OriginTopic: client.AcctRefreshTopic,
+		OriginTopic: model.AcctRefreshTopic,
 		FiMessages: []OpsAccountRefresh{
 			{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: client.AcctRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.AcctRefreshTopic},
 				Data:         AccountRefresh,
 			},
 		},
 	},
 	BroadcastInput[OpsHoldingRefresh, yodlee.DataExtractsHolding]{
-		OriginTopic: client.HoldRefreshTopic,
+		OriginTopic: model.HoldRefreshTopic,
 		FiMessages: []OpsHoldingRefresh{
 			{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: client.HoldRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.HoldRefreshTopic},
 				Data:         HoldingRefresh,
 			},
 		},
 	},
 	BroadcastInput[OpsTransactionRefresh, yodlee.DataExtractsTransaction]{
-		OriginTopic: client.TxnRefreshTopic,
+		OriginTopic: model.TxnRefreshTopic,
 		FiMessages: []OpsTransactionRefresh{
 			{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: client.TxnRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.TxnRefreshTopic},
 				Data:         TransactionRefresh,
 			},
 		},
 	},
 	BroadcastInput[OpsProviderAccount, yodlee.ProviderAccount]{
-		OriginTopic: client.CnctResponseTopic,
+		OriginTopic: model.CnctResponseTopic,
 		FiMessages: []OpsProviderAccount{
 			{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: client.CnctResponseTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.CnctResponseTopic},
 				Data:         ProviderAccountResponse,
 			},
 		},
 	},
 	BroadcastInput[OpsAccount, yodlee.Account]{
-		OriginTopic: client.AcctResponseTopic,
+		OriginTopic: model.AcctResponseTopic,
 		FiMessages: []OpsAccount{
 			{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: client.AcctResponseTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.AcctResponseTopic},
 				Data:         AccountResponse,
 			},
 		},
 	},
 	BroadcastInput[OpsHolding, yodlee.Holding]{
-		OriginTopic: client.HoldResponseTopic,
+		OriginTopic: model.HoldResponseTopic,
 		FiMessages: []OpsHolding{
 			{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: client.HoldResponseTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.HoldResponseTopic},
 				Data:         HoldingResponse,
 			},
 		},
 	},
 	BroadcastInput[OpsTransaction, yodlee.TransactionWithDateTime]{
-		OriginTopic: client.TxnResponseTopic,
+		OriginTopic: model.TxnResponseTopic,
 		FiMessages: []OpsTransaction{
 			{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: client.TxnResponseTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.TxnResponseTopic},
 				Data:         TransactionResponse,
 			},
 		},
 	},
 }
 
-var WantIngestedKeys = []testutil.WantKey{
-	{Bucket: client.CnctBucket, Key: "p1/1/10/2025-06-12"},
-	{Bucket: client.CnctBucket, Key: "p1/1/10/2025-06-13"},
-	{Bucket: client.CnctBucket, Key: "p1/1/20/2025-06-14"},
-	//{Bucket: infra.CnctBucket, Key: "p1/1/30/2025-06-15"},
-	{Bucket: client.CnctBucket, Key: "p1/1/99/2025-06-13"},
-	{Bucket: client.CnctBucket, Key: "p1/1/77/2025-06-13"},
+func wantIngestedKeys(aws model.AWS) []testutil.WantKey {
+	return []testutil.WantKey{
+		{Bucket: aws.CnctBucket, Key: "p1/1/10/2025-06-12"},
+		{Bucket: aws.CnctBucket, Key: "p1/1/10/2025-06-13"},
+		{Bucket: aws.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		//{Bucket: infra.CnctBucket, Key: "p1/1/30/2025-06-15"},
+		{Bucket: aws.CnctBucket, Key: "p1/1/99/2025-06-13"},
+		{Bucket: aws.CnctBucket, Key: "p1/1/77/2025-06-13"},
 
-	// Accounts
-	{Bucket: client.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
-	{Bucket: client.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
-	{Bucket: client.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
-	{Bucket: client.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
-	{Bucket: client.AcctBucket, Key: "p1/1/99/999/2025-06-13"},
-	{Bucket: client.AcctBucket, Key: "p1/1/77/777/2025-06-13"},
+		// AcctBucket
+		{Bucket: aws.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
+		{Bucket: aws.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
+		{Bucket: aws.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: aws.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
+		{Bucket: aws.AcctBucket, Key: "p1/1/99/999/2025-06-13"},
+		{Bucket: aws.AcctBucket, Key: "p1/1/77/777/2025-06-13"},
 
-	// Holdings
-	{Bucket: client.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
-	{Bucket: client.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
-	{Bucket: client.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
-	{Bucket: client.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
-	{Bucket: client.HoldBucket, Key: "p1/1/999/9999/2025-06-13"},
-	{Bucket: client.HoldBucket, Key: "p1/1/777/7777/2025-06-13"},
+		// HoldBucket
+		{Bucket: aws.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
+		{Bucket: aws.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
+		{Bucket: aws.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: aws.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
+		{Bucket: aws.HoldBucket, Key: "p1/1/999/9999/2025-06-13"},
+		{Bucket: aws.HoldBucket, Key: "p1/1/777/7777/2025-06-13"},
 
-	// Transactions
-	//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
-	//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
-	{Bucket: client.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
-	{Bucket: client.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
-	{Bucket: client.TxnBucket, Key: "p1/1/999/9999/2025-06-13T07:06:18Z"},
-	{Bucket: client.TxnBucket, Key: "p1/1/777/7777/2025-06-13T07:06:18Z"},
+		// TxnBucket
+		//{Bucket: aws.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		//{Bucket: aws.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		{Bucket: aws.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: aws.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
+		{Bucket: aws.TxnBucket, Key: "p1/1/999/9999/2025-06-13T07:06:18Z"},
+		{Bucket: aws.TxnBucket, Key: "p1/1/777/7777/2025-06-13T07:06:18Z"},
+	}
 }
 
 func TestConsumers(t *testing.T) {
@@ -226,54 +228,54 @@ func TestConsumers(t *testing.T) {
 
 	// when
 	tests := []struct {
-		topic client.Topic
+		topic model.Topic
 		value any
 	}{
 		// Refreshes
 		{
-			topic: client.CnctRefreshTopic,
+			topic: model.CnctRefreshTopic,
 			value: []yodlee.DataExtractsProviderAccount{ProviderAccountRefresh},
 		},
 		{
-			topic: client.AcctRefreshTopic,
+			topic: model.AcctRefreshTopic,
 			value: []yodlee.DataExtractsAccount{AccountRefresh},
 		},
 		{
-			topic: client.HoldRefreshTopic,
+			topic: model.HoldRefreshTopic,
 			value: []yodlee.DataExtractsHolding{HoldingRefresh},
 		},
 		{
-			topic: client.TxnRefreshTopic,
+			topic: model.TxnRefreshTopic,
 			value: []yodlee.DataExtractsTransaction{TransactionRefresh},
 		},
 		// Responses
 		{
-			topic: client.CnctResponseTopic,
+			topic: model.CnctResponseTopic,
 			value: yodlee.ProviderAccountResponse{ProviderAccount: []yodlee.ProviderAccount{ProviderAccountResponse}},
 		},
 		{
-			topic: client.AcctResponseTopic,
+			topic: model.AcctResponseTopic,
 			value: yodlee.AccountResponse{Account: []yodlee.Account{AccountResponse}},
 		},
 		{
-			topic: client.HoldResponseTopic,
+			topic: model.HoldResponseTopic,
 			value: yodlee.HoldingResponse{Holding: []yodlee.Holding{HoldingResponse}},
 		},
 		{
-			topic: client.TxnResponseTopic,
+			topic: model.TxnResponseTopic,
 			value: yodlee.TransactionResponse{Transaction: []yodlee.TransactionWithDateTime{TransactionResponse}},
 		},
 		{
-			topic: client.DeleteRetryTopic,
+			topic: model.DeleteRetryTopic,
 			value: []DeleteRetry{
 				{
 					Kind:   ListKind,
-					Bucket: client.TxnBucket,
+					Bucket: state.AWS.TxnBucket,
 					Prefix: "p1/1/100/3000",
 				},
 				{
 					Kind:   DeleteKind,
-					Bucket: client.CnctBucket,
+					Bucket: state.AWS.CnctBucket,
 					Keys:   []string{"p1/1/30/2025-06-15"},
 				},
 			},
@@ -296,7 +298,7 @@ func TestConsumers(t *testing.T) {
 	testutil.Equal(t, WantBroadcastMsgs, broadcastMsgs, cmpopts.IgnoreFields(OpsFiMessage{}, "Timestamp"))
 
 	// removed keys are commented.
-	assert.ElementsMatch(t, WantIngestedKeys, testutil.GetAllKeys(t, state.AWS))
+	assert.ElementsMatch(t, wantIngestedKeys(state.AWS), testutil.GetAllKeys(t, state.AWS))
 }
 
 var (
@@ -333,49 +335,49 @@ func TestConsumers_S3Errors(t *testing.T) {
 
 	// when
 	tests := []struct {
-		topic      client.Topic
+		topic      model.Topic
 		failPutKey string
 		value      any
 	}{
 		// Refreshes
 		{
-			topic:      client.CnctRefreshTopic,
+			topic:      model.CnctRefreshTopic,
 			failPutKey: "p1/1/99/2025-06-13",
 			value:      ProviderAccountRefreshSlice,
 		},
 		{
-			topic:      client.AcctRefreshTopic,
+			topic:      model.AcctRefreshTopic,
 			failPutKey: "p1/1/99/999/2025-06-13",
 			value:      AccountRefreshSlice,
 		},
 		{
-			topic:      client.HoldRefreshTopic,
+			topic:      model.HoldRefreshTopic,
 			failPutKey: "p1/1/999/9999/2025-06-13",
 			value:      HoldingRefreshSlice,
 		},
 		{
-			topic:      client.TxnRefreshTopic,
+			topic:      model.TxnRefreshTopic,
 			failPutKey: "p1/1/999/9999/2025-06-13T07:06:18Z",
 			value:      TransactionRefreshSlice,
 		},
 		// Responses
 		{
-			topic:      client.CnctResponseTopic,
+			topic:      model.CnctResponseTopic,
 			failPutKey: "p1/1/77/2025-06-13",
 			value:      ProviderAccountResponseSlice,
 		},
 		{
-			topic:      client.AcctResponseTopic,
+			topic:      model.AcctResponseTopic,
 			failPutKey: "p1/1/77/777/2025-06-13",
 			value:      AccountResponseSlice,
 		},
 		{
-			topic:      client.HoldResponseTopic,
+			topic:      model.HoldResponseTopic,
 			failPutKey: "p1/1/777/7777/2025-06-13",
 			value:      HoldingResponseSlice,
 		},
 		{
-			topic:      client.TxnResponseTopic,
+			topic:      model.TxnResponseTopic,
 			failPutKey: "p1/1/777/7777/2025-06-13T07:06:18Z",
 			value:      TransactionResponseSlice,
 		},

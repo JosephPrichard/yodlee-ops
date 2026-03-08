@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"yodleeops/client"
+	"yodleeops/model"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/testcontainers/testcontainers-go"
@@ -20,12 +20,16 @@ const (
 
 var localstackCont testcontainers.Container
 
-func SetupITest(t *testing.T) client.AWS {
+func SetupITest(t *testing.T) model.AWS {
 	ctx := context.Background()
 
-	config := client.Config{
+	config := model.Config{
 		AwsDefaultRegion: "us-east-1",
 		IsLocal:          true,
+		CnctBucket:       "cnct-bucket",
+		AcctBucket:       "acct-bucket",
+		HoldBucket:       "hold-bucket",
+		TxnBucket:        "txn-bucket",
 	}
 	config.AwsEndpoint = startLocalstackCont(ctx, t)
 
@@ -58,15 +62,15 @@ func startLocalstackCont(ctx context.Context, t *testing.T) string {
 	return fmt.Sprintf("http://%s:%s", host, port.Port())
 }
 
-func initTestAWS(t *testing.T, config client.Config) client.AWS {
-	s3Client := client.MakeS3Client(config)
-	aws := client.MakeAWS(s3Client)
+func initTestAWS(t *testing.T, config model.Config) model.AWS {
+	s3Client := model.MakeS3Client(config)
+	aws := model.MakeAWS(config, s3Client)
 
-	for _, bucket := range []client.Bucket{
-		client.CnctBucket,
-		client.AcctBucket,
-		client.HoldBucket,
-		client.TxnBucket,
+	for _, bucket := range []model.Bucket{
+		aws.CnctBucket,
+		aws.AcctBucket,
+		aws.TxnBucket,
+		aws.HoldBucket,
 	} {
 		if _, err := s3Client.CreateBucket(context.Background(), &s3.CreateBucketInput{
 			Bucket: bucket.String(),
@@ -75,7 +79,7 @@ func initTestAWS(t *testing.T, config client.Config) client.AWS {
 		}
 	}
 
-	SeedS3Buckets(t, s3Client)
+	SeedS3Buckets(t, s3Client, aws.Buckets)
 
 	return aws
 }

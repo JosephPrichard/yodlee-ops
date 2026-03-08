@@ -32,6 +32,8 @@ func (*ConsumerHandler[Value]) Cleanup(sarama.ConsumerGroupSession) error {
 
 func (consumer *ConsumerHandler[Value]) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	for message := range claim.Messages() {
+		strKey := string(message.Key)
+
 		ctx := context.WithValue(context.Background(), "trace", uuid.NewString())
 
 		start := time.Now()
@@ -43,10 +45,10 @@ func (consumer *ConsumerHandler[Value]) ConsumeClaim(session sarama.ConsumerGrou
 			continue
 		}
 
-		consumer.OnMessage(ctx, string(message.Key), data)
+		consumer.OnMessage(ctx, strKey, data)
 		session.MarkMessage(message, "")
 
-		slog.InfoContext(ctx, "consumed message from kafka topic", "message", message, "elapsed", time.Since(start))
+		slog.InfoContext(ctx, "consumed message from kafka topic", "key", strKey, "elapsed", time.Since(start))
 	}
 	return nil
 }

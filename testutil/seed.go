@@ -5,20 +5,20 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"testing"
 
-	"yodleeops/client"
+	"yodleeops/model"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/require"
 )
 
-func SeedS3Buckets(t *testing.T, s3Client *s3.Client) {
+func SeedS3Buckets(t *testing.T, s3Client *s3.Client, buckets model.Buckets) {
 	// clear all objects already in the bucket
-	for _, bucket := range []client.Bucket{
-		client.CnctBucket,
-		client.AcctBucket,
-		client.HoldBucket,
-		client.TxnBucket,
+	for _, bucket := range []model.Bucket{
+		buckets.CnctBucket,
+		buckets.AcctBucket,
+		buckets.HoldBucket,
+		buckets.TxnBucket,
 	} {
 		paginator := s3.NewListObjectVersionsPaginator(s3Client, &s3.ListObjectVersionsInput{
 			Bucket: bucket.String(),
@@ -61,31 +61,32 @@ func SeedS3Buckets(t *testing.T, s3Client *s3.Client) {
 	// seed the bucket with data to test deletions AND to ensure that inserts handle existing keys properly
 	// "body" can be anything because insertion does not look at this information
 	for _, record := range []struct {
-		Bucket client.Bucket
+		Bucket model.Bucket
 		Key    string
 	}{
-		{Bucket: client.CnctBucket, Key: "p1/1/10/2025-06-12"},
-		{Bucket: client.CnctBucket, Key: "p1/1/10/2025-06-13"},
-		{Bucket: client.CnctBucket, Key: "p1/1/20/2025-06-14"},
-		{Bucket: client.CnctBucket, Key: "p1/1/30/2025-06-15"},
+		// CnctBucket
+		{Bucket: buckets.CnctBucket, Key: "p1/1/10/2025-06-12"},
+		{Bucket: buckets.CnctBucket, Key: "p1/1/10/2025-06-13"},
+		{Bucket: buckets.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		{Bucket: buckets.CnctBucket, Key: "p1/1/30/2025-06-15"},
 
-		// Accounts
-		{Bucket: client.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
-		{Bucket: client.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
-		{Bucket: client.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
-		{Bucket: client.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
+		// AcctBucket
+		{Bucket: buckets.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
+		{Bucket: buckets.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
+		{Bucket: buckets.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: buckets.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
 
-		// Holdings
-		{Bucket: client.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
-		{Bucket: client.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
-		{Bucket: client.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
-		{Bucket: client.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
+		// HoldBucket
+		{Bucket: buckets.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
+		{Bucket: buckets.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
+		{Bucket: buckets.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: buckets.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
 
-		// Transactions
-		{Bucket: client.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
-		{Bucket: client.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
-		{Bucket: client.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
-		{Bucket: client.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
+		// TxnBucket
+		{Bucket: buckets.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		{Bucket: buckets.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		{Bucket: buckets.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: buckets.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 	} {
 		_, err := s3Client.PutObject(t.Context(), &s3.PutObjectInput{
 			Bucket: record.Bucket.String(),

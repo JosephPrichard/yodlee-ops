@@ -9,7 +9,7 @@ import (
 	"math/rand"
 	"strconv"
 	"time"
-	"yodleeops/client"
+	"yodleeops/model"
 	"yodleeops/yodlee"
 )
 
@@ -196,8 +196,8 @@ func makeHoldResponses(n int) yodlee.HoldingResponse {
 	return yodlee.HoldingResponse{Holding: arr}
 }
 
-func ExecuteDemoProducer(serverConfig client.Config, kafkaConfig *sarama.Config) {
-	producer := client.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
+func ExecuteDemoProducer(serverConfig model.Config, kafkaConfig *sarama.Config) {
+	producer := model.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
 
 	slog.Info("starting test producer", "serverConfig", serverConfig, "kafkaConfig", fmt.Sprintf("%+v", kafkaConfig)) // fmt.Sprintf is needed to serialize closures.
 
@@ -205,35 +205,35 @@ func ExecuteDemoProducer(serverConfig client.Config, kafkaConfig *sarama.Config)
 	for range ticker.C {
 		topicKind := rand.Intn(8)
 
-		var topic client.Topic
+		var topic model.Topic
 		var value any
 
 		n := rand.Intn(10)
 
 		switch topicKind {
 		case 0:
-			topic = client.CnctRefreshTopic
+			topic = model.CnctRefreshTopic
 			value = makeCnctRefreshes(n)
 		case 1:
-			topic = client.AcctRefreshTopic
+			topic = model.AcctRefreshTopic
 			value = makeAcctRefreshes(n)
 		case 2:
-			topic = client.TxnRefreshTopic
+			topic = model.TxnRefreshTopic
 			value = makeTxnRefreshes(n)
 		case 3:
-			topic = client.HoldRefreshTopic
+			topic = model.HoldRefreshTopic
 			value = makeHoldRefreshes(n)
 		case 4:
-			topic = client.CnctResponseTopic
+			topic = model.CnctResponseTopic
 			value = makeCnctResponses(n)
 		case 5:
-			topic = client.AcctResponseTopic
+			topic = model.AcctResponseTopic
 			value = makeAcctResponses(n)
 		case 6:
-			topic = client.TxnResponseTopic
+			topic = model.TxnResponseTopic
 			value = makeTxnResponses(n)
 		case 7:
-			topic = client.HoldResponseTopic
+			topic = model.HoldResponseTopic
 			value = makeHoldResponses(n)
 		default:
 			continue

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"yodleeops/client"
+	"yodleeops/model"
 	"yodleeops/yodlee"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -38,12 +38,12 @@ func IngestCnctResponses(ctx Context, profileId string, response yodlee.Provider
 		}
 		cnct := OpsProviderAccount{
 			Data:         cnct,
-			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: client.CnctResponseTopic},
+			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: model.CnctResponseTopic},
 		}
 		putList = append(putList, PutInput[OpsProviderAccount]{Key: key.String(), Input: cnct})
 	}
 
-	joinPuts := PutObjects(ctx, client.CnctBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.AWS.CnctBucket, putList)
 
 	slog.InfoContext(ctx, "finished ingest cnct responses", "elapsed", time.Since(start))
 	return joinPuts()
@@ -63,12 +63,12 @@ func IngestAcctResponses(ctx Context, profileId string, response yodlee.AccountR
 		}
 		acct := OpsAccount{
 			Data:         acct,
-			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: client.AcctResponseTopic},
+			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: model.AcctResponseTopic},
 		}
 		putList = append(putList, PutInput[OpsAccount]{Key: key.String(), Input: acct})
 	}
 
-	joinPuts := PutObjects(ctx, client.AcctBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.AWS.AcctBucket, putList)
 
 	slog.InfoContext(ctx, "finished ingest acct responses", "elapsed", time.Since(start))
 	return joinPuts()
@@ -88,12 +88,12 @@ func IngestHoldResponses(ctx Context, profileId string, response yodlee.HoldingR
 		}
 		hold := OpsHolding{
 			Data:         hold,
-			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: client.HoldResponseTopic},
+			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: model.HoldResponseTopic},
 		}
 		putList = append(putList, PutInput[OpsHolding]{Key: key.String(), Input: hold})
 	}
 
-	joinPuts := PutObjects(ctx, client.HoldBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.AWS.HoldBucket, putList)
 
 	slog.InfoContext(ctx, "finished ingest hold responses", "elapsed", time.Since(start))
 	return joinPuts()
@@ -113,12 +113,12 @@ func IngestTxnResponses(ctx Context, profileId string, response yodlee.Transacti
 		}
 		txn := OpsTransaction{
 			Data:         txn,
-			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: client.TxnResponseTopic},
+			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: model.TxnResponseTopic},
 		}
 		putList = append(putList, PutInput[OpsTransaction]{Key: key.String(), Input: txn})
 	}
 
-	joinPuts := PutObjects(ctx, client.TxnBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.AWS.TxnBucket, putList)
 
 	slog.InfoContext(ctx, "finished ingest txn responses", "elapsed", time.Since(start))
 	return joinPuts()
@@ -152,13 +152,13 @@ func IngestCnctRefreshes(ctx Context, profileId string, cncts []yodlee.DataExtra
 		} else {
 			cnct := OpsProviderAccountRefresh{
 				Data:         *cnct,
-				OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: client.CnctRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: model.CnctRefreshTopic},
 			}
 			putList = append(putList, PutInput[OpsProviderAccountRefresh]{Key: key.String(), Input: cnct})
 		}
 	}
 
-	joinPuts := PutObjects(ctx, client.CnctBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.AWS.CnctBucket, putList)
 	deleteErrs := DeleteCncts(ctx, removeCnctKeys)
 
 	slog.InfoContext(ctx, "finished ingest cnct refreshes", "elapsed", time.Since(start))
@@ -185,13 +185,13 @@ func IngestAcctsRefreshes(ctx Context, profileId string, accts []yodlee.DataExtr
 		} else {
 			acct := OpsAccountRefresh{
 				Data:         *acct,
-				OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: client.AcctRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: model.AcctRefreshTopic},
 			}
 			putList = append(putList, PutInput[OpsAccountRefresh]{Key: key.String(), Input: acct})
 		}
 	}
 
-	joinPuts := PutObjects(ctx, client.AcctBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.AWS.AcctBucket, putList)
 	deleteErrs := DeleteAccts(ctx, removeAcctKeys)
 
 	slog.InfoContext(ctx, "finished ingest accts refreshes", "elapsed", time.Since(start))
@@ -213,12 +213,12 @@ func IngestHoldRefreshes(ctx Context, profileId string, holds []yodlee.DataExtra
 		}
 		hold := OpsHoldingRefresh{
 			Data:         hold,
-			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: client.HoldRefreshTopic},
+			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: model.HoldRefreshTopic},
 		}
 		putList = append(putList, PutInput[OpsHoldingRefresh]{Key: key.String(), Input: hold})
 	}
 
-	joinPuts := PutObjects(ctx, client.HoldBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.AWS.HoldBucket, putList)
 
 	slog.InfoContext(ctx, "finished ingest hold refreshes", "elapsed", time.Since(start))
 
@@ -239,7 +239,7 @@ func IngestTxnRefreshes(ctx Context, profileId string, txns []yodlee.DataExtract
 				AcctID:    txn.AccountId,
 				ChildID:   txn.Id,
 			}
-			txnPrefixes[Prefix{Value: prefix.String(), Bucket: client.TxnBucket}] = true
+			txnPrefixes[Prefix{Value: prefix.String(), Bucket: ctx.AWS.TxnBucket}] = true
 		} else {
 			key := TxnKey{
 				ProfileId: profileId,
@@ -249,13 +249,13 @@ func IngestTxnRefreshes(ctx Context, profileId string, txns []yodlee.DataExtract
 			}
 			txn := OpsTransactionRefresh{
 				Data:         *txn,
-				OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: client.TxnRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: model.TxnRefreshTopic},
 			}
 			putList = append(putList, PutInput[OpsTransactionRefresh]{Key: key.String(), Input: txn})
 		}
 	}
 
-	joinPuts := PutObjects(ctx, client.TxnBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.AWS.TxnBucket, putList)
 	deleteErrs := DeletePrefixes(ctx, txnPrefixes)
 
 	slog.InfoContext(ctx, "finished ingest txn refreshes", "elapsed", time.Since(start))
@@ -302,7 +302,7 @@ func (o PutInput[T]) String() string {
 }
 
 // PutObjects uploads objects to a given Bucket async and returns any failed uploads when the task is joined
-func PutObjects[Input any](ctx Context, bucket client.Bucket, inputObjects []PutInput[Input]) func() []PutResult[Input] {
+func PutObjects[Input any](ctx Context, bucket model.Bucket, inputObjects []PutInput[Input]) func() []PutResult[Input] {
 	results := make([]PutResult[Input], len(inputObjects))
 
 	var wg sync.WaitGroup
@@ -433,7 +433,7 @@ func (ds *DeleteSupervisor) AddResult(deleteResult DeleteResult) {
 	ds.lock.Unlock()
 }
 
-func (ds *DeleteSupervisor) DeleteList(bucket client.Bucket, listIDsChan chan ListResult) {
+func (ds *DeleteSupervisor) DeleteList(bucket model.Bucket, listIDsChan chan ListResult) {
 	ds.Go(func() {
 		for listResult := range listIDsChan {
 			slog.InfoContext(ds.context, "deleting listed ids", "Bucket", bucket, "listResult", listResult)
@@ -456,7 +456,7 @@ type DeleteChunk struct {
 	Keys   []s3types.ObjectIdentifier
 }
 
-func (ds *DeleteSupervisor) deleteIDs(bucket client.Bucket, keys []string) {
+func (ds *DeleteSupervisor) deleteIDs(bucket model.Bucket, keys []string) {
 	ds.Go(func() {
 		deleteResult := DeleteObjects(ds.context, bucket, keys)
 		ds.AddResult(deleteResult)
@@ -490,24 +490,24 @@ func DeleteCncts(ctx Context, keys []CnctKey) []DeleteResult {
 	deletes := makeDeleteSupervisor(ctx)
 
 	for cnctPrefix := range cnctPrefixes {
-		deletes.DeleteList(client.CnctBucket, ListObjectsByPrefix(ctx, client.CnctBucket, cnctPrefix))
+		deletes.DeleteList(ctx.AWS.CnctBucket, ListObjectsByPrefix(ctx, ctx.AWS.CnctBucket, cnctPrefix))
 	}
 
 	// in addition to deleting each cnct by prefix, we need to parse the acctID and create an acctPrefix to delete txns and holdings.
 	listAccts := makeListAcctsSupervisor(ctx)
 
 	for cnctPrefix := range cnctPrefixes {
-		listIDsChan := ListObjectsByPrefix(ctx, client.AcctBucket, cnctPrefix)
+		listIDsChan := ListObjectsByPrefix(ctx, ctx.AWS.AcctBucket, cnctPrefix)
 		deleteIDsChan := listAccts.InterceptListedPrefixes(listIDsChan)
-		deletes.DeleteList(client.AcctBucket, deleteIDsChan)
+		deletes.DeleteList(ctx.AWS.AcctBucket, deleteIDsChan)
 	}
 
 	acctsPrefixTable := listAccts.Wait()
 
 	for acctPrefix := range acctsPrefixTable {
-		for _, bucket := range []client.Bucket{
-			client.HoldBucket,
-			client.TxnBucket,
+		for _, bucket := range []model.Bucket{
+			ctx.AWS.HoldBucket,
+			ctx.AWS.TxnBucket,
 		} {
 			deletes.DeleteList(bucket, ListObjectsByPrefix(ctx, bucket, acctPrefix))
 		}
@@ -539,22 +539,22 @@ func DeleteAccts(ctx Context, keys []AcctKey) []DeleteResult {
 	deletes := makeDeleteSupervisor(ctx)
 
 	for acctMemPrefix := range acctMembPrefixes {
-		for _, bucket := range []client.Bucket{
-			client.HoldBucket,
-			client.TxnBucket,
+		for _, bucket := range []model.Bucket{
+			ctx.AWS.HoldBucket,
+			ctx.AWS.TxnBucket,
 		} {
 			deletes.DeleteList(bucket, ListObjectsByPrefix(ctx, bucket, acctMemPrefix))
 		}
 	}
 	for acctPrefix := range acctPrefixes {
-		deletes.DeleteList(client.AcctBucket, ListObjectsByPrefix(ctx, client.AcctBucket, acctPrefix))
+		deletes.DeleteList(ctx.AWS.AcctBucket, ListObjectsByPrefix(ctx, ctx.AWS.AcctBucket, acctPrefix))
 	}
 
 	return deletes.wait()
 }
 
 type Prefix struct {
-	Bucket client.Bucket
+	Bucket model.Bucket
 	Value  string
 }
 
@@ -580,7 +580,7 @@ func DeletePrefixes(ctx Context, prefixes map[Prefix]bool) []DeleteResult {
 }
 
 type ListResult struct {
-	Bucket client.Bucket
+	Bucket model.Bucket
 	Prefix string
 	Keys   []string
 	Err    error
@@ -588,7 +588,7 @@ type ListResult struct {
 
 // ListObjectsByPrefix lists all object keys for a certain prefix in a Bucket and streams each page of data through a channel as they come.
 // aws s3 API does not support multiple buckets/prefixes per call, so each Bucket prefix needs its own api call.
-func ListObjectsByPrefix(ctx Context, bucket client.Bucket, prefix string) chan ListResult {
+func ListObjectsByPrefix(ctx Context, bucket model.Bucket, prefix string) chan ListResult {
 	resultsChan := make(chan ListResult)
 
 	// paginate through all objects under the given prefix for a Bucket and send each page to the channel. closes when all pages have been walked
@@ -637,13 +637,13 @@ func ListObjectsByPrefix(ctx Context, bucket client.Bucket, prefix string) chan 
 }
 
 type DeleteResult struct {
-	Bucket client.Bucket
+	Bucket model.Bucket
 	Prefix string
 	Keys   []string
 	Err    error
 }
 
-func DeleteObjects(ctx Context, bucket client.Bucket, keys []string) DeleteResult {
+func DeleteObjects(ctx Context, bucket model.Bucket, keys []string) DeleteResult {
 	objectIDs := make([]s3types.ObjectIdentifier, 0, len(keys))
 	for _, key := range keys {
 		objectIDs = append(objectIDs, s3types.ObjectIdentifier{Key: aws.String(key)})
