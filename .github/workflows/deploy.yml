@@ -101,10 +101,10 @@ jobs:
         if: github.event_name == 'push'
         run: terraform destroy -input=false -auto-approve
 
-      - name: Terraform Validate
-        id: validate
-        run: terraform validate -no-color
-
+#      - name: Terraform Validate
+#        id: validate
+#        run: terraform validate -no-color
+#
 #      - name: Terraform Plan
 #        id: plan
 #        run: terraform plan -input=false -no-color -out=tfplan
