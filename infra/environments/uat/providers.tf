@@ -12,7 +12,7 @@ terraform {
     bucket         = "yodlee-ops-tfstate-bucket-store-uat"
     key            = "terraform.tfstate"
     region         = "us-east-1"
-    dynamodb_table = "yodlee-ops-tfstate-lock-table-uat"
+    dynamodb_table = "yodlee-ops-tfstate-lock-table-store-uat"
     encrypt        = true
   }
 }
