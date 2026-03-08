@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"errors"
 	"github.com/IBM/sarama"
 	"log"
 	"log/slog"
@@ -148,4 +149,27 @@ func (p *IAMTokenProvider) Token() (*sarama.AccessToken, error) {
 		return nil, err
 	}
 	return &sarama.AccessToken{Token: token}, nil
+}
+
+// CreateKafkaTopics script to create all topics on startup. this config is a bit easier to manage than the auto create topics property
+func CreateKafkaTopics(kafkaBrokers []string, kafkaConfig *sarama.Config) {
+	admin, err := sarama.NewClusterAdmin(kafkaBrokers, kafkaConfig)
+	if err != nil {
+		log.Fatalf("failed to create cluster admin: %v", err)
+	}
+	defer admin.Close()
+	for _, topic := range TopicList {
+		err := admin.CreateTopic(string(topic), &sarama.TopicDetail{
+			NumPartitions:     16,
+			ReplicationFactor: 3,
+		}, false)
+		if err != nil {
+			if errors.Is(err, sarama.ErrTopicAlreadyExists) {
+				slog.Info("topic already exists", "topic", topic)
+				continue
+			}
+			log.Fatalf("failed to create topic %s: %v", topic, err)
+		}
+		slog.Info("created topic", "topic", topic)
+	}
 }

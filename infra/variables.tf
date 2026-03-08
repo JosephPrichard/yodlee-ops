@@ -62,16 +62,6 @@ variable "task_memory" {
   type        = number
 }
 
-variable "topic_partitions" {
-  description = "The number of partitions for each kafka topic"
-  type        = number
-}
-
-variable "topic_replication" {
-  description = "The replication factor for each kafka topic"
-  type        = number
-}
-
 variable "desired_count" {
   description = "Number of ECS tasks to run"
   type        = number
@@ -86,21 +76,4 @@ variable "buckets" {
     HOLD_BUCKET = "yodlee-holds-bucket"
     TXN_BUCKET  = "yodlee-txns-bucket"
   }
-}
-
-variable "kafka_topics" {
-  description = "Kafka topics to create"
-  type        = list(string)
-  default     = [
-    "cnct-refreshes",
-    "acct-refreshes",
-    "hold-refreshes",
-    "txn-refreshes",
-    "cnct-responses",
-    "acct-responses",
-    "hold-responses",
-    "txn-responses",
-    "delete-retry",
-    "broadcast"
-  ]
 }

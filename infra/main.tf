@@ -115,14 +115,6 @@ resource "aws_msk_configuration" "main" {
   PROPS
 }
 
-# you must comment this out the very first time `tfe deploy` is executed, it needs the msk cluster to be created on a previous deployment
-resource "kafka_topic" "main" {
-  for_each           = toset(var.kafka_topics)
-  name               = each.key
-  replication_factor = var.topic_replication
-  partitions         = var.topic_partitions
-}
-
 # ALB
 resource "aws_security_group" "alb" {
   name   = "${var.project}-${var.environment}-alb-sg"
@@ -248,7 +240,6 @@ resource "aws_iam_role_policy" "ecs_task_s3" {
 }
 
 # Allow the task to access all MSK topics for project
-# you must comment this out the very first time `tfe deploy` is executed, topics cannot be created on first deployment and policy requires ARN for topics.
 locals {
   kafka_topics_access = [
     for topic_name in var.kafka_topics : {

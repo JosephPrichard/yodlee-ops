@@ -6,14 +6,6 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
-    # kafka = {
-    #   source  = "Mongey/kafka"
-    #   version = "~> 0.7"
-    # }
-    kafka = {
-      source  = "Mongey/kafka"
-      version = "0.8.3"
-    }
   }
 
   backend "s3" {

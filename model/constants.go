@@ -40,3 +40,16 @@ const (
 	TxnResponseTopicGroupID  = "txn-responses-group"
 	DeleteRetryTopicGroupID  = "delete-retry-group"
 )
+
+var TopicList = []Topic{
+	CnctRefreshTopic,
+	AcctRefreshTopic,
+	HoldRefreshTopic,
+	TxnRefreshTopic,
+	CnctResponseTopic,
+	AcctResponseTopic,
+	HoldResponseTopic,
+	TxnResponseTopic,
+	DeleteRetryTopic,
+	BroadcastTopic,
+}
