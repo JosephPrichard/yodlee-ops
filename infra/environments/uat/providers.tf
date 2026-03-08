@@ -9,7 +9,7 @@ terraform {
   }
 
   backend "s3" {
-    bucket         = "yodlee-ops-tfstate-bucket-uat"
+    bucket         = "yodlee-ops-tfstate-bucket-store-uat"
     key            = "terraform.tfstate"
     region         = "us-east-1"
     dynamodb_table = "yodlee-ops-tfstate-lock-table-uat"
