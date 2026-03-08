@@ -377,6 +377,6 @@ resource "aws_ecs_service" "app" {
     container_port   = var.container_port
   }
 
-  health_check_grace_period_seconds = 3
+  health_check_grace_period_seconds = 30
   depends_on = [aws_lb_listener.http]
 }
