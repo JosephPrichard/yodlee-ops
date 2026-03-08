@@ -199,7 +199,7 @@ func makeHoldResponses(n int) yodlee.HoldingResponse {
 func ExecuteDemoProducer(serverConfig model.Config, kafkaConfig *sarama.Config) {
 	producer := model.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
 
-	slog.Info("starting test producer", "serverConfig", serverConfig, "kafkaConfig", fmt.Sprintf("%+v", kafkaConfig)) // fmt.Sprintf is needed to serialize closures.
+	slog.Info("starting test producer", "serverConfig", serverConfig, "kafkaConfig", fmt.Sprintf("%+v", kafkaConfig))
 
 	ticker := time.NewTicker(500 * time.Millisecond)
 	for range ticker.C {

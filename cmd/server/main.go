@@ -31,6 +31,7 @@ func main() {
 	s3Client := model.MakeS3Client(serverConfig)
 
 	kafkaConfig := model.MakeSaramaConfig(serverConfig)
+	model.CreateKafkaTopics(serverConfig.KafkaBrokers, kafkaConfig)
 	producer := model.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
 
 	// produces messages to topics to easily test that producer/consumers are working without an external producer. comment out in prod.
@@ -42,7 +43,7 @@ func main() {
 		FiMessageBroadcaster: &svc.FiMessageBroadcaster{},
 	}
 
-	slog.Info("starting consumer", "serverConfig", serverConfig, "kafkaConfig", fmt.Sprintf("%+v", kafkaConfig)) // fmt.Sprintf is needed to serialize closures.
+	slog.Info("starting consumer", "serverConfig", serverConfig, "kafkaConfig", fmt.Sprintf("%+v", kafkaConfig))
 
 	if err := svc.StartConsumers(context.Background(), serverConfig.KafkaBrokers, kafkaConfig, state); err != nil {
 		log.Fatalf("failed to start consumers: %v", err)

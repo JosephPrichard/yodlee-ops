@@ -70,7 +70,7 @@ func StartConsumers(ctx context.Context, kafkaBrokers []string, config *sarama.C
 		go func() {
 			for {
 				if err := consumerGroup.Consume(ctx, topics, consumer.Handler); err != nil {
-					slog.ErrorContext(ctx, "failed to start consumer group", "consumer", consumer, "err", err)
+					slog.ErrorContext(ctx, "failed to start consumer group", "consumer", fmt.Sprintf("+%v", consumer), "err", err)
 				}
 				// stop consumer loop when context is canceled.
 				if ctx.Err() != nil {
@@ -80,7 +80,7 @@ func StartConsumers(ctx context.Context, kafkaBrokers []string, config *sarama.C
 		}()
 	}
 
-	slog.Info("started consumers", "consumers", fmt.Sprintf("+%v", consumers)) // fmt.Sprintf is needed to serialize closures.
+	slog.Info("started consumers", "consumers", fmt.Sprintf("+%v", consumers))
 	return nil
 }
 
