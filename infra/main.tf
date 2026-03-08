@@ -34,6 +34,87 @@ resource "aws_s3_bucket_public_access_block" "yodlee-ops-buckets" {
   restrict_public_buckets = true
 }
 
+# MSK
+# resource "aws_security_group" "msk" {
+#   name   = "${var.project}-${var.environment}-msk-sg"
+#   vpc_id = module.vpc.vpc_id
+#
+#   ingress {
+#     description     = "Kafka IAM/TLS from ECS"
+#     from_port       = 9098
+#     to_port         = 9098
+#     protocol        = "tcp"
+#     security_groups = [aws_security_group.ecs.id]
+#   }
+#
+#   egress {
+#     from_port   = 0
+#     to_port     = 0
+#     protocol    = "-1"
+#     cidr_blocks = ["0.0.0.0/0"]
+#   }
+# }
+#
+# locals {
+#   msk_cluster_name = "${var.project}-${var.environment}"
+# }
+#
+# resource "aws_msk_cluster" "main" {
+#   cluster_name           = local.msk_cluster_name
+#   kafka_version          = "3.5.1"
+#   number_of_broker_nodes = 2  # one per AZ (2 AZs)
+#
+#   broker_node_group_info {
+#     instance_type   = "kafka.t3.small"
+#     client_subnets  = module.vpc.private_subnets
+#     security_groups = [aws_security_group.msk.id]
+#
+#     storage_info {
+#       ebs_storage_info {
+#         volume_size = 20
+#       }
+#     }
+#   }
+#
+#   client_authentication {
+#     sasl {
+#       iam = true
+#     }
+#   }
+#
+#   encryption_info {
+#     encryption_in_transit {
+#       client_broker = "TLS"
+#       in_cluster    = true
+#     }
+#   }
+#
+#   configuration_info {
+#     arn      = aws_msk_configuration.main.arn
+#     revision = aws_msk_configuration.main.latest_revision
+#   }
+# }
+#
+# resource "aws_msk_configuration" "main" {
+#   name           = "${var.project}-${var.environment}-config"
+#   kafka_versions = ["3.5.1"]
+#
+#   server_properties = <<-PROPS
+#     auto.create.topics.enable=false
+#     default.replication.factor=3
+#     min.insync.replicas=1
+#     num.partitions=64
+#   PROPS
+# }
+#
+# resource "aws_msk_topic" "main" {
+#   for_each             = toset(var.kafka_topics)
+#   cluster_arn          = aws_msk_cluster.main.arn
+#   topic_name           = var.kafka_topic
+#   replication_factor   = each.key
+#   partition_count      = 64
+# }
+
 # ALB
 resource "aws_security_group" "alb" {
   name   = "${var.project}-${var.environment}-alb-sg"
@@ -152,6 +233,44 @@ resource "aws_iam_role_policy" "ecs_task_s3" {
   })
 }
 
+# Allow the task to access all MSK topics for project
+# resource "aws_iam_role_policy" "ecs_task_msk" {
+#   name = "msk-access"
+#   role = aws_iam_role.ecs_task.id
+#
+#   policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [
+#       {
+#         Effect = "Allow"
+#         Action = [
+#           "kafka-cluster:Connect",
+#           "kafka-cluster:AlterCluster",
+#           "kafka-cluster:DescribeCluster"
+#         ]
+#         Resource = aws_msk_cluster.main.arn
+#       },
+#       {
+#         Effect = "Allow"
+#         Action = [
+#           "kafka-cluster:*Topic*",
+#           "kafka-cluster:ReadData",
+#           "kafka-cluster:WriteData"
+#         ]
+#         Resource = "arn:aws:kafka:${var.aws_region}:${data.aws_caller_identity.current.account_id}:topic/${local.msk_cluster_name}/*/${var.kafka_topic}"
+#       },
+#       {
+#         Effect = "Allow"
+#         Action = [
+#           "kafka-cluster:AlterGroup",
+#           "kafka-cluster:DescribeGroup"
+#         ]
+#         Resource = "arn:aws:kafka:${var.aws_region}:${data.aws_caller_identity.current.account_id}:group/${local.msk_cluster_name}-${var.environment}/*/*"
+#       }
+#     ]
+#   })
+# }
+
 # CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "app" {
   name              = "/ecs/${var.project}-${var.environment}"
@@ -163,7 +282,7 @@ locals {
   container_env_vars = [
     for k, v in merge(
       local.buckets,
-      { KAFKA_BROKERS = "" }
+      # { KAFKA_BROKERS = aws_msk_cluster.main.bootstrap_brokers_sasl_iam }
     ) : {
       name = k,
       value = v
