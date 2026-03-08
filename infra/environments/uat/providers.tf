@@ -8,11 +8,12 @@ terraform {
     }
   }
 
+  # quick dirty commit to teardown infra in yodlee-ops-tfstate-bucket
   backend "s3" {
-    bucket         = "yodlee-ops-tfstate-bucket-uat"
+    bucket         = "yodlee-ops-tfstate-bucket"
     key            = "terraform.tfstate"
     region         = "us-east-1"
-    dynamodb_table = "yodlee-ops-tfstate-lock-table-uat"
+    dynamodb_table = "yodlee-ops-tfstate-lock-table"
     encrypt        = true
   }
 }
