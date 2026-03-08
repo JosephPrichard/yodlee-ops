@@ -88,7 +88,7 @@ func (state *State) StreamFiObjectLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	values := r.URL.Query()
-	profileIDs := strings.Split(values.Get("prefix"), ",")
+	profileIDs := strings.Split(values.Get("profileIDs"), ",")
 	subjects := strings.Split(values.Get("subjects"), ",")
 
 	var topics []model.Topic

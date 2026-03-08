@@ -72,7 +72,7 @@ func TestStreamFiObjectLogs(t *testing.T) {
 	defer cancel()
 
 	// when
-	query := fmt.Sprintf("%s/events/taillog?prefix=profile1,profile2,profile3&subjects=%s,%s",
+	query := fmt.Sprintf("%s/events/taillog?profileIDs=profile1,profile2,profile3&subjects=%s,%s",
 		testServer.URL+ApiUrl, openapi.FiSubjectHoldings, openapi.FiSubjectTransactions)
 	r, err := http.NewRequestWithContext(ctx, http.MethodGet, query, nil)
 	require.NoError(t, err)

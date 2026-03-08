@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/IBM/sarama"
+	"github.com/google/uuid"
 	"log/slog"
 	"yodleeops/model"
 	"yodleeops/yodlee"
@@ -50,10 +51,14 @@ func MakeConsumers(state *State) map[model.Topic]Consumer {
 			GroupID: model.TxnResponseTopicGroupID,
 			Handler: MakeStateConsumerHandler(state, ConsumeTxnResponseMessage),
 		},
-		// the broadcast topic has a dynamically computed group id because each node receives the message
 		model.DeleteRetryTopic: {
 			GroupID: model.DeleteRetryTopicGroupID,
 			Handler: MakeStateConsumerHandler(state, ConsumeDeleteRetryMessage),
+		},
+		// the broadcast topic has a dynamically computed group id because each node receives the message
+		model.BroadcastTopic: {
+			GroupID: uuid.NewString(),
+			Handler: MakeStateConsumerHandler(state, ConsumeBroadcastMessage),
 		},
 	}
 }
@@ -63,7 +68,7 @@ func StartConsumers(ctx context.Context, kafkaBrokers []string, config *sarama.C
 	for topic, consumer := range consumers {
 		consumerGroup, err := sarama.NewConsumerGroup(kafkaBrokers, consumer.GroupID, config)
 		if err != nil {
-			return fmt.Errorf("failed to create kafka consumer: %v", err)
+			return fmt.Errorf("starting yodlee ops: failed to create kafka consumer: %v", err)
 		}
 		// begin a comsumer consumer loop for each topic
 		topics := []string{string(topic)}
@@ -80,7 +85,7 @@ func StartConsumers(ctx context.Context, kafkaBrokers []string, config *sarama.C
 		}()
 	}
 
-	slog.Info("started consumers", "consumers", fmt.Sprintf("+%v", consumers))
+	slog.Info("starting yodlee ops: started consumers", "consumers", fmt.Sprintf("+%v", consumers))
 	return nil
 }
 
