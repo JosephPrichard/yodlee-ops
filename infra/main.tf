@@ -20,14 +20,14 @@ locals {
   buckets = { for env_var_name, topic_name in var.buckets : env_var_name => "${var.project}-${var.environment}-${topic_name}" }
 }
 
-resource "aws_s3_bucket" "yodlee-ops-buckets" {
+resource "aws_s3_bucket" "main" {
   for_each = local.buckets
   bucket   = each.value
 }
 
-resource "aws_s3_bucket_public_access_block" "yodlee-ops-buckets" {
+resource "aws_s3_bucket_public_access_block" "main" {
   for_each                = local.buckets
-  bucket                  = aws_s3_bucket.yodlee-ops-buckets[each.key].id
+  bucket                  = aws_s3_bucket.main[each.key].id
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
