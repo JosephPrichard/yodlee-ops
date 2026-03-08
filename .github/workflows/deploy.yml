@@ -97,6 +97,10 @@ jobs:
         id: init
         run: terraform init -input=false
 
+#      - name: Terraform Destroy
+#        if: github.event_name == 'push'
+#        run: terraform destroy -input=false -auto-approve
+
       - name: Terraform Validate
         id: validate
         run: terraform validate -no-color
