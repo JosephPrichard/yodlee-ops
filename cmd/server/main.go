@@ -24,7 +24,7 @@ func main() {
 	cmd.InitLoggers(nil)
 
 	serverConfig := model.MakeConfig()
-	serverConfig.IsLocal = true
+	//serverConfig.IsLocal = true
 
 	slog.Info("starting yodlee ops, starting server", "serverConfig", serverConfig)
 
