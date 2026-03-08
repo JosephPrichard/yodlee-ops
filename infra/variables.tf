@@ -77,3 +77,20 @@ variable "buckets" {
     TXN_BUCKET  = "yodlee-txns-bucket"
   }
 }
+
+variable "kafka_topics" {
+  description = "Kafka topics to create"
+  type        = list(string)
+  default     = [
+    "cnct-refreshes",
+    "acct-refreshes",
+    "hold-refreshes",
+    "txn-refreshes",
+    "cnct-responses",
+    "acct-responses",
+    "hold-responses",
+    "txn-responses",
+    "delete-retry",
+    "broadcast"
+  ]
+}
