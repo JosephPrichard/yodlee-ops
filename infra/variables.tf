@@ -82,17 +82,17 @@ variable "buckets" {
 
 variable "kafka_topics" {
   description = "Kafka topics to create"
-  type        = map(string)
-  default     = {
-    CnctRefreshTopic  = "cnct-refreshes"
-    AcctRefreshTopic  = "acct-refreshes"
-    HoldRefreshTopic  = "hold-refreshes"
-    TxnRefreshTopic   = "txn-refreshes"
-    CnctResponseTopic = "cnct-responses"
-    AcctResponseTopic = "acct-responses"
-    HoldResponseTopic = "hold-responses"
-    TxnResponseTopic  = "txn-responses"
-    DeleteRetryTopic  = "delete-recovery"
-    BroadcastTopic    = "broadcast"
-  }
+  type        = list(string)
+  default     = [
+    "cnct-refreshes",
+    "acct-refreshes",
+    "hold-refreshes",
+    "txn-refreshes",
+    "cnct-responses",
+    "acct-responses",
+    "hold-responses",
+    "txn-responses",
+    "delete-retry",
+    "broadcast"
+  ]
 }

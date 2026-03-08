@@ -11,8 +11,14 @@ func (b Bucket) String() *string {
 	return aws.String(string(b))
 }
 
+type Buckets struct {
+	CnctBucket Bucket
+	AcctBucket Bucket
+	HoldBucket Bucket
+	TxnBucket  Bucket
+}
+
 const (
-	// CnctRefreshTopic etc. topics
 	CnctRefreshTopic  Topic = "cnct-refreshes"
 	AcctRefreshTopic  Topic = "acct-refreshes"
 	HoldRefreshTopic  Topic = "hold-refreshes"
@@ -21,30 +27,21 @@ const (
 	AcctResponseTopic Topic = "acct-responses"
 	HoldResponseTopic Topic = "hold-responses"
 	TxnResponseTopic  Topic = "txn-responses"
-	DeleteRetryTopic  Topic = "delete-recovery"
+	DeleteRetryTopic  Topic = "delete-retry"
 	BroadcastTopic    Topic = "broadcast"
 
-	// CnctRefreshTopicGroupID etc, group ids for topics
-	CnctRefreshTopicGroupID  = "cnct-refreshes_group"
-	AcctRefreshTopicGroupID  = "acct-refreshes_group"
-	HoldRefreshTopicGroupID  = "hold-refreshes_group"
-	TxnRefreshTopicGroupID   = "txn-refreshes_group"
-	CnctResponseTopicGroupID = "cnct-responses_group"
-	AcctResponseTopicGroupID = "acct-responses_group"
-	HoldResponseTopicGroupID = "hold-responses_group"
-	TxnResponseTopicGroupID  = "txn-responses_group"
-	DeleteRetryTopicGroupID  = "delete-recovery_group"
+	CnctRefreshTopicGroupID  = "cnct-refreshes-group"
+	AcctRefreshTopicGroupID  = "acct-refreshes-group"
+	HoldRefreshTopicGroupID  = "hold-refreshes-group"
+	TxnRefreshTopicGroupID   = "txn-refreshes-group"
+	CnctResponseTopicGroupID = "cnct-responses-group"
+	AcctResponseTopicGroupID = "acct-responses-group"
+	HoldResponseTopicGroupID = "hold-responses-group"
+	TxnResponseTopicGroupID  = "txn-responses-group"
+	DeleteRetryTopicGroupID  = "delete-retry-group"
 
-	// CnctBucket etc. buckets
 	//CnctBucket Bucket = "yodlee-cncts"
 	//AcctBucket Bucket = "yodlee-accts"
 	//HoldBucket Bucket = "yodlee-holds"
 	//TxnBucket  Bucket = "yodlee-txns"
 )
-
-type Buckets struct {
-	CnctBucket Bucket
-	AcctBucket Bucket
-	HoldBucket Bucket
-	TxnBucket  Bucket
-}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"log/slog"
@@ -28,22 +29,22 @@ func main() {
 	s3Client := model.MakeS3Client(serverConfig)
 
 	kafkaConfig := model.MakeSaramaConfig(serverConfig)
-	//producer := client.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
+	producer := model.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
 
 	// produces messages to topics to easily test that producer/consumers are working without an external producer. comment out in prod.
-	//go cmd.ExecuteDemoProducer(serverConfig, kafkaConfig)
+	go cmd.ExecuteDemoProducer(serverConfig, kafkaConfig)
 
 	state := &svc.State{
-		AWS: model.MakeAWS(serverConfig, s3Client),
-		//Producer:             producer,
+		AWS:                  model.MakeAWS(serverConfig, s3Client),
+		Producer:             producer,
 		FiMessageBroadcaster: &svc.FiMessageBroadcaster{},
 	}
 
 	slog.Info("starting consumer", "serverConfig", serverConfig, "kafkaConfig", fmt.Sprintf("%+v", kafkaConfig)) // fmt.Sprintf is needed to serialize closures.
 
-	//if err := svc.StartConsumers(context.Background(), serverConfig.KafkaBrokers, kafkaConfig, state); err != nil {
-	//	log.Fatalf("failed to start consumers: %v", err)
-	//}
+	if err := svc.StartConsumers(context.Background(), serverConfig.KafkaBrokers, kafkaConfig, state); err != nil {
+		log.Fatalf("failed to start consumers: %v", err)
+	}
 
 	go func() {
 		if err := http.ListenAndServe(":6060", nil); err != nil {
