@@ -161,7 +161,7 @@ func CreateKafkaTopics(kafkaBrokers []string, kafkaConfig *sarama.Config) {
 	for _, topic := range TopicList {
 		err := admin.CreateTopic(string(topic), &sarama.TopicDetail{
 			NumPartitions:     16,
-			ReplicationFactor: 3,
+			ReplicationFactor: 2, // 2 brokers.
 		}, false)
 		if err != nil {
 			if errors.Is(err, sarama.ErrTopicAlreadyExists) {
