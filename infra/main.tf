@@ -17,7 +17,7 @@ module "vpc" {
 
 # S3
 locals {
-  buckets = { for k, v in var.buckets : k => "${var.project}-${var.environment}-${v}" }
+  buckets = { for env_var_name, topic_name in var.buckets : env_var_name => "${var.project}-${var.environment}-${topic_name}" }
 }
 
 resource "aws_s3_bucket" "yodlee-ops-buckets" {
@@ -96,7 +96,7 @@ resource "aws_msk_cluster" "main" {
 }
 
 resource "aws_msk_configuration" "main" {
-  name           = "${var.project}-${var.environment}-config"
+  name           = "${local.msk_cluster_name}-config"
   kafka_versions = ["3.5.1"]
 
   server_properties = <<-PROPS
@@ -107,6 +107,7 @@ resource "aws_msk_configuration" "main" {
   PROPS
 }
 
+# you must comment this out the very first time `tfe deploy` is executed, it needs the msk cluster to be created on a previous deployment
 # resource "kafka_topic" "main" {
 #   for_each           = toset(var.kafka_topics)
 #   name               = each.key
@@ -217,58 +218,76 @@ resource "aws_iam_role" "ecs_task" {
   })
 }
 
-# Allow the task to access all S3 buckets
+# Allow the task to access all S3 buckets for project
+locals {
+  s3_buckets_access = [
+    for _, bucket in aws_s3_bucket.main : {
+      Effect   = "Allow"
+      Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"]
+      Resource = [bucket.arn, "${bucket.arn}/*"]
+    }
+  ]
+}
+
 resource "aws_iam_role_policy" "ecs_task_s3" {
   name = "s3-access"
   role = aws_iam_role.ecs_task.id
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"]
-      Resource = ["arn:aws:s3:::*", "arn:aws:s3:::*/*"]
-    }]
+    Statement = local.s3_buckets_access
   })
 }
 
 # Allow the task to access all MSK topics for project
-resource "aws_iam_role_policy" "ecs_task_msk" {
-  name = "msk-access"
-  role = aws_iam_role.ecs_task.id
+# you must comment this out the very first time `tfe deploy` is executed, topics cannot be created on first deployment and policy requires ARN for topics.
+# locals {
+#   kafka_topics_access = [
+#     for topic_name in var.kafka_topics : {
+#       Effect = "Allow"
+#       Action = [
+#         "kafka-cluster:*Topic*",
+#         "kafka-cluster:ReadData",
+#         "kafka-cluster:WriteData"
+#       ]
+#       # Dynamically construct the ARN from the kafka_topics list
+#       Resource = "arn:aws:kafka:${var.aws_region}:${data.aws_caller_identity.current.account_id}:topic/${local.msk_cluster_name}/*/${topic_name}"
+#     }
+#   ]
+# }
 
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "kafka-cluster:Connect",
-          "kafka-cluster:AlterCluster",
-          "kafka-cluster:DescribeCluster"
-        ]
-        Resource = aws_msk_cluster.main.arn
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "kafka-cluster:*Topic*",
-          "kafka-cluster:ReadData",
-          "kafka-cluster:WriteData"
-        ]
-        Resource = "arn:aws:kafka:${var.aws_region}:${data.aws_caller_identity.current.account_id}:topic/${local.msk_cluster_name}/*/${var.kafka_topic}"
-      },
-      {
-        Effect = "Allow"
-        Action = [
-          "kafka-cluster:AlterGroup",
-          "kafka-cluster:DescribeGroup"
-        ]
-        Resource = "arn:aws:kafka:${var.aws_region}:${data.aws_caller_identity.current.account_id}:group/${local.msk_cluster_name}-${var.environment}/*/*"
-      }
-    ]
-  })
-}
+# resource "aws_iam_role_policy" "ecs_task_msk" {
+#   name = "msk-access"
+#   role = aws_iam_role.ecs_task.id
+#
+#   policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = concat(
+#       [
+#         # kafka-cluster access
+#         {
+#           Effect = "Allow"
+#           Action = [
+#             "kafka-cluster:Connect",
+#             "kafka-cluster:AlterCluster",
+#             "kafka-cluster:DescribeCluster"
+#           ]
+#           Resource = aws_msk_cluster.main.arn
+#         },
+#         # kafka group access
+#         {
+#           Effect = "Allow"
+#           Action = [
+#             "kafka-cluster:AlterGroup",
+#             "kafka-cluster:DescribeGroup"
+#           ]
+#           Resource = "arn:aws:kafka:${var.aws_region}:${data.aws_caller_identity.current.account_id}:group/${local.msk_cluster_name}/*/*"
+#         }
+#       ],
+#       local.kafka_topics_access
+#     )
+#   })
+# }
 
 # CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "app" {
@@ -283,8 +302,7 @@ locals {
       local.buckets,
       # { KAFKA_BROKERS = aws_msk_cluster.main.bootstrap_brokers_sasl_iam }
     ) : {
-      name = k,
-      value = v
+      name = k, value = v
     }
   ]
 }
