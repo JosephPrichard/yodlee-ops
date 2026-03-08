@@ -24,7 +24,7 @@ func main() {
 	cmd.InitLoggers(nil)
 
 	serverConfig := model.MakeConfig()
-	serverConfig.IsLocal = true
+	//serverConfig.IsLocal = true
 
 	s3Client := model.MakeS3Client(serverConfig)
 
