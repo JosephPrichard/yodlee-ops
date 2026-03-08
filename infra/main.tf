@@ -1,12 +1,4 @@
-terraform {
-  required_providers {
-    kafka = {
-      source  = "Mongey/kafka"
-      version = "0.8.3"
-    }
-  }
-}
-# ── VPC ─────────────────────────────────────────────────────────────────────
+# VPC
 module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "~> 5.0"

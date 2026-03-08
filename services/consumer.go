@@ -37,11 +37,11 @@ func (consumer *ConsumerHandler[Value]) ConsumeClaim(session sarama.ConsumerGrou
 		ctx := context.WithValue(context.Background(), "trace", uuid.NewString())
 
 		start := time.Now()
-		slog.InfoContext(ctx, "read message from kafka topic", "message", message)
+		slog.InfoContext(ctx, "read message from kafka topic", "key", strKey)
 
 		var data Value
 		if err := json.Unmarshal(message.Value, &data); err != nil {
-			slog.ErrorContext(ctx, "failed to unmarshal message", "type", fmt.Sprintf("%T", data), "message", message)
+			slog.ErrorContext(ctx, "failed to unmarshal message", "type", fmt.Sprintf("%T", data), "key", strKey, "message", string(message.Value))
 			continue
 		}
 
