@@ -18,7 +18,6 @@ AWS_SECRET_KEY=test
 AWS_DEFAULT_REGION=us-east-1
 AWS_ENDPOINT=http://localhost:4566
 KAFKA_BROKERS=localhost:9092
-KAFKA_BROKERS=localhost:9092
 CNCT_BUCKET=yodlee-cncts-bucket
 ACCT_BUCKET=yodlee-accts-bucket
 TXN_BUCKET=yodlee-txns-bucket
@@ -53,9 +52,8 @@ The test deployment triggers on `test` branch and uat deployment on `main` branc
 AWS architecture definition is self-contained except needing an ECR repository (configured to be `development/yodleeops`).
 The terraform deployment creates the VPC, subnets, ECS cluster, S3 buckets, MSK cluster, ALB, ECS service, IAM roles, IAM policies, security configurations, and the ECS task definition.
 
-<img width="1407" height="890" alt="Screenshot 2026-03-08 153227" src="https://github.com/user-attachments/assets/63cebe86-5cdd-42cd-8f05-5e545772a09b" />
-<img width="1431" height="833" alt="Screenshot 2026-03-08 134923" src="https://github.com/user-attachments/assets/290e6c0b-3ab1-4325-9d9c-4058b176dde5" />
-
-<img width="1905" height="845" alt="Screenshot 2026-03-08 134704" src="https://github.com/user-attachments/assets/9c598039-d7ba-4afb-b1f9-2b627501e31e" />
-<img width="1901" height="850" alt="Screenshot 2026-03-08 134612" src="https://github.com/user-attachments/assets/aa718eee-2e52-4023-aefe-9e3bc0b0b549" />
-<img width="1912" height="802" alt="Screenshot 2026-03-08 134520" src="https://github.com/user-attachments/assets/be643580-aad4-4e4e-8de6-4a91f0eb95ea" />
+![screenshot](examples/swagger-resp.png)
+![screenshot](examples/sse-postman.png)
+![screenshot](examples/ecs-logs.png)
+![screenshot](examples/cloudwatch.png)
+![screenshot](examples/s3-console.png)
