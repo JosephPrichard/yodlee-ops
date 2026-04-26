@@ -10,8 +10,7 @@ import (
 	"io"
 	"net/http/httptest"
 	"testing"
-
-	"yodleeops/model"
+	"yodleeops/storage"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -27,7 +26,7 @@ func Equal[T any](t *testing.T, expected, actual T, opts ...cmp.Option) {
 }
 
 type WantObject[JSON any] struct {
-	Bucket model.Bucket
+	Bucket storage.Bucket
 	Key    string
 	Value  JSON
 }
@@ -44,7 +43,7 @@ func DecodeGzipJSON[JSON any](r io.Reader, decoded *JSON) error {
 	return nil
 }
 
-func AssertObjects[JSON any](t *testing.T, awsClient *model.AWS, objects []WantObject[JSON], opts ...cmp.Option) {
+func AssertObjects[JSON any](t *testing.T, awsClient *storage.AWS, objects []WantObject[JSON], opts ...cmp.Option) {
 	opts = append([]cmp.Option{protocmp.Transform()}, opts...)
 
 	t.Helper()
@@ -75,14 +74,14 @@ func AssertObjects[JSON any](t *testing.T, awsClient *model.AWS, objects []WantO
 }
 
 type WantKey struct {
-	Bucket model.Bucket
+	Bucket storage.Bucket
 	Key    string
 }
 
-func GetAllKeys(t *testing.T, aws model.AWS) []WantKey {
+func GetAllKeys(t *testing.T, aws storage.AWS) []WantKey {
 	var keys []WantKey
 
-	for _, bucket := range []model.Bucket{
+	for _, bucket := range []storage.Bucket{
 		aws.CnctBucket,
 		aws.AcctBucket,
 		aws.TxnBucket,

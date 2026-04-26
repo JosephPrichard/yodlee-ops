@@ -5,13 +5,12 @@ import (
 	"encoding/json"
 	"github.com/IBM/sarama"
 	"log/slog"
-
-	"yodleeops/model"
+	"yodleeops/storage"
 )
 
 type JsonMessage struct {
 	Key   string
-	Topic model.Topic
+	Topic storage.Topic
 	Value any
 }
 
@@ -58,11 +57,11 @@ func MakeDeleteErrorsMsgs(ctx context.Context, profileId string, deleteErrs []De
 			Prefix: deleteErr.Prefix,
 			Keys:   deleteErr.Keys,
 		}
-		slog.InfoContext(ctx, "producing delete error", "Topic", model.DeleteRetryTopic, "deleteRetry", deleteRetry)
+		slog.InfoContext(ctx, "producing delete error", "Topic", storage.DeleteRetryTopic, "deleteRetry", deleteRetry)
 
 		msgs = append(msgs, JsonMessage{
 			Key:   profileId,
-			Topic: model.DeleteRetryTopic,
+			Topic: storage.DeleteRetryTopic,
 			Value: deleteRetry,
 		})
 	}
@@ -78,13 +77,13 @@ func ProduceDeleteErrors(ctx Context, profileId string, deleteErrs []DeleteResul
 
 type BroadcastInput[Wrap YodleeWrapper[Inner], Inner YodleeInput] struct {
 	// content of the fi messages, data extracts, response, etc.
-	FiMessages  []Wrap      `json:"messages"`
-	OriginTopic model.Topic `json:"originTopic"`
+	FiMessages  []Wrap        `json:"messages"`
+	OriginTopic storage.Topic `json:"originTopic"`
 }
 
 func ProducePutResults[Wrap YodleeWrapper[Inner], Inner YodleeInput](
 	ctx Context,
-	topic model.Topic,
+	topic storage.Topic,
 	key string,
 	putResults []PutResult[Wrap],
 	mapInputs func([]Inner) any,
@@ -103,7 +102,7 @@ func ProducePutResults[Wrap YodleeWrapper[Inner], Inner YodleeInput](
 	if len(successUploads) > 0 {
 		// write success uploads with a small wrapper describing the Topic the upload originally came from (for broadcasting).
 		ProduceJsonMessage(ctx, JsonMessage{
-			Topic: model.BroadcastTopic,
+			Topic: storage.BroadcastTopic,
 			Value: BroadcastInput[Wrap, Inner]{FiMessages: successUploads, OriginTopic: topic},
 		})
 	}

@@ -6,10 +6,9 @@ import (
 	saramaMocks "github.com/IBM/sarama/mocks"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"testing"
+	"yodleeops/storage"
 	"yodleeops/testutil"
 	"yodleeops/yodlee"
-
-	"yodleeops/model"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -36,7 +35,7 @@ func TestProduceDeleteErrors(t *testing.T) {
 	wantDeleteResults := []JsonMessage{
 		{
 			Key:   "p1",
-			Topic: model.DeleteRetryTopic,
+			Topic: storage.DeleteRetryTopic,
 			Value: DeleteRetry{
 				Kind:   "delete",
 				Bucket: "Bucket",
@@ -45,7 +44,7 @@ func TestProduceDeleteErrors(t *testing.T) {
 		},
 		{
 			Key:   "p1",
-			Topic: model.DeleteRetryTopic,
+			Topic: storage.DeleteRetryTopic,
 			Value: DeleteRetry{
 				Kind:   "list",
 				Bucket: "Bucket",
@@ -69,7 +68,7 @@ func TestProducePutResults(t *testing.T) {
 		{
 			Key: "p1/1/1/2025-06-12",
 			Input: OpsProviderAccountRefresh{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.CnctRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.CnctRefreshTopic},
 				Data: yodlee.DataExtractsProviderAccount{
 					Id:          90,
 					LastUpdated: "2025-06-12",
@@ -81,7 +80,7 @@ func TestProducePutResults(t *testing.T) {
 			Err: errors.New("error"),
 			Key: "p1/1/1/2025-06-13",
 			Input: OpsProviderAccountRefresh{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.CnctRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.CnctRefreshTopic},
 				Data: yodlee.DataExtractsProviderAccount{
 					Id:          90,
 					LastUpdated: "2025-06-13",
@@ -98,7 +97,7 @@ func TestProducePutResults(t *testing.T) {
 	}
 	go func() {
 		defer mockProducer.Close()
-		ProducePutResults(ctx, model.CnctRefreshTopic, "p1", putResults, nil)
+		ProducePutResults(ctx, storage.CnctRefreshTopic, "p1", putResults, nil)
 	}()
 
 	// then
@@ -106,10 +105,10 @@ func TestProducePutResults(t *testing.T) {
 
 	wantMsgs := []any{
 		BroadcastInput[OpsProviderAccountRefresh, yodlee.DataExtractsProviderAccount]{
-			OriginTopic: model.CnctRefreshTopic,
+			OriginTopic: storage.CnctRefreshTopic,
 			FiMessages: []OpsProviderAccountRefresh{
 				{
-					OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.CnctRefreshTopic},
+					OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.CnctRefreshTopic},
 					Data: yodlee.DataExtractsProviderAccount{
 						Id:          90,
 						LastUpdated: "2025-06-12",

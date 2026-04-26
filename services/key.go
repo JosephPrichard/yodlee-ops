@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"yodleeops/model"
+	"yodleeops/storage"
 )
 
 type CnctKey struct {
@@ -131,7 +131,7 @@ type OpsFiMetadata struct {
 
 type ParseOpsFiMetadataError struct {
 	Key              string
-	Bucket           model.Bucket
+	Bucket           storage.Bucket
 	WantTokenCount   int
 	ActualTokenCount int
 }
@@ -153,7 +153,7 @@ func TimeParseLax(dateString string) (time.Time, error) {
 	return time.Time{}, fmt.Errorf("parse time with any known layout: %s", dateString)
 }
 
-func (o *OpsFiMetadata) ParseOpsFiMetadata(buckets model.Buckets, bucket model.Bucket, key string) error {
+func (o *OpsFiMetadata) ParseOpsFiMetadata(buckets storage.Buckets, bucket storage.Bucket, key string) error {
 	tokens := strings.Split(key, "/")
 
 	switch bucket {

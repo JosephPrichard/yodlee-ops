@@ -6,9 +6,9 @@ import (
 	saramaMocks "github.com/IBM/sarama/mocks"
 	"github.com/stretchr/testify/require"
 	"testing"
+	"yodleeops/storage"
 
-	"yodleeops/model"
-	"yodleeops/model/fakes"
+	"yodleeops/storage/fakes"
 	"yodleeops/testutil"
 	"yodleeops/yodlee"
 
@@ -80,10 +80,10 @@ func setupConsumersTest(t *testing.T) *State {
 
 type MockConsumers struct {
 	t         *testing.T
-	consumers map[model.Topic]Consumer
+	consumers map[storage.Topic]Consumer
 }
 
-func (p *MockConsumers) ConsumeClaim(topic model.Topic, key string, value any) {
+func (p *MockConsumers) ConsumeClaim(topic storage.Topic, key string, value any) {
 	v, err := json.Marshal(value)
 	require.NoError(p.t, err)
 
@@ -105,80 +105,80 @@ func (p *MockConsumers) ConsumeClaim(topic model.Topic, key string, value any) {
 
 var WantBroadcastMsgs = []any{
 	BroadcastInput[OpsProviderAccountRefresh, yodlee.DataExtractsProviderAccount]{
-		OriginTopic: model.CnctRefreshTopic,
+		OriginTopic: storage.CnctRefreshTopic,
 		FiMessages: []OpsProviderAccountRefresh{
 			{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.CnctRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.CnctRefreshTopic},
 				Data:         ProviderAccountRefresh,
 			},
 		},
 	},
 	BroadcastInput[OpsAccountRefresh, yodlee.DataExtractsAccount]{
-		OriginTopic: model.AcctRefreshTopic,
+		OriginTopic: storage.AcctRefreshTopic,
 		FiMessages: []OpsAccountRefresh{
 			{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.AcctRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.AcctRefreshTopic},
 				Data:         AccountRefresh,
 			},
 		},
 	},
 	BroadcastInput[OpsHoldingRefresh, yodlee.DataExtractsHolding]{
-		OriginTopic: model.HoldRefreshTopic,
+		OriginTopic: storage.HoldRefreshTopic,
 		FiMessages: []OpsHoldingRefresh{
 			{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.HoldRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.HoldRefreshTopic},
 				Data:         HoldingRefresh,
 			},
 		},
 	},
 	BroadcastInput[OpsTransactionRefresh, yodlee.DataExtractsTransaction]{
-		OriginTopic: model.TxnRefreshTopic,
+		OriginTopic: storage.TxnRefreshTopic,
 		FiMessages: []OpsTransactionRefresh{
 			{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.TxnRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.TxnRefreshTopic},
 				Data:         TransactionRefresh,
 			},
 		},
 	},
 	BroadcastInput[OpsProviderAccount, yodlee.ProviderAccount]{
-		OriginTopic: model.CnctResponseTopic,
+		OriginTopic: storage.CnctResponseTopic,
 		FiMessages: []OpsProviderAccount{
 			{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.CnctResponseTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.CnctResponseTopic},
 				Data:         ProviderAccountResponse,
 			},
 		},
 	},
 	BroadcastInput[OpsAccount, yodlee.Account]{
-		OriginTopic: model.AcctResponseTopic,
+		OriginTopic: storage.AcctResponseTopic,
 		FiMessages: []OpsAccount{
 			{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.AcctResponseTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.AcctResponseTopic},
 				Data:         AccountResponse,
 			},
 		},
 	},
 	BroadcastInput[OpsHolding, yodlee.Holding]{
-		OriginTopic: model.HoldResponseTopic,
+		OriginTopic: storage.HoldResponseTopic,
 		FiMessages: []OpsHolding{
 			{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.HoldResponseTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.HoldResponseTopic},
 				Data:         HoldingResponse,
 			},
 		},
 	},
 	BroadcastInput[OpsTransaction, yodlee.TransactionWithDateTime]{
-		OriginTopic: model.TxnResponseTopic,
+		OriginTopic: storage.TxnResponseTopic,
 		FiMessages: []OpsTransaction{
 			{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.TxnResponseTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.TxnResponseTopic},
 				Data:         TransactionResponse,
 			},
 		},
 	},
 }
 
-func wantIngestedKeys(aws model.AWS) []testutil.WantKey {
+func wantIngestedKeys(aws storage.AWS) []testutil.WantKey {
 	return []testutil.WantKey{
 		{Bucket: aws.CnctBucket, Key: "p1/1/10/2025-06-12"},
 		{Bucket: aws.CnctBucket, Key: "p1/1/10/2025-06-13"},
@@ -228,45 +228,45 @@ func TestConsumers(t *testing.T) {
 
 	// when
 	tests := []struct {
-		topic model.Topic
+		topic storage.Topic
 		value any
 	}{
 		// Refreshes
 		{
-			topic: model.CnctRefreshTopic,
+			topic: storage.CnctRefreshTopic,
 			value: []yodlee.DataExtractsProviderAccount{ProviderAccountRefresh},
 		},
 		{
-			topic: model.AcctRefreshTopic,
+			topic: storage.AcctRefreshTopic,
 			value: []yodlee.DataExtractsAccount{AccountRefresh},
 		},
 		{
-			topic: model.HoldRefreshTopic,
+			topic: storage.HoldRefreshTopic,
 			value: []yodlee.DataExtractsHolding{HoldingRefresh},
 		},
 		{
-			topic: model.TxnRefreshTopic,
+			topic: storage.TxnRefreshTopic,
 			value: []yodlee.DataExtractsTransaction{TransactionRefresh},
 		},
 		// Responses
 		{
-			topic: model.CnctResponseTopic,
+			topic: storage.CnctResponseTopic,
 			value: yodlee.ProviderAccountResponse{ProviderAccount: []yodlee.ProviderAccount{ProviderAccountResponse}},
 		},
 		{
-			topic: model.AcctResponseTopic,
+			topic: storage.AcctResponseTopic,
 			value: yodlee.AccountResponse{Account: []yodlee.Account{AccountResponse}},
 		},
 		{
-			topic: model.HoldResponseTopic,
+			topic: storage.HoldResponseTopic,
 			value: yodlee.HoldingResponse{Holding: []yodlee.Holding{HoldingResponse}},
 		},
 		{
-			topic: model.TxnResponseTopic,
+			topic: storage.TxnResponseTopic,
 			value: yodlee.TransactionResponse{Transaction: []yodlee.TransactionWithDateTime{TransactionResponse}},
 		},
 		{
-			topic: model.DeleteRetryTopic,
+			topic: storage.DeleteRetryTopic,
 			value: []DeleteRetry{
 				{
 					Kind:   ListKind,
@@ -335,49 +335,49 @@ func TestConsumers_S3Errors(t *testing.T) {
 
 	// when
 	tests := []struct {
-		topic      model.Topic
+		topic      storage.Topic
 		failPutKey string
 		value      any
 	}{
 		// Refreshes
 		{
-			topic:      model.CnctRefreshTopic,
+			topic:      storage.CnctRefreshTopic,
 			failPutKey: "p1/1/99/2025-06-13",
 			value:      ProviderAccountRefreshSlice,
 		},
 		{
-			topic:      model.AcctRefreshTopic,
+			topic:      storage.AcctRefreshTopic,
 			failPutKey: "p1/1/99/999/2025-06-13",
 			value:      AccountRefreshSlice,
 		},
 		{
-			topic:      model.HoldRefreshTopic,
+			topic:      storage.HoldRefreshTopic,
 			failPutKey: "p1/1/999/9999/2025-06-13",
 			value:      HoldingRefreshSlice,
 		},
 		{
-			topic:      model.TxnRefreshTopic,
+			topic:      storage.TxnRefreshTopic,
 			failPutKey: "p1/1/999/9999/2025-06-13T07:06:18Z",
 			value:      TransactionRefreshSlice,
 		},
 		// Responses
 		{
-			topic:      model.CnctResponseTopic,
+			topic:      storage.CnctResponseTopic,
 			failPutKey: "p1/1/77/2025-06-13",
 			value:      ProviderAccountResponseSlice,
 		},
 		{
-			topic:      model.AcctResponseTopic,
+			topic:      storage.AcctResponseTopic,
 			failPutKey: "p1/1/77/777/2025-06-13",
 			value:      AccountResponseSlice,
 		},
 		{
-			topic:      model.HoldResponseTopic,
+			topic:      storage.HoldResponseTopic,
 			failPutKey: "p1/1/777/7777/2025-06-13",
 			value:      HoldingResponseSlice,
 		},
 		{
-			topic:      model.TxnResponseTopic,
+			topic:      storage.TxnResponseTopic,
 			failPutKey: "p1/1/777/7777/2025-06-13T07:06:18Z",
 			value:      TransactionResponseSlice,
 		},

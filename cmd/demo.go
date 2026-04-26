@@ -9,7 +9,8 @@ import (
 	"math/rand"
 	"strconv"
 	"time"
-	"yodleeops/model"
+	"yodleeops/storage"
+
 	"yodleeops/yodlee"
 )
 
@@ -779,8 +780,8 @@ func makeHoldResponses(n int) yodlee.HoldingResponse {
 
 var Period = time.Second * 1
 
-func ExecuteDemoProducer(serverConfig model.Config, kafkaConfig *sarama.Config) {
-	producer := model.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
+func ExecuteDemoProducer(serverConfig storage.Config, kafkaConfig *sarama.Config) {
+	producer := storage.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
 
 	slog.Info("starting yodlee ops, starting test producer", "serverConfig", serverConfig, "kafkaConfig", fmt.Sprintf("%+v", kafkaConfig))
 
@@ -788,35 +789,35 @@ func ExecuteDemoProducer(serverConfig model.Config, kafkaConfig *sarama.Config) 
 	for range ticker.C {
 		topicKind := rand.Intn(8)
 
-		var topic model.Topic
+		var topic storage.Topic
 		var value any
 
 		n := rand.Intn(10)
 
 		switch topicKind {
 		case 0:
-			topic = model.CnctRefreshTopic
+			topic = storage.CnctRefreshTopic
 			value = makeCnctRefreshes(n)
 		case 1:
-			topic = model.AcctRefreshTopic
+			topic = storage.AcctRefreshTopic
 			value = makeAcctRefreshes(n)
 		case 2:
-			topic = model.TxnRefreshTopic
+			topic = storage.TxnRefreshTopic
 			value = makeTxnRefreshes(n)
 		case 3:
-			topic = model.HoldRefreshTopic
+			topic = storage.HoldRefreshTopic
 			value = makeHoldRefreshes(n)
 		case 4:
-			topic = model.CnctResponseTopic
+			topic = storage.CnctResponseTopic
 			value = makeCnctResponses(n)
 		case 5:
-			topic = model.AcctResponseTopic
+			topic = storage.AcctResponseTopic
 			value = makeAcctResponses(n)
 		case 6:
-			topic = model.TxnResponseTopic
+			topic = storage.TxnResponseTopic
 			value = makeTxnResponses(n)
 		case 7:
-			topic = model.HoldResponseTopic
+			topic = storage.HoldResponseTopic
 			value = makeHoldResponses(n)
 		default:
 			continue

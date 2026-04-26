@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"yodleeops/storage"
 
-	"yodleeops/model"
 	openapi "yodleeops/openapi/sources"
 
 	"github.com/go-faster/jx"
@@ -91,17 +91,17 @@ func (state *State) StreamFiObjectLogs(w http.ResponseWriter, r *http.Request) {
 	profileIDs := strings.Split(values.Get("profileIDs"), ",")
 	subjects := strings.Split(values.Get("subjects"), ",")
 
-	var topics []model.Topic
+	var topics []storage.Topic
 	for _, subject := range subjects {
 		switch openapi.FiSubject(subject) {
 		case openapi.FiSubjectConnections:
-			topics = append(topics, model.CnctRefreshTopic, model.CnctResponseTopic)
+			topics = append(topics, storage.CnctRefreshTopic, storage.CnctResponseTopic)
 		case openapi.FiSubjectAccounts:
-			topics = append(topics, model.AcctRefreshTopic, model.AcctResponseTopic)
+			topics = append(topics, storage.AcctRefreshTopic, storage.AcctResponseTopic)
 		case openapi.FiSubjectTransactions:
-			topics = append(topics, model.TxnRefreshTopic, model.TxnResponseTopic)
+			topics = append(topics, storage.TxnRefreshTopic, storage.TxnResponseTopic)
 		case openapi.FiSubjectHoldings:
-			topics = append(topics, model.HoldRefreshTopic, model.HoldResponseTopic)
+			topics = append(topics, storage.HoldRefreshTopic, storage.HoldResponseTopic)
 		}
 	}
 
@@ -142,8 +142,8 @@ func (state *State) StreamFiObjectLogs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func BucketFromSubject(buckets model.Buckets, subject openapi.FiSubject) model.Bucket {
-	var bucket model.Bucket
+func BucketFromSubject(buckets storage.Buckets, subject openapi.FiSubject) storage.Bucket {
+	var bucket storage.Bucket
 	switch subject {
 	case openapi.FiSubjectConnections:
 		bucket = buckets.CnctBucket

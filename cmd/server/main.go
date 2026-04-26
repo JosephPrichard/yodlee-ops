@@ -7,7 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"yodleeops/cmd"
-	"yodleeops/model"
+	"yodleeops/storage"
+
 	svc "yodleeops/services"
 
 	_ "net/http/pprof"
@@ -23,19 +24,19 @@ func main() {
 
 	cmd.InitLoggers(nil)
 
-	serverConfig := model.MakeConfig()
+	serverConfig := storage.MakeConfig()
 	//serverConfig.IsLocal = true
 
 	slog.Info("starting yodlee ops, starting server", "serverConfig", serverConfig)
 
-	s3Client := model.MakeS3Client(serverConfig)
+	s3Client := storage.MakeS3Client(serverConfig)
 
-	kafkaConfig := model.MakeSaramaConfig(serverConfig)
-	model.CreateKafkaTopics(serverConfig.KafkaBrokers, kafkaConfig)
-	producer := model.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
+	kafkaConfig := storage.MakeSaramaConfig(serverConfig)
+	storage.CreateKafkaTopics(serverConfig.KafkaBrokers, kafkaConfig)
+	producer := storage.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
 
 	state := &svc.State{
-		AWS:                  model.MakeAWS(serverConfig, s3Client),
+		AWS:                  storage.MakeAWS(serverConfig, s3Client),
 		Producer:             producer,
 		FiMessageBroadcaster: &svc.FiMessageBroadcaster{},
 	}
@@ -47,7 +48,7 @@ func main() {
 	}
 
 	// produces messages to topics to easily test that producer/consumers are working without an external producer. comment out in prod.
-	go cmd.ExecuteDemoProducer(serverConfig, kafkaConfig)
+	//go cmd.ExecuteDemoProducer(serverConfig, kafkaConfig)
 
 	go func() {
 		if err := http.ListenAndServe(":6060", nil); err != nil {

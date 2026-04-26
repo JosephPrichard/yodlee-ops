@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+	"yodleeops/storage"
 
-	"yodleeops/model"
 	"yodleeops/yodlee"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -38,7 +38,7 @@ func IngestCnctResponses(ctx Context, profileId string, response yodlee.Provider
 		}
 		cnct := OpsProviderAccount{
 			Data:         cnct,
-			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: model.CnctResponseTopic},
+			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: storage.CnctResponseTopic},
 		}
 		putList = append(putList, PutInput[OpsProviderAccount]{Key: key.String(), Input: cnct})
 	}
@@ -63,7 +63,7 @@ func IngestAcctResponses(ctx Context, profileId string, response yodlee.AccountR
 		}
 		acct := OpsAccount{
 			Data:         acct,
-			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: model.AcctResponseTopic},
+			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: storage.AcctResponseTopic},
 		}
 		putList = append(putList, PutInput[OpsAccount]{Key: key.String(), Input: acct})
 	}
@@ -88,7 +88,7 @@ func IngestHoldResponses(ctx Context, profileId string, response yodlee.HoldingR
 		}
 		hold := OpsHolding{
 			Data:         hold,
-			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: model.HoldResponseTopic},
+			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: storage.HoldResponseTopic},
 		}
 		putList = append(putList, PutInput[OpsHolding]{Key: key.String(), Input: hold})
 	}
@@ -113,7 +113,7 @@ func IngestTxnResponses(ctx Context, profileId string, response yodlee.Transacti
 		}
 		txn := OpsTransaction{
 			Data:         txn,
-			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: model.TxnResponseTopic},
+			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: storage.TxnResponseTopic},
 		}
 		putList = append(putList, PutInput[OpsTransaction]{Key: key.String(), Input: txn})
 	}
@@ -152,7 +152,7 @@ func IngestCnctRefreshes(ctx Context, profileId string, cncts []yodlee.DataExtra
 		} else {
 			cnct := OpsProviderAccountRefresh{
 				Data:         *cnct,
-				OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: model.CnctRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: storage.CnctRefreshTopic},
 			}
 			putList = append(putList, PutInput[OpsProviderAccountRefresh]{Key: key.String(), Input: cnct})
 		}
@@ -185,7 +185,7 @@ func IngestAcctsRefreshes(ctx Context, profileId string, accts []yodlee.DataExtr
 		} else {
 			acct := OpsAccountRefresh{
 				Data:         *acct,
-				OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: model.AcctRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: storage.AcctRefreshTopic},
 			}
 			putList = append(putList, PutInput[OpsAccountRefresh]{Key: key.String(), Input: acct})
 		}
@@ -213,7 +213,7 @@ func IngestHoldRefreshes(ctx Context, profileId string, holds []yodlee.DataExtra
 		}
 		hold := OpsHoldingRefresh{
 			Data:         hold,
-			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: model.HoldRefreshTopic},
+			OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: storage.HoldRefreshTopic},
 		}
 		putList = append(putList, PutInput[OpsHoldingRefresh]{Key: key.String(), Input: hold})
 	}
@@ -249,7 +249,7 @@ func IngestTxnRefreshes(ctx Context, profileId string, txns []yodlee.DataExtract
 			}
 			txn := OpsTransactionRefresh{
 				Data:         *txn,
-				OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: model.TxnRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: profileId, Timestamp: time.Now(), OriginTopic: storage.TxnRefreshTopic},
 			}
 			putList = append(putList, PutInput[OpsTransactionRefresh]{Key: key.String(), Input: txn})
 		}
@@ -302,7 +302,7 @@ func (o PutInput[T]) String() string {
 }
 
 // PutObjects uploads objects to a given Bucket async and returns any failed uploads when the task is joined
-func PutObjects[Input any](ctx Context, bucket model.Bucket, inputObjects []PutInput[Input]) func() []PutResult[Input] {
+func PutObjects[Input any](ctx Context, bucket storage.Bucket, inputObjects []PutInput[Input]) func() []PutResult[Input] {
 	results := make([]PutResult[Input], len(inputObjects))
 
 	var wg sync.WaitGroup
@@ -433,7 +433,7 @@ func (ds *DeleteSupervisor) AddResult(deleteResult DeleteResult) {
 	ds.lock.Unlock()
 }
 
-func (ds *DeleteSupervisor) DeleteList(bucket model.Bucket, listIDsChan chan ListResult) {
+func (ds *DeleteSupervisor) DeleteList(bucket storage.Bucket, listIDsChan chan ListResult) {
 	ds.Go(func() {
 		for listResult := range listIDsChan {
 			slog.InfoContext(ds.context, "deleting listed ids", "bucket", bucket, "listResult", listResult)
@@ -456,7 +456,7 @@ type DeleteChunk struct {
 	Keys   []s3types.ObjectIdentifier
 }
 
-func (ds *DeleteSupervisor) deleteIDs(bucket model.Bucket, keys []string) {
+func (ds *DeleteSupervisor) deleteIDs(bucket storage.Bucket, keys []string) {
 	ds.Go(func() {
 		deleteResult := DeleteObjects(ds.context, bucket, keys)
 		ds.AddResult(deleteResult)
@@ -505,7 +505,7 @@ func DeleteCncts(ctx Context, keys []CnctKey) []DeleteResult {
 	acctsPrefixTable := listAccts.Wait()
 
 	for acctPrefix := range acctsPrefixTable {
-		for _, bucket := range []model.Bucket{
+		for _, bucket := range []storage.Bucket{
 			ctx.AWS.HoldBucket,
 			ctx.AWS.TxnBucket,
 		} {
@@ -539,7 +539,7 @@ func DeleteAccts(ctx Context, keys []AcctKey) []DeleteResult {
 	deletes := makeDeleteSupervisor(ctx)
 
 	for acctMemPrefix := range acctMembPrefixes {
-		for _, bucket := range []model.Bucket{
+		for _, bucket := range []storage.Bucket{
 			ctx.AWS.HoldBucket,
 			ctx.AWS.TxnBucket,
 		} {
@@ -554,7 +554,7 @@ func DeleteAccts(ctx Context, keys []AcctKey) []DeleteResult {
 }
 
 type Prefix struct {
-	Bucket model.Bucket
+	Bucket storage.Bucket
 	Value  string
 }
 
@@ -580,7 +580,7 @@ func DeletePrefixes(ctx Context, prefixes map[Prefix]bool) []DeleteResult {
 }
 
 type ListResult struct {
-	Bucket model.Bucket
+	Bucket storage.Bucket
 	Prefix string
 	Keys   []string
 	Err    error
@@ -588,7 +588,7 @@ type ListResult struct {
 
 // ListObjectsByPrefix lists all object keys for a certain prefix in a Bucket and streams each page of data through a channel as they come.
 // aws s3 API does not support multiple buckets/prefixes per call, so each Bucket prefix needs its own api call.
-func ListObjectsByPrefix(ctx Context, bucket model.Bucket, prefix string) chan ListResult {
+func ListObjectsByPrefix(ctx Context, bucket storage.Bucket, prefix string) chan ListResult {
 	resultsChan := make(chan ListResult)
 
 	// paginate through all objects under the given prefix for a Bucket and send each page to the channel. closes when all pages have been walked
@@ -637,13 +637,13 @@ func ListObjectsByPrefix(ctx Context, bucket model.Bucket, prefix string) chan L
 }
 
 type DeleteResult struct {
-	Bucket model.Bucket
+	Bucket storage.Bucket
 	Prefix string
 	Keys   []string
 	Err    error
 }
 
-func DeleteObjects(ctx Context, bucket model.Bucket, keys []string) DeleteResult {
+func DeleteObjects(ctx Context, bucket storage.Bucket, keys []string) DeleteResult {
 	objectIDs := make([]s3types.ObjectIdentifier, 0, len(keys))
 	for _, key := range keys {
 		objectIDs = append(objectIDs, s3types.ObjectIdentifier{Key: aws.String(key)})

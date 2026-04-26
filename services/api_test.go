@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"yodleeops/model"
-	"yodleeops/model/fakes"
 	openapi "yodleeops/openapi/sources"
+	"yodleeops/storage"
+	"yodleeops/storage/fakes"
 	"yodleeops/testutil"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -83,11 +83,11 @@ func TestStreamFiObjectLogs(t *testing.T) {
 	defer resp.Body.Close()
 
 	go func() {
-		state.FiMessageBroadcaster.Broadcast("profile1", model.HoldRefreshTopic, "event1")
-		state.FiMessageBroadcaster.Broadcast("profile2", model.HoldResponseTopic, "event2")
-		state.FiMessageBroadcaster.Broadcast("profile3", model.TxnRefreshTopic, "event3")
-		state.FiMessageBroadcaster.Broadcast("profile1", model.TxnResponseTopic, "event4")
-		state.FiMessageBroadcaster.Broadcast("profile4", model.CnctRefreshTopic, "event5")
+		state.FiMessageBroadcaster.Broadcast("profile1", storage.HoldRefreshTopic, "event1")
+		state.FiMessageBroadcaster.Broadcast("profile2", storage.HoldResponseTopic, "event2")
+		state.FiMessageBroadcaster.Broadcast("profile3", storage.TxnRefreshTopic, "event3")
+		state.FiMessageBroadcaster.Broadcast("profile1", storage.TxnResponseTopic, "event4")
+		state.FiMessageBroadcaster.Broadcast("profile4", storage.CnctRefreshTopic, "event5")
 	}()
 
 	// then
@@ -116,7 +116,7 @@ func TestHandleListFiMessages(t *testing.T) {
 
 	badState := &State{AWS: a}
 	fakes.MakeBadS3Client(&badState.AWS, fakes.BadS3Config{
-		FailListPrefix: map[model.Bucket]string{
+		FailListPrefix: map[storage.Bucket]string{
 			a.AcctBucket: "p1/1/10",
 			a.CnctBucket: "p1",
 		},
@@ -319,7 +319,7 @@ func TestHandleGetFiObject(t *testing.T) {
 		OpsFiMessage: OpsFiMessage{
 			ProfileId:   "p1",
 			Timestamp:   time.Date(2025, 6, 12, 0, 15, 00, 0, time.UTC),
-			OriginTopic: model.TxnResponseTopic,
+			OriginTopic: storage.TxnResponseTopic,
 		},
 		Data: map[string]json.RawMessage{
 			"key": json.RawMessage(`"value"`),
@@ -358,7 +358,7 @@ func TestHandleGetFiObject(t *testing.T) {
 			wantOpsGeneric: openapi.FiObject{
 				ProfileId:   "p1",
 				Timestamp:   time.Date(2025, 6, 12, 0, 15, 00, 0, time.UTC),
-				OriginTopic: string(model.TxnResponseTopic),
+				OriginTopic: string(storage.TxnResponseTopic),
 				Data:        map[string]jx.Raw{"key": jx.Raw("\"value\"")},
 			},
 			wantStatusCode: http.StatusOK,

@@ -3,12 +3,11 @@ package svc
 import (
 	"context"
 	"github.com/IBM/sarama"
-
-	"yodleeops/model"
+	"yodleeops/storage"
 )
 
 type State struct {
-	AWS                  model.AWS
+	AWS                  storage.AWS
 	Producer             sarama.AsyncProducer
 	FiMessageBroadcaster *FiMessageBroadcaster
 }

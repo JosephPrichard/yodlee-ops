@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"yodleeops/model"
-	"yodleeops/model/fakes"
+	"yodleeops/storage"
+	"yodleeops/storage/fakes"
 	"yodleeops/testutil"
 	"yodleeops/yodlee"
 
@@ -57,7 +57,7 @@ func TestIngestCnctResponses(t *testing.T) {
 			Bucket: state.AWS.CnctBucket,
 			Key:    "p1/1/1/2025-06-12",
 			Value: OpsProviderAccount{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.CnctResponseTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.CnctResponseTopic},
 				Data:         yodlee.ProviderAccount{Id: 1, LastUpdated: "2025-06-12", RequestId: "REQUEST"},
 			},
 		},
@@ -65,7 +65,7 @@ func TestIngestCnctResponses(t *testing.T) {
 			Bucket: state.AWS.CnctBucket,
 			Key:    "p1/1/100/2025-06-13",
 			Value: OpsProviderAccount{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.CnctResponseTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.CnctResponseTopic},
 				Data:         yodlee.ProviderAccount{Id: 100, LastUpdated: "2025-06-13", RequestId: "REQUEST"},
 			},
 		},
@@ -105,7 +105,7 @@ func TestIngestAcctResponses(t *testing.T) {
 			Bucket: state.AWS.AcctBucket,
 			Key:    "p1/1/1/1/2025-06-12",
 			Value: OpsAccount{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.AcctResponseTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.AcctResponseTopic},
 				Data:         yodlee.Account{ProviderAccountId: 1, Id: 1, LastUpdated: "2025-06-12", AccountName: "Checking Data"},
 			},
 		},
@@ -113,7 +113,7 @@ func TestIngestAcctResponses(t *testing.T) {
 			Bucket: state.AWS.AcctBucket,
 			Key:    "p1/1/100/200/2025-06-13",
 			Value: OpsAccount{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.AcctResponseTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.AcctResponseTopic},
 				Data:         yodlee.Account{ProviderAccountId: 100, Id: 200, LastUpdated: "2025-06-13", AccountName: "Savings Data"},
 			},
 		},
@@ -153,7 +153,7 @@ func TestIngestHoldResponses(t *testing.T) {
 			Bucket: state.AWS.HoldBucket,
 			Key:    "p1/1/1/1/2025-06-12",
 			Value: OpsHolding{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.HoldResponseTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.HoldResponseTopic},
 				Data:         yodlee.Holding{AccountId: 1, Id: 1, LastUpdated: "2025-06-12", HoldingType: "Security"},
 			},
 		},
@@ -161,7 +161,7 @@ func TestIngestHoldResponses(t *testing.T) {
 			Bucket: state.AWS.HoldBucket,
 			Key:    "p1/1/200/100/2025-06-13",
 			Value: OpsHolding{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.HoldResponseTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.HoldResponseTopic},
 				Data:         yodlee.Holding{AccountId: 200, Id: 100, LastUpdated: "2025-06-13", HoldingType: "Stock"},
 			},
 		},
@@ -201,7 +201,7 @@ func TestIngestTxnResponses(t *testing.T) {
 			Bucket: state.AWS.TxnBucket,
 			Key:    "p1/1/1/1/2025-06-11T07:06:18Z",
 			Value: OpsTransaction{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.TxnResponseTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.TxnResponseTopic},
 				Data:         yodlee.TransactionWithDateTime{AccountId: 1, Id: 1, Date: "2025-06-11T07:06:18Z", CheckNumber: "123"},
 			},
 		},
@@ -209,7 +209,7 @@ func TestIngestTxnResponses(t *testing.T) {
 			Bucket: state.AWS.TxnBucket,
 			Key:    "p1/1/200/200/2025-06-13T07:06:18Z",
 			Value: OpsTransaction{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.TxnResponseTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.TxnResponseTopic},
 				Data:         yodlee.TransactionWithDateTime{AccountId: 200, Id: 200, Date: "2025-06-13T07:06:18Z", CheckNumber: "123"},
 			},
 		},
@@ -245,7 +245,7 @@ func TestIngestCnctRefreshes(t *testing.T) {
 			Bucket: state.AWS.CnctBucket,
 			Key:    "p1/1/99/2025-06-13",
 			Value: OpsProviderAccountRefresh{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.CnctRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.CnctRefreshTopic},
 				Data:         yodlee.DataExtractsProviderAccount{Id: 99, LastUpdated: "2025-06-13", RequestId: "REQUEST"},
 			},
 		},
@@ -312,7 +312,7 @@ func TestIngestAcctRefreshes(t *testing.T) {
 			Bucket: state.AWS.AcctBucket,
 			Key:    "p1/1/99/999/2025-06-13",
 			Value: OpsAccountRefresh{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.AcctRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.AcctRefreshTopic},
 				Data:         yodlee.DataExtractsAccount{ProviderAccountId: 99, Id: 999, LastUpdated: "2025-06-13", AccountName: "Savings Data"},
 			},
 		},
@@ -379,7 +379,7 @@ func TestIngestTxnRefreshes(t *testing.T) {
 			Bucket: state.AWS.TxnBucket,
 			Key:    "p1/1/999/9999/2025-06-13T07:06:18Z",
 			Value: OpsTransactionRefresh{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.TxnRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.TxnRefreshTopic},
 				Data:         yodlee.DataExtractsTransaction{AccountId: 999, Id: 9999, Date: "2025-06-13T07:06:18Z", CheckNumber: "123"},
 			},
 		},
@@ -447,7 +447,7 @@ func TestIngestHoldRefreshes(t *testing.T) {
 			Bucket: state.AWS.HoldBucket,
 			Key:    "p1/1/999/9999/2025-06-13",
 			Value: OpsHoldingRefresh{
-				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.HoldRefreshTopic},
+				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.HoldRefreshTopic},
 				Data:         yodlee.DataExtractsHolding{AccountId: 999, Id: 9999, LastUpdated: "2025-06-13", HoldingType: "Stock"},
 			},
 		},
@@ -574,7 +574,7 @@ func TestIngest_PutFailure(t *testing.T) {
 		want := []PutCnctResult{
 			{
 				Key:   failKey,
-				Input: OpsProviderAccount{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.CnctResponseTopic}, Data: input.ProviderAccount[0]},
+				Input: OpsProviderAccount{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.CnctResponseTopic}, Data: input.ProviderAccount[0]},
 			},
 		}
 		testutil.Equal(t, want, putResults, putResultOpts[PutCnctResult]()...)
@@ -600,7 +600,7 @@ func TestIngest_PutFailure(t *testing.T) {
 		want := []PutAcctResult{
 			{
 				Key:   failKey,
-				Input: OpsAccount{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.AcctResponseTopic}, Data: input.Account[0]},
+				Input: OpsAccount{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.AcctResponseTopic}, Data: input.Account[0]},
 			},
 		}
 		testutil.Equal(t, want, putResults, putResultOpts[PutAcctResult]()...)
@@ -626,7 +626,7 @@ func TestIngest_PutFailure(t *testing.T) {
 		want := []PutHoldResult{
 			{
 				Key:   failKey,
-				Input: OpsHolding{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.HoldResponseTopic}, Data: input.Holding[0]},
+				Input: OpsHolding{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.HoldResponseTopic}, Data: input.Holding[0]},
 			},
 		}
 		testutil.Equal(t, want, putResults, putResultOpts[PutHoldResult]()...)
@@ -652,7 +652,7 @@ func TestIngest_PutFailure(t *testing.T) {
 		want := []PutTxnResult{
 			{
 				Key:   failKey,
-				Input: OpsTransaction{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.TxnResponseTopic}, Data: input.Transaction[0]},
+				Input: OpsTransaction{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.TxnResponseTopic}, Data: input.Transaction[0]},
 			},
 		}
 		testutil.Equal(t, want, putResults, putResultOpts[PutTxnResult]()...)
@@ -676,7 +676,7 @@ func TestIngest_PutFailure(t *testing.T) {
 			PutResults: []PutResult[OpsProviderAccountRefresh]{
 				{
 					Key:   failKey,
-					Input: OpsProviderAccountRefresh{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.CnctRefreshTopic}, Data: input[0]},
+					Input: OpsProviderAccountRefresh{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.CnctRefreshTopic}, Data: input[0]},
 				},
 			},
 		}
@@ -703,7 +703,7 @@ func TestIngest_PutFailure(t *testing.T) {
 			PutResults: []PutResult[OpsAccountRefresh]{
 				{
 					Key:   failKey,
-					Input: OpsAccountRefresh{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.AcctRefreshTopic}, Data: input[0]},
+					Input: OpsAccountRefresh{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.AcctRefreshTopic}, Data: input[0]},
 				},
 			},
 		}
@@ -730,7 +730,7 @@ func TestIngest_PutFailure(t *testing.T) {
 			PutResults: []PutResult[OpsHoldingRefresh]{
 				{
 					Key:   failKey,
-					Input: OpsHoldingRefresh{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.HoldRefreshTopic}, Data: input[0]},
+					Input: OpsHoldingRefresh{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.HoldRefreshTopic}, Data: input[0]},
 				},
 			},
 		}
@@ -757,7 +757,7 @@ func TestIngest_PutFailure(t *testing.T) {
 			PutResults: []PutResult[OpsTransactionRefresh]{
 				{
 					Key:   failKey,
-					Input: OpsTransactionRefresh{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: model.TxnRefreshTopic}, Data: input[0]},
+					Input: OpsTransactionRefresh{OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.TxnRefreshTopic}, Data: input[0]},
 				},
 			},
 		}
@@ -775,7 +775,7 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 		stateCtx := Context{Context: ctx, State: state}
 
 		fakes.MakeBadS3Client(&state.AWS, fakes.BadS3Config{
-			FailListPrefix: map[model.Bucket]string{
+			FailListPrefix: map[storage.Bucket]string{
 				state.AWS.TxnBucket: "p1/1/100", // fail to list txn by prefix
 			},
 			FailDeleteKeys: map[string]bool{
@@ -802,7 +802,7 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 		stateCtx := Context{Context: ctx, State: state}
 
 		fakes.MakeBadS3Client(&state.AWS, fakes.BadS3Config{
-			FailListPrefix: map[model.Bucket]string{
+			FailListPrefix: map[storage.Bucket]string{
 				state.AWS.TxnBucket: "p1/1/100", // fail to list txn by prefix
 			},
 			FailDeleteKeys: map[string]bool{

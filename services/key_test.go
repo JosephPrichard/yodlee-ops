@@ -2,14 +2,13 @@ package svc
 
 import (
 	"testing"
-
-	"yodleeops/model"
+	"yodleeops/storage"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestParseOpsFiMetadata(t *testing.T) {
-	buckets := model.Buckets{
+	buckets := storage.Buckets{
 		CnctBucket: "cnct-bucket",
 		AcctBucket: "acct-bucket",
 		HoldBucket: "hold-bucket",
@@ -17,7 +16,7 @@ func TestParseOpsFiMetadata(t *testing.T) {
 	}
 	for _, test := range []struct {
 		name        string
-		bucket      model.Bucket
+		bucket      storage.Bucket
 		key         string
 		expectError bool
 		validateFn  func(t *testing.T, o *OpsFiMetadata)

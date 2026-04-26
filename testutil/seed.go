@@ -4,17 +4,16 @@ import (
 	"bytes"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"testing"
-
-	"yodleeops/model"
+	"yodleeops/storage"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/require"
 )
 
-func SeedS3Buckets(t *testing.T, s3Client *s3.Client, buckets model.Buckets) {
+func SeedS3Buckets(t *testing.T, s3Client *s3.Client, buckets storage.Buckets) {
 	// clear all objects already in the bucket
-	for _, bucket := range []model.Bucket{
+	for _, bucket := range []storage.Bucket{
 		buckets.CnctBucket,
 		buckets.AcctBucket,
 		buckets.HoldBucket,
@@ -61,7 +60,7 @@ func SeedS3Buckets(t *testing.T, s3Client *s3.Client, buckets model.Buckets) {
 	// seed the bucket with data to test deletions AND to ensure that inserts handle existing keys properly
 	// "body" can be anything because insertion does not look at this information
 	for _, record := range []struct {
-		Bucket model.Bucket
+		Bucket storage.Bucket
 		Key    string
 	}{
 		// CnctBucket

@@ -7,12 +7,13 @@ import (
 	"github.com/IBM/sarama"
 	"github.com/google/uuid"
 	"log/slog"
-	"yodleeops/model"
+	"yodleeops/storage"
+
 	"yodleeops/yodlee"
 )
 
 type Consumer struct {
-	Topic   model.Topic
+	Topic   storage.Topic
 	GroupID string
 	Handler sarama.ConsumerGroupHandler
 }
@@ -22,7 +23,7 @@ type ConsumerHandlerFunc[Value any] = func(Context, string, Value)
 type ConsumerConfig[Value any] struct {
 	State   *State
 	GroupID string
-	Topic   model.Topic
+	Topic   storage.Topic
 	Handler ConsumerHandlerFunc[Value]
 }
 
@@ -39,73 +40,73 @@ func MakeConsumer[Value any](cfg ConsumerConfig[Value]) Consumer {
 	}
 }
 
-func MakeConsumers(state *State) map[model.Topic]Consumer {
+func MakeConsumers(state *State) map[storage.Topic]Consumer {
 	consumerList := []Consumer{
 		// fi message topics have a statically computed group id because only one node receives messages
 		MakeConsumer(ConsumerConfig[[]yodlee.DataExtractsProviderAccount]{
-			Topic:   model.CnctRefreshTopic,
+			Topic:   storage.CnctRefreshTopic,
 			State:   state,
-			GroupID: model.CnctRefreshTopicGroupID,
+			GroupID: storage.CnctRefreshTopicGroupID,
 			Handler: ConsumeCnctRefreshMessage,
 		}),
 		MakeConsumer(ConsumerConfig[[]yodlee.DataExtractsAccount]{
-			Topic:   model.AcctRefreshTopic,
+			Topic:   storage.AcctRefreshTopic,
 			State:   state,
-			GroupID: model.AcctRefreshTopicGroupID,
+			GroupID: storage.AcctRefreshTopicGroupID,
 			Handler: ConsumeAcctRefreshMessage,
 		}),
 		MakeConsumer(ConsumerConfig[[]yodlee.DataExtractsHolding]{
-			Topic:   model.HoldRefreshTopic,
+			Topic:   storage.HoldRefreshTopic,
 			State:   state,
-			GroupID: model.HoldRefreshTopicGroupID,
+			GroupID: storage.HoldRefreshTopicGroupID,
 			Handler: ConsumeHoldRefreshMessage,
 		}),
 		MakeConsumer(ConsumerConfig[[]yodlee.DataExtractsTransaction]{
-			Topic:   model.TxnRefreshTopic,
+			Topic:   storage.TxnRefreshTopic,
 			State:   state,
-			GroupID: model.TxnRefreshTopicGroupID,
+			GroupID: storage.TxnRefreshTopicGroupID,
 			Handler: ConsumeTxnRefreshMessage,
 		}),
 		MakeConsumer(ConsumerConfig[yodlee.ProviderAccountResponse]{
-			Topic:   model.CnctResponseTopic,
+			Topic:   storage.CnctResponseTopic,
 			State:   state,
-			GroupID: model.CnctResponseTopicGroupID,
+			GroupID: storage.CnctResponseTopicGroupID,
 			Handler: ConsumeCnctResponseMessage,
 		}),
 		MakeConsumer(ConsumerConfig[yodlee.AccountResponse]{
-			Topic:   model.AcctResponseTopic,
+			Topic:   storage.AcctResponseTopic,
 			State:   state,
-			GroupID: model.AcctResponseTopicGroupID,
+			GroupID: storage.AcctResponseTopicGroupID,
 			Handler: ConsumeAcctResponseMessage,
 		}),
 		MakeConsumer(ConsumerConfig[yodlee.HoldingResponse]{
-			Topic:   model.HoldResponseTopic,
+			Topic:   storage.HoldResponseTopic,
 			State:   state,
-			GroupID: model.HoldResponseTopicGroupID,
+			GroupID: storage.HoldResponseTopicGroupID,
 			Handler: ConsumeHoldResponseMessage,
 		}),
 		MakeConsumer(ConsumerConfig[yodlee.TransactionResponse]{
-			Topic:   model.TxnResponseTopic,
+			Topic:   storage.TxnResponseTopic,
 			State:   state,
-			GroupID: model.TxnResponseTopicGroupID,
+			GroupID: storage.TxnResponseTopicGroupID,
 			Handler: ConsumeTxnResponseMessage,
 		}),
 		MakeConsumer(ConsumerConfig[[]DeleteRetry]{
-			Topic:   model.DeleteRetryTopic,
+			Topic:   storage.DeleteRetryTopic,
 			State:   state,
-			GroupID: model.DeleteRetryTopicGroupID,
+			GroupID: storage.DeleteRetryTopicGroupID,
 			Handler: ConsumeDeleteRetryMessage,
 		}),
 		// the broadcast topic has a dynamically computed group id because each node receives the message
 		MakeConsumer(ConsumerConfig[BroadcastOutput]{
-			Topic:   model.BroadcastTopic,
+			Topic:   storage.BroadcastTopic,
 			State:   state,
 			GroupID: uuid.NewString(),
 			Handler: ConsumeBroadcastMessage,
 		}),
 	}
 
-	consumerMap := make(map[model.Topic]Consumer, len(consumerList))
+	consumerMap := make(map[storage.Topic]Consumer, len(consumerList))
 	for _, c := range consumerList {
 		consumerMap[c.Topic] = c
 	}
@@ -144,7 +145,7 @@ func ConsumeCnctRefreshMessage(ctx Context, key string, cncts []yodlee.DataExtra
 	result := IngestCnctRefreshes(ctx, key, cncts)
 	slog.InfoContext(ctx, "completed cnct refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	ProducePutResults(ctx, model.CnctRefreshTopic, key, result.PutResults, nil)
+	ProducePutResults(ctx, storage.CnctRefreshTopic, key, result.PutResults, nil)
 	ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
@@ -154,7 +155,7 @@ func ConsumeAcctRefreshMessage(ctx Context, key string, accts []yodlee.DataExtra
 	result := IngestAcctsRefreshes(ctx, key, accts)
 	slog.InfoContext(ctx, "completed acct refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	ProducePutResults(ctx, model.AcctRefreshTopic, key, result.PutResults, nil)
+	ProducePutResults(ctx, storage.AcctRefreshTopic, key, result.PutResults, nil)
 	ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
@@ -164,7 +165,7 @@ func ConsumeTxnRefreshMessage(ctx Context, key string, txns []yodlee.DataExtract
 	result := IngestTxnRefreshes(ctx, key, txns)
 	slog.InfoContext(ctx, "completed txn refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	ProducePutResults(ctx, model.TxnRefreshTopic, key, result.PutResults, nil)
+	ProducePutResults(ctx, storage.TxnRefreshTopic, key, result.PutResults, nil)
 	ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
@@ -174,7 +175,7 @@ func ConsumeHoldRefreshMessage(ctx Context, key string, holds []yodlee.DataExtra
 	result := IngestHoldRefreshes(ctx, key, holds)
 	slog.InfoContext(ctx, "completed hold refresh ingestion", "putResults", result.PutResults, "deleteErrs", result.DeleteErrors)
 
-	ProducePutResults(ctx, model.HoldRefreshTopic, key, result.PutResults, nil)
+	ProducePutResults(ctx, storage.HoldRefreshTopic, key, result.PutResults, nil)
 	ProduceDeleteErrors(ctx, key, result.DeleteErrors)
 }
 
@@ -183,7 +184,7 @@ func ConsumeCnctResponseMessage(ctx Context, key string, cncts yodlee.ProviderAc
 
 	putResults := IngestCnctResponses(ctx, key, cncts)
 
-	ProducePutResults(ctx, model.CnctResponseTopic, key, putResults, func(errInputs []yodlee.ProviderAccount) any {
+	ProducePutResults(ctx, storage.CnctResponseTopic, key, putResults, func(errInputs []yodlee.ProviderAccount) any {
 		return yodlee.ProviderAccountResponse{ProviderAccount: errInputs}
 	})
 }
@@ -193,7 +194,7 @@ func ConsumeAcctResponseMessage(ctx Context, key string, accts yodlee.AccountRes
 
 	putResults := IngestAcctResponses(ctx, key, accts)
 
-	ProducePutResults(ctx, model.AcctResponseTopic, key, putResults, func(errInputs []yodlee.Account) any {
+	ProducePutResults(ctx, storage.AcctResponseTopic, key, putResults, func(errInputs []yodlee.Account) any {
 		return yodlee.AccountResponse{Account: errInputs}
 	})
 }
@@ -203,7 +204,7 @@ func ConsumeTxnResponseMessage(ctx Context, key string, txns yodlee.TransactionR
 
 	putResults := IngestTxnResponses(ctx, key, txns)
 
-	ProducePutResults(ctx, model.TxnResponseTopic, key, putResults, func(errInputs []yodlee.TransactionWithDateTime) any {
+	ProducePutResults(ctx, storage.TxnResponseTopic, key, putResults, func(errInputs []yodlee.TransactionWithDateTime) any {
 		return yodlee.TransactionResponse{Transaction: errInputs}
 	})
 }
@@ -213,7 +214,7 @@ func ConsumeHoldResponseMessage(ctx Context, key string, holds yodlee.HoldingRes
 
 	putResults := IngestHoldResponses(ctx, key, holds)
 
-	ProducePutResults(ctx, model.HoldResponseTopic, key, putResults, func(errInputs []yodlee.Holding) any {
+	ProducePutResults(ctx, storage.HoldResponseTopic, key, putResults, func(errInputs []yodlee.Holding) any {
 		return yodlee.HoldingResponse{Holding: errInputs}
 	})
 }

@@ -5,8 +5,7 @@ import (
 	"fmt"
 	"testing"
 	"time"
-
-	"yodleeops/model"
+	"yodleeops/storage"
 
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/testcontainers/testcontainers-go"
@@ -20,10 +19,10 @@ const (
 
 var localstackCont testcontainers.Container
 
-func SetupITest(t *testing.T) model.AWS {
+func SetupITest(t *testing.T) storage.AWS {
 	ctx := context.Background()
 
-	config := model.Config{
+	config := storage.Config{
 		AwsDefaultRegion: "us-east-1",
 		IsLocal:          true,
 		CnctBucket:       "cnct-bucket",
@@ -62,11 +61,11 @@ func startLocalstackCont(ctx context.Context, t *testing.T) string {
 	return fmt.Sprintf("http://%s:%s", host, port.Port())
 }
 
-func initTestAWS(t *testing.T, config model.Config) model.AWS {
-	s3Client := model.MakeS3Client(config)
-	aws := model.MakeAWS(config, s3Client)
+func initTestAWS(t *testing.T, config storage.Config) storage.AWS {
+	s3Client := storage.MakeS3Client(config)
+	aws := storage.MakeAWS(config, s3Client)
 
-	for _, bucket := range []model.Bucket{
+	for _, bucket := range []storage.Bucket{
 		aws.CnctBucket,
 		aws.AcctBucket,
 		aws.TxnBucket,
