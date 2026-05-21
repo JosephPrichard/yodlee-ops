@@ -1,13 +1,22 @@
 # Yodlee Ops
-Microservice to ingest yodlee responses to S3 through message queues. 
-Contains a small REST API for common queries and an SSE endpoint to stream ingested data for specific profile IDs.
+A microservice to ingest yodlee responses to S3 through Kafka.
 
 ## Problem Statement
 
-Yodlee, the financial data aggregation plaform has an API for consuming information that contains the logical concept of connections, accounts, transactions, and holdings.
+Yodlee, the financial data aggregation platform, has an API for consuming information that contains the logical concept of connections, accounts, transactions, and holdings.
 Suppose there is another microservice that uses Yodlee's API to receive customer data for these 4 datatypes. 
 We need a way to log every response received from Yodlee and store it in an ultra long-term inexpensive storage (S3) for future access.
 Additionally, we need to delete any customer records marked as deleted, as well as child records (if a connection is deleted, all of its accounts, transactions, and holdings must also be deleted).
+
+## Solution
+
+The microservice receives all responses received from Yodlee on a Kafka topic for each response type.
+Whenever it consumes from each topic, it stores the individual financial records that are not marked as a "delete" into S3 using the "PutObject" API.
+We can receive multiple financial records in one message, so the service executes multiple calls to S3 concurrently.
+If a message is marked as "deleted" we use the "ListObjectsV2" and "DeleteObjects" APIs to find child records and delete them concurrently.
+Since deleting using multiple API calls is not atomic, we collect delete failures and republish them using a retry topic (DLQ).
+
+Additionally, it contains a small REST API for common queries and an SSE endpoint to stream ingested data for specific profile IDs (for debugging).
 
 ## Configuration
 
@@ -38,6 +47,8 @@ Execute
 
 ## Deployment
 
+The deployment setup is a POC for a GitHub action and Terraform workflow.
+
 Project contains configs for two environments, test and uat. 
 Both of these are test environments, but the uat environment contains more tasks and more powerful ECS task instances.
 For the most part, multienvironment setup exists as a POC for quickly replicating the terraform config to different environments.
@@ -51,6 +62,8 @@ The test deployment triggers on `test` branch and uat deployment on `main` branc
 
 AWS architecture definition is self-contained except needing an ECR repository (configured to be `development/yodleeops`).
 The terraform deployment creates the VPC, subnets, ECS cluster, S3 buckets, MSK cluster, ALB, ECS service, IAM roles, IAM policies, security configurations, and the ECS task definition.
+
+## Examples
 
 ![screenshot](examples/swagger-resp.png)
 ![screenshot](examples/sse-postman.png)

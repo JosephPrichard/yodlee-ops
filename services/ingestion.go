@@ -312,10 +312,7 @@ func PutObjects[Input any](ctx Context, bucket storage.Bucket, inputObjects []Pu
 		if !ok {
 			continue
 		}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			_, err := ctx.AWS.S3.PutObject(ctx, &s3.PutObjectInput{
 				Bucket: bucket.String(),
 				Key:    aws.String(object.Key),
@@ -328,7 +325,7 @@ func PutObjects[Input any](ctx Context, bucket storage.Bucket, inputObjects []Pu
 			}
 
 			results[i] = PutResult[Input]{Key: object.Key, Input: object.Input, Err: err}
-		}()
+		})
 	}
 
 	return func() []PutResult[Input] {
@@ -358,14 +355,6 @@ type Supervisor struct {
 	wg      sync.WaitGroup
 }
 
-func (s *Supervisor) Go(cb func()) {
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
-		cb()
-	}()
-}
-
 type ListAcctsTable struct {
 	Supervisor
 	table map[string]bool
@@ -381,7 +370,7 @@ func makeListAcctsSupervisor(ctx Context) ListAcctsTable {
 
 func (ls *ListAcctsTable) InterceptListedPrefixes(listIDsChan chan ListResult) chan ListResult {
 	pipeIDsChan := make(chan ListResult)
-	ls.Go(func() {
+	ls.wg.Go(func() {
 		defer close(pipeIDsChan) // nothing more to pipe once there is nothing more to receive.
 
 		for listResult := range listIDsChan {
@@ -434,7 +423,7 @@ func (ds *DeleteSupervisor) AddResult(deleteResult DeleteResult) {
 }
 
 func (ds *DeleteSupervisor) DeleteList(bucket storage.Bucket, listIDsChan chan ListResult) {
-	ds.Go(func() {
+	ds.wg.Go(func() {
 		for listResult := range listIDsChan {
 			slog.InfoContext(ds.context, "deleting listed ids", "bucket", bucket, "listResult", listResult)
 
@@ -457,7 +446,7 @@ type DeleteChunk struct {
 }
 
 func (ds *DeleteSupervisor) deleteIDs(bucket storage.Bucket, keys []string) {
-	ds.Go(func() {
+	ds.wg.Go(func() {
 		deleteResult := DeleteObjects(ds.context, bucket, keys)
 		ds.AddResult(deleteResult)
 	})
