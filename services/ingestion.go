@@ -350,41 +350,34 @@ func PutObjects[Input any](ctx Context, bucket storage.Bucket, inputObjects []Pu
 	}
 }
 
-type Supervisor struct {
-	context Context
-	wg      sync.WaitGroup
+type ListAcctsWaitGroup struct {
+	context  Context
+	internal sync.WaitGroup
+	table    map[string]bool
+	lock     sync.Mutex
 }
 
-type ListAcctsTable struct {
-	Supervisor
-	table map[string]bool
-	lock  sync.Mutex
+func makeListAcctsSupervisor(ctx Context) ListAcctsWaitGroup {
+	return ListAcctsWaitGroup{context: ctx, table: make(map[string]bool)}
 }
 
-func makeListAcctsSupervisor(ctx Context) ListAcctsTable {
-	return ListAcctsTable{
-		Supervisor: Supervisor{context: ctx},
-		table:      make(map[string]bool),
-	}
-}
-
-func (ls *ListAcctsTable) InterceptListedPrefixes(listIDsChan chan ListResult) chan ListResult {
+func (wg *ListAcctsWaitGroup) InterceptListedPrefixes(listIDsChan chan ListResult) chan ListResult {
 	pipeIDsChan := make(chan ListResult)
-	ls.wg.Go(func() {
+	wg.internal.Go(func() {
 		defer close(pipeIDsChan) // nothing more to pipe once there is nothing more to receive.
 
 		for listResult := range listIDsChan {
 			for _, acctObjectID := range listResult.Keys {
 				acctKey, err := ParseAcctKey(acctObjectID)
 				if err != nil {
-					slog.ErrorContext(ls.context, "failed to parse acct Key from s3 object key", "acctKeyStr", acctObjectID, "err", err)
+					slog.ErrorContext(wg.context, "failed to parse acct Key from s3 object key", "acctKeyStr", acctObjectID, "err", err)
 					continue
 				}
 				acctPrefixStr := AcctMemberPrefix{ProfileId: acctKey.ProfileId, AcctID: acctKey.AcctID}.String()
 
-				ls.lock.Lock()
-				ls.table[acctPrefixStr] = true
-				ls.lock.Unlock()
+				wg.lock.Lock()
+				wg.table[acctPrefixStr] = true
+				wg.lock.Unlock()
 			}
 			// always pipeline regardless of the list acct is an error or not. (we handle errors later)
 			pipeIDsChan <- listResult
@@ -393,73 +386,67 @@ func (ls *ListAcctsTable) InterceptListedPrefixes(listIDsChan chan ListResult) c
 	return pipeIDsChan
 }
 
-func (ls *ListAcctsTable) Wait() map[string]bool {
-	ls.wg.Wait()
-	slog.InfoContext(ls.context, "finished list accts supervisor", "acctPrefixTable", ls.table)
-	return ls.table
+func (wg *ListAcctsWaitGroup) Wait() map[string]bool {
+	wg.internal.Wait()
+	slog.InfoContext(wg.context, "finished list accts wait group", "acctPrefixTable", wg.table)
+	return wg.table
 }
 
-// DeleteSupervisor is a block of state to control the goroutines executing concurrent delete jobs
+// DeletesWaitGroup is a block of state to control the goroutines executing concurrent delete jobs
 // it stores errors any deletes run into (protected with a lock) and a wait group for coordinating job execution
-type DeleteSupervisor struct {
-	Supervisor
+type DeletesWaitGroup struct {
+	context    Context
+	internal   sync.WaitGroup
 	deleteErrs []DeleteResult
 	lock       sync.Mutex
 }
 
-func makeDeleteSupervisor(ctx Context) DeleteSupervisor {
-	return DeleteSupervisor{
-		Supervisor: Supervisor{context: ctx},
-	}
+func makeDeleteSupervisor(ctx Context) DeletesWaitGroup {
+	return DeletesWaitGroup{context: ctx}
 }
 
-func (ds *DeleteSupervisor) AddResult(deleteResult DeleteResult) {
+func (wg *DeletesWaitGroup) AddResult(deleteResult DeleteResult) {
 	if deleteResult.Err == nil {
 		return
 	}
-	ds.lock.Lock()
-	ds.deleteErrs = append(ds.deleteErrs, deleteResult)
-	ds.lock.Unlock()
+	wg.lock.Lock()
+	wg.deleteErrs = append(wg.deleteErrs, deleteResult)
+	wg.lock.Unlock()
 }
 
-func (ds *DeleteSupervisor) DeleteList(bucket storage.Bucket, listIDsChan chan ListResult) {
-	ds.wg.Go(func() {
+func (wg *DeletesWaitGroup) DeleteList(bucket storage.Bucket, listIDsChan chan ListResult) {
+	wg.internal.Go(func() {
 		for listResult := range listIDsChan {
-			slog.InfoContext(ds.context, "deleting listed ids", "bucket", bucket, "listResult", listResult)
+			slog.InfoContext(wg.context, "deleting listed ids", "bucket", bucket, "listResult", listResult)
 
 			var deleteResult DeleteResult
 
 			if listResult.Err != nil {
 				deleteResult = DeleteResult{Bucket: listResult.Bucket, Prefix: listResult.Prefix, Err: listResult.Err}
 			} else {
-				deleteResult = DeleteObjects(ds.context, bucket, listResult.Keys)
+				deleteResult = DeleteObjects(wg.context, bucket, listResult.Keys)
 			}
 
-			ds.AddResult(deleteResult)
+			wg.AddResult(deleteResult)
 		}
 	})
 }
 
-type DeleteChunk struct {
-	Bucket string
-	Keys   []s3types.ObjectIdentifier
-}
-
-func (ds *DeleteSupervisor) deleteIDs(bucket storage.Bucket, keys []string) {
-	ds.wg.Go(func() {
-		deleteResult := DeleteObjects(ds.context, bucket, keys)
-		ds.AddResult(deleteResult)
+func (wg *DeletesWaitGroup) deleteIDs(bucket storage.Bucket, keys []string) {
+	wg.internal.Go(func() {
+		deleteResult := DeleteObjects(wg.context, bucket, keys)
+		wg.AddResult(deleteResult)
 	})
 }
 
-func (ds *DeleteSupervisor) wait() []DeleteResult {
-	ds.wg.Wait()
-	if len(ds.deleteErrs) == 0 {
-		slog.InfoContext(ds.context, "finished delete objects supervisor")
+func (wg *DeletesWaitGroup) wait() []DeleteResult {
+	wg.internal.Wait()
+	if len(wg.deleteErrs) == 0 {
+		slog.InfoContext(wg.context, "finished delete objects supervisor")
 	} else {
-		slog.ErrorContext(ds.context, "finished delete objects supervisor", "errs", ds.deleteErrs)
+		slog.ErrorContext(wg.context, "finished delete objects supervisor", "errs", wg.deleteErrs)
 	}
-	return ds.deleteErrs
+	return wg.deleteErrs
 }
 
 // DeleteCncts deletes all records with the following account keys from all parts of s3.
