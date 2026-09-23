@@ -5,12 +5,12 @@ RUN apk add --no-cache make
 WORKDIR /sources
 
 # ---- Dependency Layer ----
-COPY go.mod go.sum Makefile ./
+COPY ./app/go.mod ./app/go.sum ./app/Makefile ./
 RUN go mod download
 RUN make install
 
 # ---- Source Layer ----
-COPY . .
+COPY ./app .
 RUN make
 RUN CGO_ENABLED=0 go build -trimpath -ldflags=-s -o /bin/app ./cmd/server
 
