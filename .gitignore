@@ -28,10 +28,8 @@ go.work.sum
 .env
 envs
 
-openapi/static
-openapi/sources
-
-frontend/public/mockServiceWorker.js
+# Generated sources
+app/openapi/sources
 
 *.ps1
 
