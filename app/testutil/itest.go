@@ -62,8 +62,8 @@ func startLocalstackCont(ctx context.Context, t *testing.T) string {
 }
 
 func initTestAWS(t *testing.T, config storage.Config) storage.AWS {
-	s3Client := storage.MakeS3Client(config)
-	aws := storage.MakeAWS(config, s3Client)
+	s3Client := storage.NewS3Client(config)
+	aws := storage.NewAWSClient(config, s3Client)
 
 	for _, bucket := range []storage.Bucket{
 		aws.CnctBucket,

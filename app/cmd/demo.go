@@ -3,13 +3,14 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/IBM/sarama"
-	"github.com/brianvoe/gofakeit/v6"
 	"log/slog"
 	"math/rand"
 	"strconv"
 	"time"
 	"yodleeops/storage"
+
+	"github.com/IBM/sarama"
+	"github.com/brianvoe/gofakeit/v6"
 
 	"yodleeops/yodlee"
 )
@@ -781,7 +782,7 @@ func makeHoldResponses(n int) yodlee.HoldingResponse {
 var Period = time.Second * 1
 
 func ExecuteDemoProducer(serverConfig storage.Config, kafkaConfig *sarama.Config) {
-	producer := storage.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
+	producer := storage.NewSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
 
 	slog.Info("starting yodlee ops, starting test producer", "serverConfig", serverConfig, "kafkaConfig", fmt.Sprintf("%+v", kafkaConfig))
 

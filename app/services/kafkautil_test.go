@@ -3,9 +3,10 @@ package svc
 import (
 	"encoding/json"
 	"fmt"
+	"yodleeops/storage"
+
 	"github.com/IBM/sarama"
 	saramaMocks "github.com/IBM/sarama/mocks"
-	"yodleeops/storage"
 
 	"yodleeops/yodlee"
 )
@@ -27,14 +28,14 @@ func decodeBroadcast(msg *sarama.ProducerMessage) any {
 	if err != nil {
 		return err.Error()
 	}
-	var brdcast struct {
-		OriginTopic storage.Topic `json:"origintopic"`
+	var broadcast struct {
+		OriginTopic storage.Topic `json:"originTopic"`
 	}
-	if err := json.Unmarshal(v, &brdcast); err != nil {
+	if err := json.Unmarshal(v, &broadcast); err != nil {
 		return fmt.Errorf("unmarshal broadcast message: %w", err)
 	}
 
-	switch brdcast.OriginTopic {
+	switch broadcast.OriginTopic {
 	case storage.CnctResponseTopic:
 		return decodeProduceMsg[BroadcastInput[OpsProviderAccount, yodlee.ProviderAccount]](msg)
 	case storage.AcctResponseTopic:
@@ -74,6 +75,8 @@ func decodeProducerMessage(msg *sarama.ProducerMessage) any {
 		return decodeProduceMsg[[]yodlee.DataExtractsHolding](msg)
 	case storage.TxnRefreshTopic:
 		return decodeProduceMsg[[]yodlee.DataExtractsTransaction](msg)
+	case storage.DeleteRetryTopic:
+		return decodeProduceMsg[DeleteResult](msg)
 	case storage.BroadcastTopic:
 		return decodeBroadcast(msg)
 	default:
@@ -81,15 +84,13 @@ func decodeProducerMessage(msg *sarama.ProducerMessage) any {
 	}
 }
 
-func drainMockProducerMessages(mockProducer *saramaMocks.AsyncProducer) []any {
+func getMockProducerMessages(mockProducer *saramaMocks.AsyncProducer) []any {
 	var messages []any
-
-Collect:
 	for {
 		select {
 		case msg, ok := <-mockProducer.Successes():
 			if !ok {
-				break Collect
+				return messages
 			}
 			messages = append(messages, decodeProducerMessage(msg))
 		case err, ok := <-mockProducer.Errors():
@@ -97,9 +98,7 @@ Collect:
 				break
 			}
 			messages = append(messages, fmt.Errorf("mock producer error: %+v", err))
-			break Collect
+			return messages
 		}
 	}
-
-	return messages
 }

@@ -24,19 +24,19 @@ func main() {
 
 	cmd.InitLoggers(nil)
 
-	serverConfig := storage.MakeConfig()
+	serverConfig := storage.NewConfig()
 	//serverConfig.IsLocal = true
 
 	slog.Info("starting yodlee ops, starting server", "serverConfig", serverConfig)
 
-	s3Client := storage.MakeS3Client(serverConfig)
+	s3Client := storage.NewS3Client(serverConfig)
 
-	kafkaConfig := storage.MakeSaramaConfig(serverConfig)
+	kafkaConfig := storage.NewSaramaConfig(serverConfig)
 	storage.CreateKafkaTopics(serverConfig.KafkaBrokers, kafkaConfig)
-	producer := storage.MakeSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
+	producer := storage.NewSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
 
 	state := &svc.State{
-		AWS:                  storage.MakeAWS(serverConfig, s3Client),
+		AWS:                  storage.NewAWSClient(serverConfig, s3Client),
 		Producer:             producer,
 		FiMessageBroadcaster: &svc.FiMessageBroadcaster{},
 	}

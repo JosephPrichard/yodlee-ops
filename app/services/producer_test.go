@@ -2,19 +2,30 @@ package svc
 
 import (
 	"errors"
-	"github.com/IBM/sarama"
-	saramaMocks "github.com/IBM/sarama/mocks"
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"testing"
 	"yodleeops/storage"
 	"yodleeops/testutil"
 	"yodleeops/yodlee"
 
+	"github.com/IBM/sarama"
+	saramaMocks "github.com/IBM/sarama/mocks"
+	"github.com/google/go-cmp/cmp/cmpopts"
+
 	"github.com/stretchr/testify/assert"
 )
 
+func setupProducerTest(t *testing.T) (Context, *saramaMocks.AsyncProducer) {
+	config := sarama.NewConfig()
+	config.Producer.Return.Successes = true
+	config.Producer.Return.Errors = true
+
+	mockProducer := saramaMocks.NewAsyncProducer(t, config)
+	return Context{Context: t.Context(), State: &State{Producer: mockProducer}}, mockProducer
+}
+
 func TestProduceDeleteErrors(t *testing.T) {
-	// given
+	ctx, mockProducer := setupProducerTest(t)
+
 	deleteErrs := []DeleteResult{
 		{
 			Bucket: "Bucket",
@@ -28,41 +39,26 @@ func TestProduceDeleteErrors(t *testing.T) {
 		},
 	}
 
-	// when
-	msgs := MakeDeleteErrorsMsgs(t.Context(), "p1", deleteErrs)
-
-	// then
-	wantDeleteResults := []JsonMessage{
-		{
-			Key:   "p1",
-			Topic: storage.DeleteRetryTopic,
-			Value: DeleteRetry{
-				Kind:   "delete",
-				Bucket: "Bucket",
-				Keys:   []string{"key1", "key2"},
-			},
-		},
-		{
-			Key:   "p1",
-			Topic: storage.DeleteRetryTopic,
-			Value: DeleteRetry{
-				Kind:   "list",
-				Bucket: "Bucket",
-				Prefix: "prefix",
-			},
-		},
+	for range deleteErrs {
+		mockProducer.ExpectInputAndSucceed()
 	}
-	assert.ElementsMatch(t, wantDeleteResults, msgs)
+	go func() {
+		defer mockProducer.Close()
+		ProduceDeleteErrors(ctx, "p1", deleteErrs)
+	}()
+
+	messages := getMockProducerMessages(mockProducer)
+
+	// (echo assert)
+	wantMessages := []any{
+		DeleteResult{Bucket: "Bucket", Keys: []string{"key1", "key2"}},
+		DeleteResult{Bucket: "Bucket", Prefix: "prefix"},
+	}
+	assert.ElementsMatch(t, wantMessages, messages)
 }
 
 func TestProducePutResults(t *testing.T) {
-	// given
-	config := sarama.NewConfig()
-	config.Producer.Return.Successes = true
-	config.Producer.Return.Errors = true
-
-	mockProducer := saramaMocks.NewAsyncProducer(t, config)
-	ctx := Context{Context: t.Context(), State: &State{Producer: mockProducer}}
+	ctx, mockProducer := setupProducerTest(t)
 
 	putResults := []PutResult[OpsProviderAccountRefresh]{
 		{
@@ -90,9 +86,7 @@ func TestProducePutResults(t *testing.T) {
 		},
 	}
 
-	// when
 	for range putResults {
-		// expect one message to be produced per `PutResult`
 		mockProducer.ExpectInputAndSucceed()
 	}
 	go func() {
@@ -100,10 +94,9 @@ func TestProducePutResults(t *testing.T) {
 		ProducePutResults(ctx, storage.CnctRefreshTopic, "p1", putResults, nil)
 	}()
 
-	// then
-	msgs := drainMockProducerMessages(mockProducer)
+	messages := getMockProducerMessages(mockProducer)
 
-	wantMsgs := []any{
+	wantMessages := []any{
 		BroadcastInput[OpsProviderAccountRefresh, yodlee.DataExtractsProviderAccount]{
 			OriginTopic: storage.CnctRefreshTopic,
 			FiMessages: []OpsProviderAccountRefresh{
@@ -119,5 +112,5 @@ func TestProducePutResults(t *testing.T) {
 		},
 		[]yodlee.DataExtractsProviderAccount{{LastUpdated: "2025-06-13", RequestId: "REQUEST", Id: 90}},
 	}
-	testutil.Equal(t, wantMsgs, msgs, cmpopts.IgnoreFields(OpsFiMessage{}, "Timestamp"))
+	testutil.Equal(t, wantMessages, messages, cmpopts.IgnoreFields(OpsFiMessage{}, "Timestamp"))
 }

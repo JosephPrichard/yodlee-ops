@@ -1,11 +1,11 @@
 package svc
 
 import (
-	"context"
 	"encoding/json"
-	"github.com/IBM/sarama"
 	"log/slog"
 	"yodleeops/storage"
+
+	"github.com/IBM/sarama"
 )
 
 type JsonMessage struct {
@@ -14,32 +14,12 @@ type JsonMessage struct {
 	Value any
 }
 
-func ProduceJsonMessage(ctx Context, message JsonMessage) {
-	inputBytes, err := json.Marshal(message.Value)
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to republish json messages", "err", err)
-		return
-	}
-	slog.InfoContext(ctx, "producing json messages", "topic", message.Topic, "size", len(inputBytes), "json", string(inputBytes))
-
-	messages := &sarama.ProducerMessage{
-		Key:   sarama.ByteEncoder(message.Key),
-		Topic: string(message.Topic),
-		Value: sarama.ByteEncoder(inputBytes),
-	}
-	select {
-	case ctx.Producer.Input() <- messages:
-	case <-ctx.Done():
-		return
-	}
-}
-
-func MakeDeleteErrorsMsgs(ctx context.Context, profileId string, deleteErrs []DeleteResult) []JsonMessage {
+func ProduceDeleteErrors(ctx Context, profileId string, deleteErrs []DeleteResult) {
 	if len(deleteErrs) == 0 {
-		return nil
+		return
 	}
 
-	var msgs []JsonMessage
+	var deleteErrorMsgs []JsonMessage
 	for _, deleteErr := range deleteErrs {
 		var kind string
 		if deleteErr.Prefix != "" {
@@ -59,19 +39,15 @@ func MakeDeleteErrorsMsgs(ctx context.Context, profileId string, deleteErrs []De
 		}
 		slog.InfoContext(ctx, "producing delete error", "Topic", storage.DeleteRetryTopic, "deleteRetry", deleteRetry)
 
-		msgs = append(msgs, JsonMessage{
+		deleteErrorMsgs = append(deleteErrorMsgs, JsonMessage{
 			Key:   profileId,
 			Topic: storage.DeleteRetryTopic,
 			Value: deleteRetry,
 		})
 	}
-	return msgs
-}
 
-func ProduceDeleteErrors(ctx Context, profileId string, deleteErrs []DeleteResult) {
-	deleteErrorMsgs := MakeDeleteErrorsMsgs(ctx, profileId, deleteErrs)
 	for _, msg := range deleteErrorMsgs {
-		ProduceJsonMessage(ctx, msg)
+		produceJsonMessage(ctx, msg)
 	}
 }
 
@@ -101,22 +77,42 @@ func ProducePutResults[Wrap YodleeWrapper[Inner], Inner YodleeInput](
 
 	if len(successUploads) > 0 {
 		// write success uploads with a small wrapper describing the Topic the upload originally came from (for broadcasting).
-		ProduceJsonMessage(ctx, JsonMessage{
+		produceJsonMessage(ctx, JsonMessage{
 			Topic: storage.BroadcastTopic,
 			Value: BroadcastInput[Wrap, Inner]{FiMessages: successUploads, OriginTopic: topic},
 		})
 	}
 	if len(errInputs) > 0 {
-		// maps the failed inputs into a new datastructure or writes as is.
+		// maps the failed inputs into a new datastructures or writes as is
 		// mapInputs guarantees that `writeErrInputs` is the same type that `e.OriginTopic` expects.
 		var writeErrInputs any = errInputs
 		if mapInputs != nil {
 			writeErrInputs = mapInputs(errInputs)
 		}
-		ProduceJsonMessage(ctx, JsonMessage{
+		produceJsonMessage(ctx, JsonMessage{
 			Topic: topic,
 			Key:   key,
 			Value: writeErrInputs,
 		})
+	}
+}
+
+func produceJsonMessage(ctx Context, message JsonMessage) {
+	inputBytes, err := json.Marshal(message.Value)
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to republish json messages", "err", err)
+		return
+	}
+	slog.InfoContext(ctx, "producing json messages", "topic", message.Topic, "size", len(inputBytes), "json", string(inputBytes))
+
+	messages := &sarama.ProducerMessage{
+		Key:   sarama.ByteEncoder(message.Key),
+		Topic: string(message.Topic),
+		Value: sarama.ByteEncoder(inputBytes),
+	}
+	select {
+	case ctx.Producer.Input() <- messages:
+	case <-ctx.Done():
+		return
 	}
 }

@@ -34,23 +34,20 @@ func (f *fakeSession) MarkOffset(string, int32, int64, string)         {}
 func (f *fakeSession) Context() context.Context                        { return context.Background() }
 
 func TestConsumerHandler_ConsumeClaim(t *testing.T) {
-	// given
 	type testValue struct {
 		ID   string `json:"id"`
 		Num  int    `json:"num"`
 		Name string `json:"name"`
 	}
 
-	var (
-		capturedKey   string
-		capturedValue testValue
-	)
-	onMessage := func(ctx context.Context, key string, value testValue) {
+	var capturedKey string
+	var capturedValue testValue
+
+	onMessage := func(ctx Context, key string, value testValue) {
 		capturedKey = key
 		capturedValue = value
 	}
-
-	consumer := &ConsumerHandler[testValue]{OnMessage: onMessage}
+	consumer := &ConsumerHandler[testValue]{handler: onMessage}
 
 	payload := testValue{
 		ID:   "abc",
@@ -69,14 +66,12 @@ func TestConsumerHandler_ConsumeClaim(t *testing.T) {
 	}
 	session := &fakeSession{}
 
-	// when
 	claim.msgChan <- msg
 	close(claim.msgChan)
 
 	err = consumer.ConsumeClaim(session, claim)
 	require.NoError(t, err)
 
-	// then
 	require.Equal(t, "key", capturedKey)
 	require.Equal(t, payload.ID, capturedValue.ID)
 	require.Equal(t, payload.Num, capturedValue.Num)

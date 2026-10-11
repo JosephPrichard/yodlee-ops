@@ -28,13 +28,11 @@ func setupIngestionTest(t *testing.T) *State {
 }
 
 func TestIngestCnctResponses(t *testing.T) {
-	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	state := setupIngestionTest(t)
 	stateCtx := Context{Context: ctx, State: state}
 
-	// when
 	putResults := IngestCnctResponses(stateCtx, "p1", yodlee.ProviderAccountResponse{
 		ProviderAccount: []yodlee.ProviderAccount{
 			{
@@ -51,7 +49,6 @@ func TestIngestCnctResponses(t *testing.T) {
 	})
 	assert.Equal(t, 2, len(putResults))
 
-	// then
 	wantObjects := []testutil.WantObject[OpsProviderAccount]{
 		{
 			Bucket: state.AWS.CnctBucket,
@@ -74,13 +71,11 @@ func TestIngestCnctResponses(t *testing.T) {
 }
 
 func TestIngestAcctResponses(t *testing.T) {
-	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	state := setupIngestionTest(t)
 	stateCtx := Context{Context: ctx, State: state}
 
-	// when
 	putResults := IngestAcctResponses(stateCtx, "p1", yodlee.AccountResponse{
 		Account: []yodlee.Account{
 			{
@@ -99,7 +94,6 @@ func TestIngestAcctResponses(t *testing.T) {
 	})
 	assert.Equal(t, 2, len(putResults))
 
-	// then
 	wantObjects := []testutil.WantObject[OpsAccount]{
 		{
 			Bucket: state.AWS.AcctBucket,
@@ -122,13 +116,11 @@ func TestIngestAcctResponses(t *testing.T) {
 }
 
 func TestIngestHoldResponses(t *testing.T) {
-	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	state := setupIngestionTest(t)
 	stateCtx := Context{Context: ctx, State: state}
 
-	// when
 	putResults := IngestHoldResponses(stateCtx, "p1", yodlee.HoldingResponse{
 		Holding: []yodlee.Holding{
 			{
@@ -147,7 +139,6 @@ func TestIngestHoldResponses(t *testing.T) {
 	})
 	assert.Equal(t, 2, len(putResults))
 
-	// then
 	wantObjects := []testutil.WantObject[OpsHolding]{
 		{
 			Bucket: state.AWS.HoldBucket,
@@ -170,13 +161,11 @@ func TestIngestHoldResponses(t *testing.T) {
 }
 
 func TestIngestTxnResponses(t *testing.T) {
-	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	state := setupIngestionTest(t)
 	stateCtx := Context{Context: ctx, State: state}
 
-	// when
 	putResults := IngestTxnResponses(stateCtx, "p1", yodlee.TransactionResponse{
 		Transaction: []yodlee.TransactionWithDateTime{
 			{
@@ -195,7 +184,6 @@ func TestIngestTxnResponses(t *testing.T) {
 	})
 	assert.Equal(t, 2, len(putResults))
 
-	// then
 	wantObjects := []testutil.WantObject[OpsTransaction]{
 		{
 			Bucket: state.AWS.TxnBucket,
@@ -218,13 +206,11 @@ func TestIngestTxnResponses(t *testing.T) {
 }
 
 func TestIngestCnctRefreshes(t *testing.T) {
-	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	state := setupIngestionTest(t)
 	stateCtx := Context{Context: ctx, State: state}
 
-	// when
 	result := IngestCnctRefreshes(stateCtx, "p1", []yodlee.DataExtractsProviderAccount{
 		{
 			IsDeleted: true,
@@ -239,7 +225,6 @@ func TestIngestCnctRefreshes(t *testing.T) {
 	assert.Equal(t, 1, len(result.PutResults))
 	require.Empty(t, result.DeleteErrors)
 
-	// then
 	wantObjects := []testutil.WantObject[OpsProviderAccountRefresh]{
 		{
 			Bucket: state.AWS.CnctBucket,
@@ -283,13 +268,11 @@ func TestIngestCnctRefreshes(t *testing.T) {
 }
 
 func TestIngestAcctRefreshes(t *testing.T) {
-	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	state := setupIngestionTest(t)
 	stateCtx := Context{Context: ctx, State: state}
 
-	// when
 	result := IngestAcctsRefreshes(stateCtx, "p1", []yodlee.DataExtractsAccount{
 		{
 			IsDeleted:         true,
@@ -306,7 +289,6 @@ func TestIngestAcctRefreshes(t *testing.T) {
 	assert.Equal(t, 1, len(result.PutResults))
 	require.Empty(t, result.DeleteErrors)
 
-	// then
 	wantObjects := []testutil.WantObject[OpsAccountRefresh]{
 		{
 			Bucket: state.AWS.AcctBucket,
@@ -350,13 +332,11 @@ func TestIngestAcctRefreshes(t *testing.T) {
 }
 
 func TestIngestTxnRefreshes(t *testing.T) {
-	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	state := setupIngestionTest(t)
 	stateCtx := Context{Context: ctx, State: state}
 
-	// when
 	result := IngestTxnRefreshes(stateCtx, "p1", []yodlee.DataExtractsTransaction{
 		{
 			IsDeleted: true,
@@ -373,7 +353,6 @@ func TestIngestTxnRefreshes(t *testing.T) {
 	assert.Equal(t, 1, len(result.PutResults))
 	require.Empty(t, result.DeleteErrors)
 
-	// then
 	wantObjects := []testutil.WantObject[OpsTransactionRefresh]{
 		{
 			Bucket: state.AWS.TxnBucket,
@@ -417,13 +396,11 @@ func TestIngestTxnRefreshes(t *testing.T) {
 }
 
 func TestIngestHoldRefreshes(t *testing.T) {
-	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	state := setupIngestionTest(t)
 	stateCtx := Context{Context: ctx, State: state}
 
-	// when
 	result := IngestHoldRefreshes(stateCtx, "p1", []yodlee.DataExtractsHolding{
 		// holdings can't be deleted individually (only the account that contains the holdings can be deleted).
 		//{
@@ -441,7 +418,6 @@ func TestIngestHoldRefreshes(t *testing.T) {
 	assert.Equal(t, 1, len(result.PutResults))
 	require.Empty(t, result.DeleteErrors)
 
-	// then
 	wantObjects := []testutil.WantObject[OpsHoldingRefresh]{
 		{
 			Bucket: state.AWS.HoldBucket,
@@ -485,13 +461,11 @@ func TestIngestHoldRefreshes(t *testing.T) {
 }
 
 func TestIngestDeleteRetries(t *testing.T) {
-	// given
 	ctx := context.WithValue(t.Context(), "trace", t.Name())
 
 	state := setupIngestionTest(t)
 	stateCtx := Context{Context: ctx, State: state}
 
-	// when
 	results := IngestDeleteRetries(stateCtx, []DeleteRetry{
 		{
 			Kind:   ListKind,
@@ -506,7 +480,6 @@ func TestIngestDeleteRetries(t *testing.T) {
 	})
 	require.Empty(t, results)
 
-	// then
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
 		// CnctBucket
@@ -549,7 +522,7 @@ func TestIngest_PutFailure(t *testing.T) {
 
 	setupTest := func(failKey string) *State {
 		state := setupIngestionTest(t)
-		fakes.MakeBadS3Client(&state.AWS, fakes.BadS3Config{
+		fakes.SetBadS3Client(&state.AWS, fakes.BadS3Config{
 			FailPutKey: failKey,
 		})
 		return state
@@ -774,7 +747,7 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 		state := setupIngestionTest(t)
 		stateCtx := Context{Context: ctx, State: state}
 
-		fakes.MakeBadS3Client(&state.AWS, fakes.BadS3Config{
+		fakes.SetBadS3Client(&state.AWS, fakes.BadS3Config{
 			FailListPrefix: map[storage.Bucket]string{
 				state.AWS.TxnBucket: "p1/1/100", // fail to list txn by prefix
 			},
@@ -801,7 +774,7 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 		state := setupIngestionTest(t)
 		stateCtx := Context{Context: ctx, State: state}
 
-		fakes.MakeBadS3Client(&state.AWS, fakes.BadS3Config{
+		fakes.SetBadS3Client(&state.AWS, fakes.BadS3Config{
 			FailListPrefix: map[storage.Bucket]string{
 				state.AWS.TxnBucket: "p1/1/100", // fail to list txn by prefix
 			},

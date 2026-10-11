@@ -4,18 +4,28 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/IBM/sarama"
-	"github.com/google/uuid"
 	"log/slog"
 	"time"
+	"yodleeops/storage"
+
+	"github.com/IBM/sarama"
+	"github.com/google/uuid"
 )
 
 type ConsumerHandler[Value any] struct {
-	Topic     string
-	OnMessage OnConsumerMessage[Value]
+	groupID string
+	topic   storage.Topic
+	state   *State
+	handler func(Context, string, Value)
 }
 
-type OnConsumerMessage[Value any] = func(ctx context.Context, key string, value Value)
+func (consumer *ConsumerHandler[Value]) Topic() storage.Topic {
+	return consumer.topic
+}
+
+func (consumer *ConsumerHandler[Value]) GroupID() string {
+	return consumer.groupID
+}
 
 func (*ConsumerHandler[Value]) Setup(sarama.ConsumerGroupSession) error {
 	return nil
@@ -32,19 +42,21 @@ func (consumer *ConsumerHandler[Value]) ConsumeClaim(session sarama.ConsumerGrou
 		ctx := context.WithValue(context.Background(), "trace", uuid.NewString())
 
 		start := time.Now()
-		slog.InfoContext(ctx, "read message from kafka topic", "topic", consumer.Topic, "key", strKey)
+		slog.InfoContext(ctx, "read message from kafka topic", "topic", consumer.topic, "key", strKey)
 
 		var data Value
 		if err := json.Unmarshal(message.Value, &data); err != nil {
 			slog.ErrorContext(ctx, "failed to unmarshal message", "type", fmt.Sprintf("%T", data),
-				"topic", consumer.Topic, "key", strKey, "message", string(message.Value))
+				"topic", consumer.topic, "key", strKey, "message", string(message.Value))
 			continue
 		}
 
-		consumer.OnMessage(ctx, strKey, data)
+		serviceCtx := Context{Context: ctx, State: consumer.state}
+
+		consumer.handler(serviceCtx, strKey, data)
 		session.MarkMessage(message, "")
 
-		slog.InfoContext(ctx, "consumed message from kafka topic", "topic", consumer.Topic, "key", strKey, "elapsed", time.Since(start).String())
+		slog.InfoContext(ctx, "consumed message from kafka topic", "topic", consumer.topic, "key", strKey, "elapsed", time.Since(start).String())
 	}
 	return nil
 }

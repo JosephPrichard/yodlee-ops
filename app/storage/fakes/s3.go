@@ -21,7 +21,7 @@ type BadS3Config struct {
 	FailDeleteKeys map[string]bool
 }
 
-func MakeBadS3Client(awsClient *storage.AWS, cfg BadS3Config) {
+func SetBadS3Client(awsClient *storage.AWS, cfg BadS3Config) {
 	goodS3Client := awsClient.S3
 	awsClient.S3 = &BadS3{S3: goodS3Client, BadS3Config: cfg}
 }

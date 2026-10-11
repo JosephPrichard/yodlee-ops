@@ -2,11 +2,12 @@ package svc
 
 import (
 	"encoding/json"
+	"testing"
+	"yodleeops/storage"
+
 	"github.com/IBM/sarama"
 	saramaMocks "github.com/IBM/sarama/mocks"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"yodleeops/storage"
 
 	"yodleeops/storage/fakes"
 	"yodleeops/testutil"
@@ -72,18 +73,21 @@ var (
 	}
 )
 
-func setupConsumersTest(t *testing.T) *State {
+func setupConsumersTest(t *testing.T) (*State, MockConsumer) {
 	awsClient := testutil.SetupITest(t)
 	state := &State{AWS: awsClient}
-	return state
+
+	mockConsumer := MockConsumer{t: t, consumers: MakeConsumerMap(state)}
+
+	return state, mockConsumer
 }
 
-type MockConsumers struct {
+type MockConsumer struct {
 	t         *testing.T
 	consumers map[storage.Topic]Consumer
 }
 
-func (p *MockConsumers) ConsumeClaim(topic storage.Topic, key string, value any) {
+func (p *MockConsumer) Consume(topic storage.Topic, key string, value any) {
 	v, err := json.Marshal(value)
 	require.NoError(p.t, err)
 
@@ -99,7 +103,7 @@ func (p *MockConsumers) ConsumeClaim(topic storage.Topic, key string, value any)
 	claim.msgChan <- msg
 	close(claim.msgChan)
 
-	err = p.consumers[topic].Handler.ConsumeClaim(session, claim)
+	err = p.consumers[topic].ConsumeClaim(session, claim)
 	require.NoError(p.t, err)
 }
 
@@ -214,10 +218,7 @@ func wantIngestedKeys(aws storage.AWS) []testutil.WantKey {
 }
 
 func TestConsumers(t *testing.T) {
-	// given
-	state := setupConsumersTest(t)
-
-	mockConsumer := MockConsumers{t: t, consumers: MakeConsumers(state)}
+	state, mockConsumer := setupConsumersTest(t)
 
 	config := sarama.NewConfig()
 	config.Producer.Return.Successes = true
@@ -226,7 +227,6 @@ func TestConsumers(t *testing.T) {
 	mockProducer := saramaMocks.NewAsyncProducer(t, config)
 	state.Producer = mockProducer
 
-	// when
 	tests := []struct {
 		topic storage.Topic
 		value any
@@ -289,12 +289,11 @@ func TestConsumers(t *testing.T) {
 			if _, ok := test.value.([]DeleteRetry); !ok {
 				mockProducer.ExpectInputAndSucceed()
 			}
-			mockConsumer.ConsumeClaim(test.topic, "p1", test.value)
+			mockConsumer.Consume(test.topic, "p1", test.value)
 		}
 	}()
 
-	// then
-	broadcastMsgs := drainMockProducerMessages(mockProducer)
+	broadcastMsgs := getMockProducerMessages(mockProducer)
 	testutil.Equal(t, WantBroadcastMsgs, broadcastMsgs, cmpopts.IgnoreFields(OpsFiMessage{}, "Timestamp"))
 
 	// removed keys are commented.
@@ -319,10 +318,7 @@ var WantPutRetryMsgs = []any{
 }
 
 func TestConsumers_S3Errors(t *testing.T) {
-	// given
-	state := setupConsumersTest(t)
-
-	mockConsumer := MockConsumers{t: t, consumers: MakeConsumers(state)}
+	state, mockConsumer := setupConsumersTest(t)
 
 	config := sarama.NewConfig()
 	config.Producer.Return.Successes = true
@@ -333,7 +329,6 @@ func TestConsumers_S3Errors(t *testing.T) {
 
 	key := "p1" // all messages for same profileId.
 
-	// when
 	tests := []struct {
 		topic      storage.Topic
 		failPutKey string
@@ -386,18 +381,17 @@ func TestConsumers_S3Errors(t *testing.T) {
 		defer mockProducer.Close()
 
 		for _, test := range tests {
-			fakes.MakeBadS3Client(&state.AWS, fakes.BadS3Config{
+			fakes.SetBadS3Client(&state.AWS, fakes.BadS3Config{
 				FailPutKey: test.failPutKey,
 			})
 
 			// expect one message to be produced per `PutResult`
 			mockProducer.ExpectInputAndSucceed()
 
-			mockConsumer.ConsumeClaim(test.topic, key, test.value)
+			mockConsumer.Consume(test.topic, key, test.value)
 		}
 	}()
 
-	// then
-	msgs := drainMockProducerMessages(mockProducer)
+	msgs := getMockProducerMessages(mockProducer)
 	assert.ElementsMatch(t, WantPutRetryMsgs, msgs)
 }

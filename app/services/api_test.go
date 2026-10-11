@@ -71,7 +71,6 @@ func TestStreamFiObjectLogs(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
 	defer cancel()
 
-	// when
 	query := fmt.Sprintf("%s/events/taillog?profileIDs=profile1,profile2,profile3&subjects=%s,%s",
 		testServer.URL+ApiUrl, openapi.FiSubjectHoldings, openapi.FiSubjectTransactions)
 	r, err := http.NewRequestWithContext(ctx, http.MethodGet, query, nil)
@@ -90,7 +89,6 @@ func TestStreamFiObjectLogs(t *testing.T) {
 		state.FiMessageBroadcaster.Broadcast("profile4", storage.CnctRefreshTopic, "event5")
 	}()
 
-	// then
 	wantEvents := []string{
 		fmt.Sprintf("event: %s\ndata: %s\n", "meta", "init"),
 		fmt.Sprintf("event: %s\ndata: %s\n", "log", "event1"),
@@ -108,14 +106,13 @@ var opsGenericsCmpOpts = []cmp.Option{
 }
 
 func TestHandleListFiMessages(t *testing.T) {
-	// given
 	a := testutil.SetupITest(t)
 
 	goodState := &State{AWS: a}
 	goodState.AWS.PaginationLen = aws.Int32(1) // testing ListObjectsV2 pagination.
 
 	badState := &State{AWS: a}
-	fakes.MakeBadS3Client(&badState.AWS, fakes.BadS3Config{
+	fakes.SetBadS3Client(&badState.AWS, fakes.BadS3Config{
 		FailListPrefix: map[storage.Bucket]string{
 			a.AcctBucket: "p1/1/10",
 			a.CnctBucket: "p1",
@@ -203,7 +200,6 @@ func TestHandleListFiMessages(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			// when
 			endpoint := fmt.Sprintf("%s/fimetadata/%s", ApiUrl, test.url)
 			r := httptest.NewRequest(http.MethodGet, endpoint, nil)
 			r.Header.Set("Authorization", TestAuthorizationToken)
@@ -212,7 +208,6 @@ func TestHandleListFiMessages(t *testing.T) {
 			hander := MakeServeMux(test.state)
 			hander.ServeHTTP(w, r)
 
-			// then
 			assert.Equal(t, test.wantStatusCode, w.Code)
 			if test.wantStatusCode == http.StatusOK {
 				testutil.AssertRespBody(t, test.wantOpsGeneric, w, opsGenericsCmpOpts...)
@@ -224,7 +219,6 @@ func TestHandleListFiMessages(t *testing.T) {
 }
 
 func TestHandleListFiMessages_Pagination(t *testing.T) {
-	// given
 	awsClient := testutil.SetupITest(t)
 
 	state := &State{AWS: awsClient}
@@ -236,7 +230,6 @@ func TestHandleListFiMessages_Pagination(t *testing.T) {
 	var statuses []int
 	var responses []openapi.ListFiMetadataResponse
 
-	// when
 	for range MaxPages {
 		r := httptest.NewRequest(http.MethodGet,
 			fmt.Sprintf("%s/fimetadata/profiles?profileIDs=p1,p2&cursor=%s&subject=accounts",
@@ -261,8 +254,6 @@ func TestHandleListFiMessages_Pagination(t *testing.T) {
 			break
 		}
 	}
-
-	// then
 
 	// assert: only 2 pages, and each page has the data we expect.
 	wantOpsGenerics := []openapi.ListFiMetadataResponse{
@@ -313,7 +304,6 @@ func TestHandleListFiMessages_Pagination(t *testing.T) {
 }
 
 func TestHandleGetFiObject(t *testing.T) {
-	// given
 	testKey := "p1/1/100/3000/2025-06-12T00:14:37Z"
 	testBody := OpsFiGeneric{
 		OpsFiMessage: OpsFiMessage{
@@ -330,7 +320,7 @@ func TestHandleGetFiObject(t *testing.T) {
 
 	goodState := &State{AWS: a}
 	badState := &State{AWS: a}
-	fakes.MakeBadS3Client(&badState.AWS, fakes.BadS3Config{
+	fakes.SetBadS3Client(&badState.AWS, fakes.BadS3Config{
 		FailGetKey: testKey,
 	})
 
@@ -381,7 +371,6 @@ func TestHandleGetFiObject(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			// when
 			r := httptest.NewRequest(http.MethodGet,
 				fmt.Sprintf("%s/fiobject?key=%s&subject=%s",
 					ApiUrl,
@@ -395,7 +384,6 @@ func TestHandleGetFiObject(t *testing.T) {
 			hander := MakeServeMux(test.state)
 			hander.ServeHTTP(w, r)
 
-			// then
 			assert.Equal(t, test.wantStatusCode, w.Code)
 			if test.wantStatusCode == http.StatusOK {
 				testutil.AssertRespBody(t, test.wantOpsGeneric, w)

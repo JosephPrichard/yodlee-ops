@@ -2,8 +2,9 @@ package svc
 
 import (
 	"context"
-	"github.com/IBM/sarama"
 	"yodleeops/storage"
+
+	"github.com/IBM/sarama"
 )
 
 type State struct {

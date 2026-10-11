@@ -161,9 +161,8 @@ func GetFiObject(ctx Context, bucket storage.Bucket, key string) (fiObject OpsFi
 		var nsk *types.NoSuchKey
 		if errors.As(err, &nsk) {
 			return fiObject, ErrKeyNotFound
-		} else {
-			return fiObject, fmt.Errorf("get object %s/%s: %w", bucket, key, err)
 		}
+		return fiObject, fmt.Errorf("get object %s/%s: %w", bucket, key, err)
 	}
 	defer object.Body.Close()
 

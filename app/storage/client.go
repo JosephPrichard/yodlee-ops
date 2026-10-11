@@ -3,11 +3,12 @@ package storage
 import (
 	"context"
 	"errors"
-	"github.com/IBM/sarama"
 	"log"
 	"log/slog"
 	"os"
 	"strings"
+
+	"github.com/IBM/sarama"
 
 	mskiam "github.com/aws/aws-msk-iam-sasl-signer-go/signer"
 
@@ -32,7 +33,7 @@ type Config struct {
 	TxnBucket  string
 }
 
-func MakeConfig() Config {
+func NewConfig() Config {
 	envMap := make(map[string]string)
 	for _, env := range os.Environ() {
 		kv := strings.SplitN(env, "=", 2)
@@ -66,7 +67,7 @@ type S3 interface {
 	DeleteObjects(ctx context.Context, params *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
 }
 
-func MakeS3Client(cfg Config) *s3.Client {
+func NewS3Client(cfg Config) *s3.Client {
 	awsOpts := []func(*config.LoadOptions) error{
 		config.WithRegion(cfg.AwsDefaultRegion),
 	}
@@ -95,7 +96,7 @@ func MakeS3Client(cfg Config) *s3.Client {
 	return s3.NewFromConfig(awsCfg, s3Opts...)
 }
 
-func MakeAWS(config Config, s3Client *s3.Client) AWS {
+func NewAWSClient(config Config, s3Client *s3.Client) AWS {
 	return AWS{
 		S3:            s3Client,
 		PaginationLen: nil,
@@ -108,7 +109,7 @@ func MakeAWS(config Config, s3Client *s3.Client) AWS {
 	}
 }
 
-func MakeSaramaConfig(config Config) *sarama.Config {
+func NewSaramaConfig(config Config) *sarama.Config {
 	kafkaConfig := sarama.NewConfig()
 	kafkaConfig.Version = sarama.V3_0_0_0 // using 3.5.1 in infra, this value just needs to be older.
 	kafkaConfig.Producer.Return.Errors = true
@@ -126,7 +127,7 @@ func MakeSaramaConfig(config Config) *sarama.Config {
 	return kafkaConfig
 }
 
-func MakeSaramaProducer(kafkaBrokers []string, kafkaConfig *sarama.Config) sarama.AsyncProducer {
+func NewSaramaProducer(kafkaBrokers []string, kafkaConfig *sarama.Config) sarama.AsyncProducer {
 	producer, err := sarama.NewAsyncProducer(kafkaBrokers, kafkaConfig)
 	if err != nil {
 		log.Fatalf("failed to create kafka producer: %v", err)

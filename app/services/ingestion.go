@@ -613,10 +613,10 @@ func ListObjectsByPrefix(ctx Context, bucket storage.Bucket, prefix string) chan
 }
 
 type DeleteResult struct {
-	Bucket storage.Bucket
-	Prefix string
-	Keys   []string
-	Err    error
+	Bucket storage.Bucket `json:"bucket"`
+	Prefix string         `json:"prefix"`
+	Keys   []string       `json:"keys"`
+	Err    error          `json:"err"`
 }
 
 func DeleteObjects(ctx Context, bucket storage.Bucket, keys []string) DeleteResult {
