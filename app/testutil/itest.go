@@ -19,20 +19,40 @@ const (
 
 var localstackCont testcontainers.Container
 
-func SetupITest(t *testing.T) storage.AWS {
+var AWSConfig = storage.Config{
+	AwsDefaultRegion: "us-east-1",
+	IsLocal:          true,
+	CnctBucket:       "cnct-bucket",
+	AcctBucket:       "acct-bucket",
+	HoldBucket:       "hold-bucket",
+	TxnBucket:        "txn-bucket",
+}
+
+func NewVirtualS3Client(t *testing.T) storage.S3Client {
 	ctx := context.Background()
 
-	config := storage.Config{
-		AwsDefaultRegion: "us-east-1",
-		IsLocal:          true,
-		CnctBucket:       "cnct-bucket",
-		AcctBucket:       "acct-bucket",
-		HoldBucket:       "hold-bucket",
-		TxnBucket:        "txn-bucket",
-	}
+	config := AWSConfig
 	config.AwsEndpoint = startLocalstackCont(ctx, t)
 
-	return initTestAWS(t, config)
+	s3Sdk := storage.NewS3SDK(config)
+	s3Client := storage.NewS3Client(config, s3Sdk)
+
+	for _, bucket := range []storage.Bucket{
+		s3Client.CnctBucket,
+		s3Client.AcctBucket,
+		s3Client.TxnBucket,
+		s3Client.HoldBucket,
+	} {
+		if _, err := s3Sdk.CreateBucket(context.Background(), &s3.CreateBucketInput{
+			Bucket: bucket.String(),
+		}); err != nil {
+			t.Fatalf("failed to create bucket %s: %v", bucket, err)
+		}
+	}
+
+	SeedS3Buckets(t, s3Sdk, s3Client.Buckets)
+
+	return s3Client
 }
 
 func startLocalstackCont(ctx context.Context, t *testing.T) string {
@@ -59,26 +79,4 @@ func startLocalstackCont(ctx context.Context, t *testing.T) string {
 	port, _ := localstackCont.MappedPort(ctx, LocalStackContPort)
 
 	return fmt.Sprintf("http://%s:%s", host, port.Port())
-}
-
-func initTestAWS(t *testing.T, config storage.Config) storage.AWS {
-	s3Client := storage.NewS3Client(config)
-	aws := storage.NewAWSClient(config, s3Client)
-
-	for _, bucket := range []storage.Bucket{
-		aws.CnctBucket,
-		aws.AcctBucket,
-		aws.TxnBucket,
-		aws.HoldBucket,
-	} {
-		if _, err := s3Client.CreateBucket(context.Background(), &s3.CreateBucketInput{
-			Bucket: bucket.String(),
-		}); err != nil {
-			t.Fatalf("failed to create bucket %s: %v", bucket, err)
-		}
-	}
-
-	SeedS3Buckets(t, s3Client, aws.Buckets)
-
-	return aws
 }

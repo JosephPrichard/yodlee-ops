@@ -5,6 +5,11 @@ import (
 )
 
 type Topic string
+
+func (b Topic) String() string {
+	return string(b)
+}
+
 type Bucket string
 
 func (b Bucket) String() *string {

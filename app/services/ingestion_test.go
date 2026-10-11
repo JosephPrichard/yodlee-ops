@@ -19,10 +19,10 @@ import (
 var fiMessageOpts = []cmp.Option{cmpopts.IgnoreFields(OpsFiMessage{}, "Timestamp")}
 
 func setupIngestionTest(t *testing.T) *State {
-	awsClient := testutil.SetupITest(t)
+	s3Client := testutil.NewVirtualS3Client(t)
 
-	state := &State{AWS: awsClient}
-	state.AWS.PaginationLen = aws.Int32(1) // testing ListObjectsV2 pagination.
+	state := &State{S3Client: s3Client}
+	state.S3Client.PaginationLen = aws.Int32(1) // testing ListObjectsV2 pagination.
 
 	return state
 }
@@ -51,7 +51,7 @@ func TestIngestCnctResponses(t *testing.T) {
 
 	wantObjects := []testutil.WantObject[OpsProviderAccount]{
 		{
-			Bucket: state.AWS.CnctBucket,
+			Bucket: state.S3Client.CnctBucket,
 			Key:    "p1/1/1/2025-06-12",
 			Value: OpsProviderAccount{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.CnctResponseTopic},
@@ -59,7 +59,7 @@ func TestIngestCnctResponses(t *testing.T) {
 			},
 		},
 		{
-			Bucket: state.AWS.CnctBucket,
+			Bucket: state.S3Client.CnctBucket,
 			Key:    "p1/1/100/2025-06-13",
 			Value: OpsProviderAccount{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.CnctResponseTopic},
@@ -67,7 +67,7 @@ func TestIngestCnctResponses(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, &state.AWS, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &state.S3Client, wantObjects, fiMessageOpts...)
 }
 
 func TestIngestAcctResponses(t *testing.T) {
@@ -96,7 +96,7 @@ func TestIngestAcctResponses(t *testing.T) {
 
 	wantObjects := []testutil.WantObject[OpsAccount]{
 		{
-			Bucket: state.AWS.AcctBucket,
+			Bucket: state.S3Client.AcctBucket,
 			Key:    "p1/1/1/1/2025-06-12",
 			Value: OpsAccount{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.AcctResponseTopic},
@@ -104,7 +104,7 @@ func TestIngestAcctResponses(t *testing.T) {
 			},
 		},
 		{
-			Bucket: state.AWS.AcctBucket,
+			Bucket: state.S3Client.AcctBucket,
 			Key:    "p1/1/100/200/2025-06-13",
 			Value: OpsAccount{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.AcctResponseTopic},
@@ -112,7 +112,7 @@ func TestIngestAcctResponses(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, &state.AWS, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &state.S3Client, wantObjects, fiMessageOpts...)
 }
 
 func TestIngestHoldResponses(t *testing.T) {
@@ -141,7 +141,7 @@ func TestIngestHoldResponses(t *testing.T) {
 
 	wantObjects := []testutil.WantObject[OpsHolding]{
 		{
-			Bucket: state.AWS.HoldBucket,
+			Bucket: state.S3Client.HoldBucket,
 			Key:    "p1/1/1/1/2025-06-12",
 			Value: OpsHolding{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.HoldResponseTopic},
@@ -149,7 +149,7 @@ func TestIngestHoldResponses(t *testing.T) {
 			},
 		},
 		{
-			Bucket: state.AWS.HoldBucket,
+			Bucket: state.S3Client.HoldBucket,
 			Key:    "p1/1/200/100/2025-06-13",
 			Value: OpsHolding{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.HoldResponseTopic},
@@ -157,7 +157,7 @@ func TestIngestHoldResponses(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, &state.AWS, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &state.S3Client, wantObjects, fiMessageOpts...)
 }
 
 func TestIngestTxnResponses(t *testing.T) {
@@ -186,7 +186,7 @@ func TestIngestTxnResponses(t *testing.T) {
 
 	wantObjects := []testutil.WantObject[OpsTransaction]{
 		{
-			Bucket: state.AWS.TxnBucket,
+			Bucket: state.S3Client.TxnBucket,
 			Key:    "p1/1/1/1/2025-06-11T07:06:18Z",
 			Value: OpsTransaction{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.TxnResponseTopic},
@@ -194,7 +194,7 @@ func TestIngestTxnResponses(t *testing.T) {
 			},
 		},
 		{
-			Bucket: state.AWS.TxnBucket,
+			Bucket: state.S3Client.TxnBucket,
 			Key:    "p1/1/200/200/2025-06-13T07:06:18Z",
 			Value: OpsTransaction{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.TxnResponseTopic},
@@ -202,7 +202,7 @@ func TestIngestTxnResponses(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, &state.AWS, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &state.S3Client, wantObjects, fiMessageOpts...)
 }
 
 func TestIngestCnctRefreshes(t *testing.T) {
@@ -227,7 +227,7 @@ func TestIngestCnctRefreshes(t *testing.T) {
 
 	wantObjects := []testutil.WantObject[OpsProviderAccountRefresh]{
 		{
-			Bucket: state.AWS.CnctBucket,
+			Bucket: state.S3Client.CnctBucket,
 			Key:    "p1/1/99/2025-06-13",
 			Value: OpsProviderAccountRefresh{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.CnctRefreshTopic},
@@ -235,36 +235,36 @@ func TestIngestCnctRefreshes(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, &state.AWS, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &state.S3Client, wantObjects, fiMessageOpts...)
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
 		// CnctBucket
 		//{Bucket: infra.CnctBucket, Key: "p1/1/10/2025-06-12"},
 		//{Bucket: infra.CnctBucket, Key: "p1/1/10/2025-06-13"},
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/20/2025-06-14"},
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/30/2025-06-15"},
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/99/2025-06-13"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/30/2025-06-15"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/99/2025-06-13"},
 
 		// AcctBucket
 		//{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
 		//{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
-		{Bucket: state.AWS.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
-		{Bucket: state.AWS.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
+		{Bucket: state.S3Client.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: state.S3Client.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
 
 		// HoldBucket
 		//{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
 		//{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
-		{Bucket: state.AWS.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
-		{Bucket: state.AWS.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
+		{Bucket: state.S3Client.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: state.S3Client.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
 
 		// TxnBucket
 		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
 		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
-		{Bucket: state.AWS.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
-		{Bucket: state.AWS.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
+		{Bucket: state.S3Client.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: state.S3Client.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 	}
-	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, state.AWS))
+	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, state.S3Client))
 }
 
 func TestIngestAcctRefreshes(t *testing.T) {
@@ -291,7 +291,7 @@ func TestIngestAcctRefreshes(t *testing.T) {
 
 	wantObjects := []testutil.WantObject[OpsAccountRefresh]{
 		{
-			Bucket: state.AWS.AcctBucket,
+			Bucket: state.S3Client.AcctBucket,
 			Key:    "p1/1/99/999/2025-06-13",
 			Value: OpsAccountRefresh{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.AcctRefreshTopic},
@@ -299,36 +299,36 @@ func TestIngestAcctRefreshes(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, &state.AWS, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &state.S3Client, wantObjects, fiMessageOpts...)
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
 		// CnctBucket
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/10/2025-06-12"},
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/10/2025-06-13"},
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/20/2025-06-14"},
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/30/2025-06-15"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/10/2025-06-12"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/10/2025-06-13"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/30/2025-06-15"},
 
 		// AcctBucket
 		//{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
 		//{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
-		{Bucket: state.AWS.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
-		{Bucket: state.AWS.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
-		{Bucket: state.AWS.AcctBucket, Key: "p1/1/99/999/2025-06-13"},
+		{Bucket: state.S3Client.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: state.S3Client.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
+		{Bucket: state.S3Client.AcctBucket, Key: "p1/1/99/999/2025-06-13"},
 
 		// HoldBucket
 		//{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
 		//{Bucket: infra.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
-		{Bucket: state.AWS.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
-		{Bucket: state.AWS.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
+		{Bucket: state.S3Client.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: state.S3Client.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
 
 		// TxnBucket
 		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
 		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
-		{Bucket: state.AWS.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
-		{Bucket: state.AWS.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
+		{Bucket: state.S3Client.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: state.S3Client.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 	}
-	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, state.AWS))
+	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, state.S3Client))
 }
 
 func TestIngestTxnRefreshes(t *testing.T) {
@@ -355,7 +355,7 @@ func TestIngestTxnRefreshes(t *testing.T) {
 
 	wantObjects := []testutil.WantObject[OpsTransactionRefresh]{
 		{
-			Bucket: state.AWS.TxnBucket,
+			Bucket: state.S3Client.TxnBucket,
 			Key:    "p1/1/999/9999/2025-06-13T07:06:18Z",
 			Value: OpsTransactionRefresh{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.TxnRefreshTopic},
@@ -363,36 +363,36 @@ func TestIngestTxnRefreshes(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, &state.AWS, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &state.S3Client, wantObjects, fiMessageOpts...)
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
 		// CnctBucket
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/10/2025-06-12"},
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/10/2025-06-13"},
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/20/2025-06-14"},
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/30/2025-06-15"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/10/2025-06-12"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/10/2025-06-13"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/30/2025-06-15"},
 
 		// AcctBucket
-		{Bucket: state.AWS.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
-		{Bucket: state.AWS.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
-		{Bucket: state.AWS.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
-		{Bucket: state.AWS.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
+		{Bucket: state.S3Client.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
+		{Bucket: state.S3Client.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
+		{Bucket: state.S3Client.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: state.S3Client.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
 
 		// HoldBucket
-		{Bucket: state.AWS.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
-		{Bucket: state.AWS.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
-		{Bucket: state.AWS.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
-		{Bucket: state.AWS.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
+		{Bucket: state.S3Client.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
+		{Bucket: state.S3Client.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
+		{Bucket: state.S3Client.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: state.S3Client.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
 
 		// TxnBucket
 		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
 		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
-		{Bucket: state.AWS.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
-		{Bucket: state.AWS.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
-		{Bucket: state.AWS.TxnBucket, Key: "p1/1/999/9999/2025-06-13T07:06:18Z"},
+		{Bucket: state.S3Client.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: state.S3Client.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
+		{Bucket: state.S3Client.TxnBucket, Key: "p1/1/999/9999/2025-06-13T07:06:18Z"},
 	}
-	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, state.AWS))
+	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, state.S3Client))
 }
 
 func TestIngestHoldRefreshes(t *testing.T) {
@@ -420,7 +420,7 @@ func TestIngestHoldRefreshes(t *testing.T) {
 
 	wantObjects := []testutil.WantObject[OpsHoldingRefresh]{
 		{
-			Bucket: state.AWS.HoldBucket,
+			Bucket: state.S3Client.HoldBucket,
 			Key:    "p1/1/999/9999/2025-06-13",
 			Value: OpsHoldingRefresh{
 				OpsFiMessage: OpsFiMessage{ProfileId: "p1", OriginTopic: storage.HoldRefreshTopic},
@@ -428,36 +428,36 @@ func TestIngestHoldRefreshes(t *testing.T) {
 			},
 		},
 	}
-	testutil.AssertObjects(t, &state.AWS, wantObjects, fiMessageOpts...)
+	testutil.AssertObjects(t, &state.S3Client, wantObjects, fiMessageOpts...)
 
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
 		// CnctBucket
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/10/2025-06-12"},
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/10/2025-06-13"},
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/20/2025-06-14"},
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/30/2025-06-15"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/10/2025-06-12"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/10/2025-06-13"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/30/2025-06-15"},
 
 		// AcctBucket
-		{Bucket: state.AWS.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
-		{Bucket: state.AWS.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
-		{Bucket: state.AWS.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
-		{Bucket: state.AWS.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
+		{Bucket: state.S3Client.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
+		{Bucket: state.S3Client.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
+		{Bucket: state.S3Client.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: state.S3Client.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
 
 		// HoldBucket
-		{Bucket: state.AWS.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
-		{Bucket: state.AWS.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
-		{Bucket: state.AWS.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
-		{Bucket: state.AWS.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
-		{Bucket: state.AWS.HoldBucket, Key: "p1/1/999/9999/2025-06-13"},
+		{Bucket: state.S3Client.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
+		{Bucket: state.S3Client.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
+		{Bucket: state.S3Client.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: state.S3Client.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
+		{Bucket: state.S3Client.HoldBucket, Key: "p1/1/999/9999/2025-06-13"},
 
 		// TxnBucket
-		{Bucket: state.AWS.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
-		{Bucket: state.AWS.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
-		{Bucket: state.AWS.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
-		{Bucket: state.AWS.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
+		{Bucket: state.S3Client.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
+		{Bucket: state.S3Client.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
+		{Bucket: state.S3Client.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: state.S3Client.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 	}
-	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, state.AWS))
+	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, state.S3Client))
 }
 
 func TestIngestDeleteRetries(t *testing.T) {
@@ -469,12 +469,12 @@ func TestIngestDeleteRetries(t *testing.T) {
 	results := IngestDeleteRetries(stateCtx, []DeleteRetry{
 		{
 			Kind:   ListKind,
-			Bucket: state.AWS.AcctBucket,
+			Bucket: state.S3Client.AcctBucket,
 			Prefix: "p1/1/10",
 		},
 		{
 			Kind:   DeleteKind,
-			Bucket: state.AWS.TxnBucket,
+			Bucket: state.S3Client.TxnBucket,
 			Keys:   []string{"p1/1/100/3000/2025-06-12T00:14:37Z", "p1/1/100/3000/2025-06-12T02:48:09Z"},
 		},
 	})
@@ -483,30 +483,30 @@ func TestIngestDeleteRetries(t *testing.T) {
 	// removed keys are commented.
 	wantKeys := []testutil.WantKey{
 		// CnctBucket
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/10/2025-06-12"},
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/10/2025-06-13"},
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/20/2025-06-14"},
-		{Bucket: state.AWS.CnctBucket, Key: "p1/1/30/2025-06-15"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/10/2025-06-12"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/10/2025-06-13"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/20/2025-06-14"},
+		{Bucket: state.S3Client.CnctBucket, Key: "p1/1/30/2025-06-15"},
 
 		// AcctBucket
 		//{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-12"},
 		//{Bucket: infra.AcctBucket, Key: "p1/1/10/100/2025-06-13"},
-		{Bucket: state.AWS.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
-		{Bucket: state.AWS.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
+		{Bucket: state.S3Client.AcctBucket, Key: "p2/1/20/200/2025-06-14"},
+		{Bucket: state.S3Client.AcctBucket, Key: "p2/1/30/400/2025-06-15"},
 
 		// HoldBucket
-		{Bucket: state.AWS.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
-		{Bucket: state.AWS.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
-		{Bucket: state.AWS.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
-		{Bucket: state.AWS.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
+		{Bucket: state.S3Client.HoldBucket, Key: "p1/1/100/1000/2025-06-12"},
+		{Bucket: state.S3Client.HoldBucket, Key: "p1/1/100/1000/2025-06-13"},
+		{Bucket: state.S3Client.HoldBucket, Key: "p2/1/100/1000/2025-06-14"},
+		{Bucket: state.S3Client.HoldBucket, Key: "p2/1/200/2000/2025-06-15"},
 
 		// TxnBucket
 		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T00:14:37Z"},
 		//{Bucket: infra.TxnBucket, Key: "p1/1/100/3000/2025-06-12T02:48:09Z"},
-		{Bucket: state.AWS.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
-		{Bucket: state.AWS.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
+		{Bucket: state.S3Client.TxnBucket, Key: "p2/1/100/3000/2025-06-13T02:48:09Z"},
+		{Bucket: state.S3Client.TxnBucket, Key: "p2/1/200/2000/2025-06-14T07:06:18Z"},
 	}
-	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, state.AWS))
+	assert.ElementsMatch(t, wantKeys, testutil.GetAllKeys(t, state.S3Client))
 }
 
 func putResultOpts[T any]() []cmp.Option {
@@ -522,7 +522,7 @@ func TestIngest_PutFailure(t *testing.T) {
 
 	setupTest := func(failKey string) *State {
 		state := setupIngestionTest(t)
-		fakes.SetBadS3Client(&state.AWS, fakes.BadS3Config{
+		fakes.SetBadS3Client(&state.S3Client, fakes.BadS3Config{
 			FailPutKey: failKey,
 		})
 		return state
@@ -747,9 +747,9 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 		state := setupIngestionTest(t)
 		stateCtx := Context{Context: ctx, State: state}
 
-		fakes.SetBadS3Client(&state.AWS, fakes.BadS3Config{
+		fakes.SetBadS3Client(&state.S3Client, fakes.BadS3Config{
 			FailListPrefix: map[storage.Bucket]string{
-				state.AWS.TxnBucket: "p1/1/100", // fail to list txn by prefix
+				state.S3Client.TxnBucket: "p1/1/100", // fail to list txn by prefix
 			},
 			FailDeleteKeys: map[string]bool{
 				"p1/1/100/1000/2025-06-12": true, // fail to delete a holding
@@ -764,8 +764,8 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 		})
 
 		want := []DeleteResult{
-			{Bucket: state.AWS.TxnBucket, Prefix: "p1/1/100"},
-			{Bucket: state.AWS.HoldBucket, Keys: []string{"p1/1/100/1000/2025-06-12"}},
+			{Bucket: state.S3Client.TxnBucket, Prefix: "p1/1/100"},
+			{Bucket: state.S3Client.HoldBucket, Keys: []string{"p1/1/100/1000/2025-06-12"}},
 		}
 		testutil.Equal(t, want, result.DeleteErrors, deleteResultOpts...)
 	})
@@ -774,9 +774,9 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 		state := setupIngestionTest(t)
 		stateCtx := Context{Context: ctx, State: state}
 
-		fakes.SetBadS3Client(&state.AWS, fakes.BadS3Config{
+		fakes.SetBadS3Client(&state.S3Client, fakes.BadS3Config{
 			FailListPrefix: map[storage.Bucket]string{
-				state.AWS.TxnBucket: "p1/1/100", // fail to list txn by prefix
+				state.S3Client.TxnBucket: "p1/1/100", // fail to list txn by prefix
 			},
 			FailDeleteKeys: map[string]bool{
 				"p1/1/10/100/2025-06-12": true, // fail to delete an acct
@@ -792,8 +792,8 @@ func TestIngest_RefreshDeleteFailure(t *testing.T) {
 		})
 
 		want := []DeleteResult{
-			{Bucket: state.AWS.TxnBucket, Prefix: "p1/1/100"},
-			{Bucket: state.AWS.AcctBucket, Keys: []string{"p1/1/10/100/2025-06-12"}},
+			{Bucket: state.S3Client.TxnBucket, Prefix: "p1/1/100"},
+			{Bucket: state.S3Client.AcctBucket, Keys: []string{"p1/1/10/100/2025-06-12"}},
 		}
 		testutil.Equal(t, want, result.DeleteErrors, deleteResultOpts...)
 	})

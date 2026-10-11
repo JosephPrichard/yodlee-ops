@@ -63,7 +63,7 @@ func MakeServeMux(app *State) *http.ServeMux {
 }
 
 func (state *State) AuthorizeToken(ctx context.Context, token string) (context.Context, error) {
-	// todo: implement token validation here. in this implementation, Authorization allows all users.
+	// TODO: implement token validation here. in this implementation, Authorization allows all users.
 	return ctx, nil
 }
 
@@ -193,7 +193,7 @@ func (h *FiOpsAPIHandler) GetFiMetadataByPrefix(ctx context.Context, params open
 		return &openapi.GetFiMetadataByPrefixInternalServerError{ErrorCode: openapi.ErrorCodeFATALERROR, ErrorDesc: InternalServerErrorMessage}
 	}
 
-	bucket := BucketFromSubject(h.AWS.Buckets, params.Subject)
+	bucket := BucketFromSubject(h.S3Client.Buckets, params.Subject)
 
 	opsFiMetadata, nextCursor, err := ListFiMetadataByPrefix(appCtx, bucket, params.Prefix, params.Cursor.Value)
 	if err != nil {
@@ -215,7 +215,7 @@ func (h *FiOpsAPIHandler) GetFiMetadataByProfiles(ctx context.Context, params op
 	}
 
 	profileIDs := strings.Split(params.ProfileIDs, ",")
-	bucket := BucketFromSubject(h.AWS.Buckets, params.Subject)
+	bucket := BucketFromSubject(h.S3Client.Buckets, params.Subject)
 
 	var arrayCursor []string
 	if params.Cursor == "" {
@@ -240,10 +240,11 @@ func (h *FiOpsAPIHandler) GetFiMetadataByProfiles(ctx context.Context, params op
 	if err != nil {
 		return internalServerError(err), nil
 	}
+	cursor := strings.Join(fiMetadataResults.Cursor, ",")
 
 	return &openapi.ListFiMetadataResponse{
 		OpsFiMetadata: mapOpsFiMetadata(fiMetadataResults.OpsFiMetadata, params.Subject),
-		Cursor:        fiMetadataResults.Cursor,
+		Cursor:        cursor,
 	}, nil
 }
 
@@ -256,7 +257,7 @@ func (h *FiOpsAPIHandler) GetFiObject(ctx context.Context, params openapi.GetFiO
 	}
 
 	keyInput := params.Key
-	bucketInput := BucketFromSubject(h.AWS.Buckets, params.Subject)
+	bucketInput := BucketFromSubject(h.S3Client.Buckets, params.Subject)
 
 	opsFiObject, err := GetFiObject(appCtx, bucketInput, keyInput)
 	if errors.Is(err, ErrKeyNotFound) {
@@ -267,6 +268,7 @@ func (h *FiOpsAPIHandler) GetFiObject(ctx context.Context, params openapi.GetFiO
 	} else if err != nil {
 		return internalServerError(err), nil
 	}
+
 	slog.InfoContext(appCtx, "retrieved fi message object", "key", keyInput, "bucket", bucketInput)
 
 	fiObjectData := make(map[string]jx.Raw)

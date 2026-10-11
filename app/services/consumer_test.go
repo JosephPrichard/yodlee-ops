@@ -57,10 +57,7 @@ func TestConsumerHandler_ConsumeClaim(t *testing.T) {
 	raw, err := json.Marshal(payload)
 	require.NoError(t, err)
 
-	msg := &sarama.ConsumerMessage{
-		Key:   []byte("key"),
-		Value: raw,
-	}
+	msg := &sarama.ConsumerMessage{Key: []byte("key"), Value: raw}
 	claim := &fakeClaim{
 		msgChan: make(chan *sarama.ConsumerMessage, 1),
 	}

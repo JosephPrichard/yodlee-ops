@@ -8,7 +8,7 @@ import (
 )
 
 type State struct {
-	AWS                  storage.AWS
+	S3Client             storage.S3Client
 	Producer             sarama.AsyncProducer
 	FiMessageBroadcaster *FiMessageBroadcaster
 }

@@ -54,20 +54,20 @@ func NewConfig() Config {
 	}
 }
 
-type AWS struct {
-	S3            S3
+type S3Client struct {
+	S3API
 	PaginationLen *int32
 	Buckets
 }
 
-type S3 interface {
+type S3API interface {
 	PutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
 	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 	ListObjectsV2(ctx context.Context, params *s3.ListObjectsV2Input, optFns ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
 	DeleteObjects(ctx context.Context, params *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
 }
 
-func NewS3Client(cfg Config) *s3.Client {
+func NewS3SDK(cfg Config) *s3.Client {
 	awsOpts := []func(*config.LoadOptions) error{
 		config.WithRegion(cfg.AwsDefaultRegion),
 	}
@@ -96,9 +96,9 @@ func NewS3Client(cfg Config) *s3.Client {
 	return s3.NewFromConfig(awsCfg, s3Opts...)
 }
 
-func NewAWSClient(config Config, s3Client *s3.Client) AWS {
-	return AWS{
-		S3:            s3Client,
+func NewS3Client(config Config, s3Client *s3.Client) S3Client {
+	return S3Client{
+		S3API:         s3Client,
 		PaginationLen: nil,
 		Buckets: Buckets{
 			CnctBucket: Bucket(config.CnctBucket),

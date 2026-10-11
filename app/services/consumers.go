@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"log/slog"
 	"yodleeops/storage"
 
@@ -26,8 +27,8 @@ type Consumer interface {
 	GroupID() string
 }
 
-func MakeConsumerMap(state *State) map[storage.Topic]Consumer {
-	consumerList := []Consumer{
+func MakeConsumerList(state *State) []Consumer {
+	return []Consumer{
 		// fi message topics have a statically computed group id because only one node receives messages
 		&ConsumerHandler[[]yodlee.DataExtractsProviderAccount]{
 			topic:   storage.CnctRefreshTopic,
@@ -91,40 +92,36 @@ func MakeConsumerMap(state *State) map[storage.Topic]Consumer {
 			handler: ConsumeBroadcastMessage,
 		},
 	}
-
-	consumerMap := make(map[storage.Topic]Consumer, len(consumerList))
-	for _, c := range consumerList {
-		consumerMap[c.Topic()] = c
-	}
-	return consumerMap
 }
 
-func StartConsumers(ctx context.Context, kafkaBrokers []string, config *sarama.Config, app *State) error {
-	consumers := MakeConsumerMap(app)
+func StartConsumers(ctx context.Context, kafkaBrokers []string, config *sarama.Config, state *State) error {
+	consumers := MakeConsumerList(state)
 
-	for topic, consumer := range consumers {
-		consumerGroup, err := sarama.NewConsumerGroup(kafkaBrokers, consumer.GroupID(), config)
-		if err != nil {
-			return fmt.Errorf("starting yodlee ops, failed to create kafka consumer: %v", err)
-		}
-		// begin a consumer loop for each topic
-		topics := []string{string(topic)}
-		go func() {
-			defer consumerGroup.Close()
-			for {
-				if err := consumerGroup.Consume(ctx, topics, consumer); err != nil {
-					slog.ErrorContext(ctx, "failed to start consumer group", "consumer", fmt.Sprintf("%+v", consumer), "err", err)
-				}
-				// stop consumer loop when context is canceled.
-				if ctx.Err() != nil {
-					return
-				}
-			}
-		}()
+	for _, consumer := range consumers {
+		go consumerLoop(ctx, kafkaBrokers, config, consumer)
 	}
 
 	slog.Info("starting yodlee ops, started consumers", "consumers", fmt.Sprintf("%+v", consumers))
 	return nil
+}
+
+func consumerLoop(ctx context.Context, kafkaBrokers []string, config *sarama.Config, consumer Consumer) {
+	consumerGroup, err := sarama.NewConsumerGroup(kafkaBrokers, consumer.GroupID(), config)
+	if err != nil {
+		log.Fatalf("failed to create consumer group: %v", err)
+	}
+	defer consumerGroup.Close()
+
+	topics := []string{consumer.Topic().String()}
+	for {
+		if err := consumerGroup.Consume(ctx, topics, consumer); err != nil {
+			slog.ErrorContext(ctx, "failed to start consumer group", "consumer", fmt.Sprintf("%+v", consumer), "err", err)
+		}
+		// stop consumer loop when context is canceled.
+		if ctx.Err() != nil {
+			return
+		}
+	}
 }
 
 func ConsumeCnctRefreshMessage(ctx Context, key string, cncts []yodlee.DataExtractsProviderAccount) {

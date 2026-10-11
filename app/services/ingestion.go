@@ -43,7 +43,7 @@ func IngestCnctResponses(ctx Context, profileId string, response yodlee.Provider
 		putList = append(putList, PutInput[OpsProviderAccount]{Key: key.String(), Input: cnct})
 	}
 
-	joinPuts := PutObjects(ctx, ctx.AWS.CnctBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.S3Client.CnctBucket, putList)
 
 	slog.InfoContext(ctx, "finished ingest cnct responses", "elapsed", time.Since(start).String())
 	return joinPuts()
@@ -68,7 +68,7 @@ func IngestAcctResponses(ctx Context, profileId string, response yodlee.AccountR
 		putList = append(putList, PutInput[OpsAccount]{Key: key.String(), Input: acct})
 	}
 
-	joinPuts := PutObjects(ctx, ctx.AWS.AcctBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.S3Client.AcctBucket, putList)
 
 	slog.InfoContext(ctx, "finished ingest acct responses", "elapsed", time.Since(start).String())
 	return joinPuts()
@@ -93,7 +93,7 @@ func IngestHoldResponses(ctx Context, profileId string, response yodlee.HoldingR
 		putList = append(putList, PutInput[OpsHolding]{Key: key.String(), Input: hold})
 	}
 
-	joinPuts := PutObjects(ctx, ctx.AWS.HoldBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.S3Client.HoldBucket, putList)
 
 	slog.InfoContext(ctx, "finished ingest hold responses", "elapsed", time.Since(start).String())
 	return joinPuts()
@@ -118,7 +118,7 @@ func IngestTxnResponses(ctx Context, profileId string, response yodlee.Transacti
 		putList = append(putList, PutInput[OpsTransaction]{Key: key.String(), Input: txn})
 	}
 
-	joinPuts := PutObjects(ctx, ctx.AWS.TxnBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.S3Client.TxnBucket, putList)
 
 	slog.InfoContext(ctx, "finished ingest txn responses", "elapsed", time.Since(start).String())
 	return joinPuts()
@@ -158,7 +158,7 @@ func IngestCnctRefreshes(ctx Context, profileId string, cncts []yodlee.DataExtra
 		}
 	}
 
-	joinPuts := PutObjects(ctx, ctx.AWS.CnctBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.S3Client.CnctBucket, putList)
 	deleteErrs := DeleteCncts(ctx, removeCnctKeys)
 
 	slog.InfoContext(ctx, "finished ingest cnct refreshes", "elapsed", time.Since(start).String())
@@ -191,7 +191,7 @@ func IngestAcctsRefreshes(ctx Context, profileId string, accts []yodlee.DataExtr
 		}
 	}
 
-	joinPuts := PutObjects(ctx, ctx.AWS.AcctBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.S3Client.AcctBucket, putList)
 	deleteErrs := DeleteAccts(ctx, removeAcctKeys)
 
 	slog.InfoContext(ctx, "finished ingest accts refreshes", "elapsed", time.Since(start).String())
@@ -218,7 +218,7 @@ func IngestHoldRefreshes(ctx Context, profileId string, holds []yodlee.DataExtra
 		putList = append(putList, PutInput[OpsHoldingRefresh]{Key: key.String(), Input: hold})
 	}
 
-	joinPuts := PutObjects(ctx, ctx.AWS.HoldBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.S3Client.HoldBucket, putList)
 
 	slog.InfoContext(ctx, "finished ingest hold refreshes", "elapsed", time.Since(start).String())
 
@@ -239,7 +239,7 @@ func IngestTxnRefreshes(ctx Context, profileId string, txns []yodlee.DataExtract
 				AcctID:    txn.AccountId,
 				ChildID:   txn.Id,
 			}
-			txnPrefixes[Prefix{Value: prefix.String(), Bucket: ctx.AWS.TxnBucket}] = true
+			txnPrefixes[Prefix{Value: prefix.String(), Bucket: ctx.S3Client.TxnBucket}] = true
 		} else {
 			key := TxnKey{
 				ProfileId: profileId,
@@ -255,7 +255,7 @@ func IngestTxnRefreshes(ctx Context, profileId string, txns []yodlee.DataExtract
 		}
 	}
 
-	joinPuts := PutObjects(ctx, ctx.AWS.TxnBucket, putList)
+	joinPuts := PutObjects(ctx, ctx.S3Client.TxnBucket, putList)
 	deleteErrs := DeletePrefixes(ctx, txnPrefixes)
 
 	slog.InfoContext(ctx, "finished ingest txn refreshes", "elapsed", time.Since(start).String())
@@ -313,7 +313,7 @@ func PutObjects[Input any](ctx Context, bucket storage.Bucket, inputObjects []Pu
 			continue
 		}
 		wg.Go(func() {
-			_, err := ctx.AWS.S3.PutObject(ctx, &s3.PutObjectInput{
+			_, err := ctx.S3Client.PutObject(ctx, &s3.PutObjectInput{
 				Bucket: bucket.String(),
 				Key:    aws.String(object.Key),
 				Body:   bytes.NewReader(body),
@@ -466,24 +466,24 @@ func DeleteCncts(ctx Context, keys []CnctKey) []DeleteResult {
 	deletes := makeDeleteSupervisor(ctx)
 
 	for cnctPrefix := range cnctPrefixes {
-		deletes.DeleteList(ctx.AWS.CnctBucket, ListObjectsByPrefix(ctx, ctx.AWS.CnctBucket, cnctPrefix))
+		deletes.DeleteList(ctx.S3Client.CnctBucket, ListObjectsByPrefix(ctx, ctx.S3Client.CnctBucket, cnctPrefix))
 	}
 
 	// in addition to deleting each cnct by prefix, we need to parse the acctID and create an acctPrefix to delete txns and holdings.
 	listAccts := makeListAcctsSupervisor(ctx)
 
 	for cnctPrefix := range cnctPrefixes {
-		listIDsChan := ListObjectsByPrefix(ctx, ctx.AWS.AcctBucket, cnctPrefix)
+		listIDsChan := ListObjectsByPrefix(ctx, ctx.S3Client.AcctBucket, cnctPrefix)
 		deleteIDsChan := listAccts.InterceptListedPrefixes(listIDsChan)
-		deletes.DeleteList(ctx.AWS.AcctBucket, deleteIDsChan)
+		deletes.DeleteList(ctx.S3Client.AcctBucket, deleteIDsChan)
 	}
 
 	acctsPrefixTable := listAccts.Wait()
 
 	for acctPrefix := range acctsPrefixTable {
 		for _, bucket := range []storage.Bucket{
-			ctx.AWS.HoldBucket,
-			ctx.AWS.TxnBucket,
+			ctx.S3Client.HoldBucket,
+			ctx.S3Client.TxnBucket,
 		} {
 			deletes.DeleteList(bucket, ListObjectsByPrefix(ctx, bucket, acctPrefix))
 		}
@@ -516,14 +516,14 @@ func DeleteAccts(ctx Context, keys []AcctKey) []DeleteResult {
 
 	for acctMemPrefix := range acctMembPrefixes {
 		for _, bucket := range []storage.Bucket{
-			ctx.AWS.HoldBucket,
-			ctx.AWS.TxnBucket,
+			ctx.S3Client.HoldBucket,
+			ctx.S3Client.TxnBucket,
 		} {
 			deletes.DeleteList(bucket, ListObjectsByPrefix(ctx, bucket, acctMemPrefix))
 		}
 	}
 	for acctPrefix := range acctPrefixes {
-		deletes.DeleteList(ctx.AWS.AcctBucket, ListObjectsByPrefix(ctx, ctx.AWS.AcctBucket, acctPrefix))
+		deletes.DeleteList(ctx.S3Client.AcctBucket, ListObjectsByPrefix(ctx, ctx.S3Client.AcctBucket, acctPrefix))
 	}
 
 	return deletes.wait()
@@ -571,10 +571,10 @@ func ListObjectsByPrefix(ctx Context, bucket storage.Bucket, prefix string) chan
 	go func() {
 		defer close(resultsChan)
 
-		paginator := s3.NewListObjectsV2Paginator(ctx.AWS.S3, &s3.ListObjectsV2Input{
+		paginator := s3.NewListObjectsV2Paginator(ctx.S3Client, &s3.ListObjectsV2Input{
 			Bucket:  bucket.String(),
 			Prefix:  aws.String(prefix),
-			MaxKeys: ctx.AWS.PaginationLen,
+			MaxKeys: ctx.S3Client.PaginationLen,
 		})
 		page := 0
 
@@ -625,7 +625,7 @@ func DeleteObjects(ctx Context, bucket storage.Bucket, keys []string) DeleteResu
 		objectIDs = append(objectIDs, s3types.ObjectIdentifier{Key: aws.String(key)})
 	}
 
-	_, err := ctx.AWS.S3.DeleteObjects(ctx, &s3.DeleteObjectsInput{
+	_, err := ctx.S3Client.DeleteObjects(ctx, &s3.DeleteObjectsInput{
 		Bucket: bucket.String(),
 		Delete: &s3types.Delete{Objects: objectIDs},
 	})

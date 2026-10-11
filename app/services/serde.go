@@ -59,3 +59,21 @@ func MustEncodeJson(t *testing.T, v any) []byte {
 
 	return encoded.Bytes()
 }
+
+func MustGzipString(t *testing.T, str string) []byte {
+	var encoded bytes.Buffer
+
+	gzipWriter := gzip.NewWriter(&encoded)
+	defer gzipWriter.Close()
+
+	if _, err := gzipWriter.Write([]byte(str)); err != nil {
+		t.Fatal(err)
+	}
+
+	// Close is required to flush gzip footer
+	if err := gzipWriter.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	return encoded.Bytes()
+}

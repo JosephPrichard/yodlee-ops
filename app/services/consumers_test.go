@@ -1,21 +1,35 @@
 package svc
 
 import (
-	"encoding/json"
 	"testing"
 	"yodleeops/storage"
-
-	"github.com/IBM/sarama"
-	saramaMocks "github.com/IBM/sarama/mocks"
-	"github.com/stretchr/testify/require"
 
 	"yodleeops/storage/fakes"
 	"yodleeops/testutil"
 	"yodleeops/yodlee"
 
+	"github.com/IBM/sarama"
+	saramaMocks "github.com/IBM/sarama/mocks"
+
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 )
+
+func setupConsumersTest(t *testing.T) (*State, MockConsumers, *saramaMocks.AsyncProducer) {
+	s3Client := testutil.NewVirtualS3Client(t)
+	state := &State{S3Client: s3Client, FiMessageBroadcaster: &FiMessageBroadcaster{}}
+
+	config := sarama.NewConfig()
+	config.Producer.Return.Successes = true
+	config.Producer.Return.Errors = true
+
+	mockProducer := saramaMocks.NewAsyncProducer(t, config)
+	state.Producer = mockProducer
+
+	mockConsumer := MockConsumers{t: t, consumers: MakeConsumerList(state)}
+
+	return state, mockConsumer, mockProducer
+}
 
 var (
 	ProviderAccountRefresh = yodlee.DataExtractsProviderAccount{
@@ -72,40 +86,6 @@ var (
 		CheckNumber: "1299",
 	}
 )
-
-func setupConsumersTest(t *testing.T) (*State, MockConsumer) {
-	awsClient := testutil.SetupITest(t)
-	state := &State{AWS: awsClient}
-
-	mockConsumer := MockConsumer{t: t, consumers: MakeConsumerMap(state)}
-
-	return state, mockConsumer
-}
-
-type MockConsumer struct {
-	t         *testing.T
-	consumers map[storage.Topic]Consumer
-}
-
-func (p *MockConsumer) Consume(topic storage.Topic, key string, value any) {
-	v, err := json.Marshal(value)
-	require.NoError(p.t, err)
-
-	session := &fakeSession{}
-	claim := &fakeClaim{
-		msgChan: make(chan *sarama.ConsumerMessage, 1),
-	}
-
-	msg := &sarama.ConsumerMessage{
-		Key:   []byte(key),
-		Value: v,
-	}
-	claim.msgChan <- msg
-	close(claim.msgChan)
-
-	err = p.consumers[topic].ConsumeClaim(session, claim)
-	require.NoError(p.t, err)
-}
 
 var WantBroadcastMsgs = []any{
 	BroadcastInput[OpsProviderAccountRefresh, yodlee.DataExtractsProviderAccount]{
@@ -182,7 +162,7 @@ var WantBroadcastMsgs = []any{
 	},
 }
 
-func wantIngestedKeys(aws storage.AWS) []testutil.WantKey {
+func wantIngestedKeys(aws storage.S3Client) []testutil.WantKey {
 	return []testutil.WantKey{
 		{Bucket: aws.CnctBucket, Key: "p1/1/10/2025-06-12"},
 		{Bucket: aws.CnctBucket, Key: "p1/1/10/2025-06-13"},
@@ -218,14 +198,8 @@ func wantIngestedKeys(aws storage.AWS) []testutil.WantKey {
 }
 
 func TestConsumers(t *testing.T) {
-	state, mockConsumer := setupConsumersTest(t)
-
-	config := sarama.NewConfig()
-	config.Producer.Return.Successes = true
-	config.Producer.Return.Errors = true
-
-	mockProducer := saramaMocks.NewAsyncProducer(t, config)
-	state.Producer = mockProducer
+	state, mockConsumers, mockProducer := setupConsumersTest(t)
+	defer mockProducer.Close()
 
 	tests := []struct {
 		topic storage.Topic
@@ -270,34 +244,32 @@ func TestConsumers(t *testing.T) {
 			value: []DeleteRetry{
 				{
 					Kind:   ListKind,
-					Bucket: state.AWS.TxnBucket,
+					Bucket: state.S3Client.TxnBucket,
 					Prefix: "p1/1/100/3000",
 				},
 				{
 					Kind:   DeleteKind,
-					Bucket: state.AWS.CnctBucket,
+					Bucket: state.S3Client.CnctBucket,
 					Keys:   []string{"p1/1/30/2025-06-15"},
 				},
 			},
 		},
 	}
-	go func() {
-		defer mockProducer.Close()
 
-		for _, test := range tests {
-			// expect one message to be produced per `PutResult` except DeleteRetries
-			if _, ok := test.value.([]DeleteRetry); !ok {
-				mockProducer.ExpectInputAndSucceed()
-			}
-			mockConsumer.Consume(test.topic, "p1", test.value)
+	for _, test := range tests {
+		// expect one message to be produced per `PutResult` except DeleteRetries
+		if _, ok := test.value.([]DeleteRetry); !ok {
+			mockProducer.ExpectInputAndSucceed()
 		}
-	}()
+		mockConsumers.Consume(test.topic, "p1", test.value)
+	}
 
-	broadcastMsgs := getMockProducerMessages(mockProducer)
-	testutil.Equal(t, WantBroadcastMsgs, broadcastMsgs, cmpopts.IgnoreFields(OpsFiMessage{}, "Timestamp"))
+	broadcastMessages := ConsumeMockProducer(t, mockProducer, len(WantBroadcastMsgs))
+
+	testutil.Equal(t, WantBroadcastMsgs, broadcastMessages, cmpopts.IgnoreFields(OpsFiMessage{}, "Timestamp"))
 
 	// removed keys are commented.
-	assert.ElementsMatch(t, wantIngestedKeys(state.AWS), testutil.GetAllKeys(t, state.AWS))
+	assert.ElementsMatch(t, wantIngestedKeys(state.S3Client), testutil.GetAllKeys(t, state.S3Client))
 }
 
 var (
@@ -312,20 +284,20 @@ var (
 	TransactionResponseSlice     = yodlee.TransactionResponse{Transaction: []yodlee.TransactionWithDateTime{TransactionResponse}}
 )
 
-var WantPutRetryMsgs = []any{
-	ProviderAccountResponseSlice, AccountResponseSlice, HoldingResponseSlice, TransactionResponseSlice,
-	ProviderAccountRefreshSlice, AccountRefreshSlice, HoldingRefreshSlice, TransactionRefreshSlice,
+var WantPutRetryMessages = []any{
+	ProviderAccountResponseSlice,
+	AccountResponseSlice,
+	HoldingResponseSlice,
+	TransactionResponseSlice,
+	ProviderAccountRefreshSlice,
+	AccountRefreshSlice,
+	HoldingRefreshSlice,
+	TransactionRefreshSlice,
 }
 
 func TestConsumers_S3Errors(t *testing.T) {
-	state, mockConsumer := setupConsumersTest(t)
-
-	config := sarama.NewConfig()
-	config.Producer.Return.Successes = true
-	config.Producer.Return.Errors = true
-
-	mockProducer := saramaMocks.NewAsyncProducer(t, config)
-	state.Producer = mockProducer
+	state, mockConsumers, mockProducer := setupConsumersTest(t)
+	defer mockProducer.Close()
 
 	key := "p1" // all messages for same profileId.
 
@@ -377,21 +349,19 @@ func TestConsumers_S3Errors(t *testing.T) {
 			value:      TransactionResponseSlice,
 		},
 	}
-	go func() {
-		defer mockProducer.Close()
 
-		for _, test := range tests {
-			fakes.SetBadS3Client(&state.AWS, fakes.BadS3Config{
-				FailPutKey: test.failPutKey,
-			})
+	for _, test := range tests {
+		fakes.SetBadS3Client(&state.S3Client, fakes.BadS3Config{
+			FailPutKey: test.failPutKey,
+		})
 
-			// expect one message to be produced per `PutResult`
-			mockProducer.ExpectInputAndSucceed()
+		// expect one message to be produced per `PutResult`
+		mockProducer.ExpectInputAndSucceed()
 
-			mockConsumer.Consume(test.topic, key, test.value)
-		}
-	}()
+		mockConsumers.Consume(test.topic, key, test.value)
+	}
 
-	msgs := getMockProducerMessages(mockProducer)
-	assert.ElementsMatch(t, WantPutRetryMsgs, msgs)
+	messages := ConsumeMockProducer(t, mockProducer, len(WantPutRetryMessages))
+
+	assert.ElementsMatch(t, WantPutRetryMessages, messages)
 }

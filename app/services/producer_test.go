@@ -25,6 +25,7 @@ func setupProducerTest(t *testing.T) (Context, *saramaMocks.AsyncProducer) {
 
 func TestProduceDeleteErrors(t *testing.T) {
 	ctx, mockProducer := setupProducerTest(t)
+	defer mockProducer.Close()
 
 	deleteErrs := []DeleteResult{
 		{
@@ -42,23 +43,20 @@ func TestProduceDeleteErrors(t *testing.T) {
 	for range deleteErrs {
 		mockProducer.ExpectInputAndSucceed()
 	}
-	go func() {
-		defer mockProducer.Close()
-		ProduceDeleteErrors(ctx, "p1", deleteErrs)
-	}()
+	ProduceDeleteErrors(ctx, "p1", deleteErrs)
 
-	messages := getMockProducerMessages(mockProducer)
-
-	// (echo assert)
 	wantMessages := []any{
 		DeleteResult{Bucket: "Bucket", Keys: []string{"key1", "key2"}},
 		DeleteResult{Bucket: "Bucket", Prefix: "prefix"},
 	}
+
+	messages := ConsumeMockProducer(t, mockProducer, len(wantMessages))
 	assert.ElementsMatch(t, wantMessages, messages)
 }
 
 func TestProducePutResults(t *testing.T) {
 	ctx, mockProducer := setupProducerTest(t)
+	defer mockProducer.Close()
 
 	putResults := []PutResult[OpsProviderAccountRefresh]{
 		{
@@ -89,12 +87,7 @@ func TestProducePutResults(t *testing.T) {
 	for range putResults {
 		mockProducer.ExpectInputAndSucceed()
 	}
-	go func() {
-		defer mockProducer.Close()
-		ProducePutResults(ctx, storage.CnctRefreshTopic, "p1", putResults, nil)
-	}()
-
-	messages := getMockProducerMessages(mockProducer)
+	ProducePutResults(ctx, storage.CnctRefreshTopic, "p1", putResults, nil)
 
 	wantMessages := []any{
 		BroadcastInput[OpsProviderAccountRefresh, yodlee.DataExtractsProviderAccount]{
@@ -112,5 +105,7 @@ func TestProducePutResults(t *testing.T) {
 		},
 		[]yodlee.DataExtractsProviderAccount{{LastUpdated: "2025-06-13", RequestId: "REQUEST", Id: 90}},
 	}
+
+	messages := ConsumeMockProducer(t, mockProducer, len(wantMessages))
 	testutil.Equal(t, wantMessages, messages, cmpopts.IgnoreFields(OpsFiMessage{}, "Timestamp"))
 }

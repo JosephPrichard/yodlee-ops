@@ -6,11 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"google.golang.org/protobuf/testing/protocmp"
 	"io"
 	"net/http/httptest"
 	"testing"
 	"yodleeops/storage"
+
+	"google.golang.org/protobuf/testing/protocmp"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -43,14 +44,14 @@ func DecodeGzipJSON[JSON any](r io.Reader, decoded *JSON) error {
 	return nil
 }
 
-func AssertObjects[JSON any](t *testing.T, awsClient *storage.AWS, objects []WantObject[JSON], opts ...cmp.Option) {
+func AssertObjects[JSON any](t *testing.T, s3Client *storage.S3Client, objects []WantObject[JSON], opts ...cmp.Option) {
 	opts = append([]cmp.Option{protocmp.Transform()}, opts...)
 
 	t.Helper()
 
 	for _, object := range objects {
 		func() {
-			resp, err := awsClient.S3.GetObject(context.Background(), &s3.GetObjectInput{
+			resp, err := s3Client.GetObject(context.Background(), &s3.GetObjectInput{
 				Bucket: object.Bucket.String(),
 				Key:    aws.String(object.Key),
 			})
@@ -78,16 +79,16 @@ type WantKey struct {
 	Key    string
 }
 
-func GetAllKeys(t *testing.T, aws storage.AWS) []WantKey {
+func GetAllKeys(t *testing.T, s3Client storage.S3Client) []WantKey {
 	var keys []WantKey
 
 	for _, bucket := range []storage.Bucket{
-		aws.CnctBucket,
-		aws.AcctBucket,
-		aws.TxnBucket,
-		aws.HoldBucket,
+		s3Client.CnctBucket,
+		s3Client.AcctBucket,
+		s3Client.TxnBucket,
+		s3Client.HoldBucket,
 	} {
-		paginator := s3.NewListObjectsV2Paginator(aws.S3, &s3.ListObjectsV2Input{Bucket: bucket.String()})
+		paginator := s3.NewListObjectsV2Paginator(s3Client.S3API, &s3.ListObjectsV2Input{Bucket: bucket.String()})
 
 		for paginator.HasMorePages() {
 			page, err := paginator.NextPage(context.Background())

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -71,8 +70,7 @@ func TestStreamFiObjectLogs(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 1*time.Second)
 	defer cancel()
 
-	query := fmt.Sprintf("%s/events/taillog?profileIDs=profile1,profile2,profile3&subjects=%s,%s",
-		testServer.URL+ApiUrl, openapi.FiSubjectHoldings, openapi.FiSubjectTransactions)
+	query := fmt.Sprintf("%s/events/taillog?profileIDs=profile1,profile2,profile3&subjects=%s,%s", testServer.URL+ApiUrl, openapi.FiSubjectHoldings, openapi.FiSubjectTransactions)
 	r, err := http.NewRequestWithContext(ctx, http.MethodGet, query, nil)
 	require.NoError(t, err)
 	r.Header.Set("Authorization", TestAuthorizationToken)
@@ -106,16 +104,16 @@ var opsGenericsCmpOpts = []cmp.Option{
 }
 
 func TestHandleListFiMessages(t *testing.T) {
-	a := testutil.SetupITest(t)
+	s3Client := testutil.NewVirtualS3Client(t)
 
-	goodState := &State{AWS: a}
-	goodState.AWS.PaginationLen = aws.Int32(1) // testing ListObjectsV2 pagination.
+	goodState := &State{S3Client: s3Client}
+	goodState.S3Client.PaginationLen = aws.Int32(1) // testing ListObjectsV2 pagination.
 
-	badState := &State{AWS: a}
-	fakes.SetBadS3Client(&badState.AWS, fakes.BadS3Config{
+	badState := &State{S3Client: s3Client}
+	fakes.SetBadS3Client(&badState.S3Client, fakes.BadS3Config{
 		FailListPrefix: map[storage.Bucket]string{
-			a.AcctBucket: "p1/1/10",
-			a.CnctBucket: "p1",
+			s3Client.AcctBucket: "p1/1/10",
+			s3Client.CnctBucket: "p1",
 		},
 	})
 
@@ -201,12 +199,12 @@ func TestHandleListFiMessages(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			endpoint := fmt.Sprintf("%s/fimetadata/%s", ApiUrl, test.url)
-			r := httptest.NewRequest(http.MethodGet, endpoint, nil)
-			r.Header.Set("Authorization", TestAuthorizationToken)
+			request := httptest.NewRequest(http.MethodGet, endpoint, nil)
+			request.Header.Set("Authorization", TestAuthorizationToken)
 			w := httptest.NewRecorder()
 
-			hander := MakeServeMux(test.state)
-			hander.ServeHTTP(w, r)
+			handler := MakeServeMux(test.state)
+			handler.ServeHTTP(w, request)
 
 			assert.Equal(t, test.wantStatusCode, w.Code)
 			if test.wantStatusCode == http.StatusOK {
@@ -219,29 +217,25 @@ func TestHandleListFiMessages(t *testing.T) {
 }
 
 func TestHandleListFiMessages_Pagination(t *testing.T) {
-	awsClient := testutil.SetupITest(t)
+	s3Client := testutil.NewVirtualS3Client(t)
 
-	state := &State{AWS: awsClient}
-	state.AWS.PaginationLen = aws.Int32(1) // testing ListObjectsV2 pagination.
+	state := &State{S3Client: s3Client}
+	state.S3Client.PaginationLen = aws.Int32(1) // testing ListObjectsV2 pagination.
 
-	MaxPages := 10 // hard cap to prevent infinite loops for logic errors.
+	const MaxPages = 10 // hard cap to prevent infinite loops for logic errors.
 	cursor := ""
 
 	var statuses []int
 	var responses []openapi.ListFiMetadataResponse
 
 	for range MaxPages {
-		r := httptest.NewRequest(http.MethodGet,
-			fmt.Sprintf("%s/fimetadata/profiles?profileIDs=p1,p2&cursor=%s&subject=accounts",
-				ApiUrl,
-				url.QueryEscape(cursor),
-			),
-			nil)
+		endpoint := fmt.Sprintf("%s/fimetadata/profiles?profileIDs=p1,p2&cursor=%s&subject=accounts", ApiUrl, url.QueryEscape(cursor))
+		r := httptest.NewRequest(http.MethodGet, endpoint, nil)
 		r.Header.Set("Authorization", TestAuthorizationToken)
 		w := httptest.NewRecorder()
 
-		hander := MakeServeMux(state)
-		hander.ServeHTTP(w, r)
+		handler := MakeServeMux(state)
+		handler.ServeHTTP(w, r)
 
 		listFiMetadataResponse := testutil.GetRespBody[openapi.ListFiMetadataResponse](t, w)
 
@@ -305,29 +299,20 @@ func TestHandleListFiMessages_Pagination(t *testing.T) {
 
 func TestHandleGetFiObject(t *testing.T) {
 	testKey := "p1/1/100/3000/2025-06-12T00:14:37Z"
-	testBody := OpsFiGeneric{
-		OpsFiMessage: OpsFiMessage{
-			ProfileId:   "p1",
-			Timestamp:   time.Date(2025, 6, 12, 0, 15, 00, 0, time.UTC),
-			OriginTopic: storage.TxnResponseTopic,
-		},
-		Data: map[string]json.RawMessage{
-			"key": json.RawMessage(`"value"`),
-		},
-	}
+	testBody := `{"profileId": "p1", "timestamp": "2025-06-12T00:15:00Z", "originTopic": "txn-responses", "data": {"key": "value" }}`
 
-	a := testutil.SetupITest(t)
+	s3Client := testutil.NewVirtualS3Client(t)
 
-	goodState := &State{AWS: a}
-	badState := &State{AWS: a}
-	fakes.SetBadS3Client(&badState.AWS, fakes.BadS3Config{
+	goodState := &State{S3Client: s3Client}
+	badState := &State{S3Client: s3Client}
+	fakes.SetBadS3Client(&badState.S3Client, fakes.BadS3Config{
 		FailGetKey: testKey,
 	})
 
-	_, err := a.S3.PutObject(t.Context(), &s3.PutObjectInput{
-		Bucket: a.TxnBucket.String(),
+	_, err := s3Client.PutObject(t.Context(), &s3.PutObjectInput{
+		Bucket: s3Client.TxnBucket.String(),
 		Key:    aws.String(testKey),
-		Body:   bytes.NewReader(MustEncodeJson(t, testBody)),
+		Body:   bytes.NewReader(MustGzipString(t, testBody)),
 	})
 	require.NoError(t, err)
 
@@ -371,18 +356,13 @@ func TestHandleGetFiObject(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodGet,
-				fmt.Sprintf("%s/fiobject?key=%s&subject=%s",
-					ApiUrl,
-					url.QueryEscape(test.key),
-					url.QueryEscape(test.subject),
-				),
-				nil)
+			endpoint := fmt.Sprintf("%s/fiobject?key=%s&subject=%s", ApiUrl, url.QueryEscape(test.key), url.QueryEscape(test.subject))
+			r := httptest.NewRequest(http.MethodGet, endpoint, nil)
 			r.Header.Set("Authorization", TestAuthorizationToken)
 			w := httptest.NewRecorder()
 
-			hander := MakeServeMux(test.state)
-			hander.ServeHTTP(w, r)
+			handler := MakeServeMux(test.state)
+			handler.ServeHTTP(w, r)
 
 			assert.Equal(t, test.wantStatusCode, w.Code)
 			if test.wantStatusCode == http.StatusOK {

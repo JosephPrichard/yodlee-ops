@@ -29,14 +29,12 @@ func main() {
 
 	slog.Info("starting yodlee ops, starting server", "serverConfig", serverConfig)
 
-	s3Client := storage.NewS3Client(serverConfig)
-
 	kafkaConfig := storage.NewSaramaConfig(serverConfig)
 	storage.CreateKafkaTopics(serverConfig.KafkaBrokers, kafkaConfig)
 	producer := storage.NewSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
 
 	state := &svc.State{
-		AWS:                  storage.NewAWSClient(serverConfig, s3Client),
+		S3Client:             storage.NewS3Client(serverConfig, storage.NewS3SDK(serverConfig)),
 		Producer:             producer,
 		FiMessageBroadcaster: &svc.FiMessageBroadcaster{},
 	}
