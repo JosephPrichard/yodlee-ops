@@ -783,6 +783,7 @@ var Period = time.Second * 1
 
 func ExecuteDemoProducer(serverConfig storage.Config, kafkaConfig *sarama.Config) {
 	producer := storage.NewSaramaProducer(serverConfig.KafkaBrokers, kafkaConfig)
+	defer producer.Close()
 
 	slog.Info("starting yodlee ops, starting test producer", "serverConfig", serverConfig, "kafkaConfig", fmt.Sprintf("%+v", kafkaConfig))
 
